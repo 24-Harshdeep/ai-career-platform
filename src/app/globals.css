@@ -1,0 +1,184 @@
+@import "tailwindcss";
+
+:root {
+  --background: #FAFAFF;
+  --foreground: #1E293B;
+  --card: #FFFFFF;
+  --card-foreground: #0F111A;
+  --primary: #6366F1;
+  --secondary: #8B5CF6;
+  --accent: #F3E8FF;
+  --border: #E2E8F0;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --muted: #64748B;
+  color-scheme: light dark;
+}
+
+/* Force dark mode overrides when document has color-scheme = dark */
+:root[data-theme="dark"] {
+  --background: #0F111A;
+  --foreground: #F1F5F9;
+  --card: #161A2B;
+  --card-foreground: #F8FAFC;
+  --primary: #6366F1;
+  --secondary: #8B5CF6;
+  --accent: #1F2438;
+  --border: #242B44;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --muted: #94A3B8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #0F111A;
+    --foreground: #F1F5F9;
+    --card: #161A2B;
+    --card-foreground: #F8FAFC;
+    --primary: #6366F1;
+    --secondary: #8B5CF6;
+    --accent: #1F2438;
+    --border: #242B44;
+    --success: #10B981;
+    --warning: #F59E0B;
+    --muted: #94A3B8;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-inter);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Custom Scrollbar Utility */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: light-dark(#CBD5E1, #2E3757) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: light-dark(#CBD5E1, #2E3757);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: light-dark(#94A3B8, #4E5B8E);
+}
+
+/* Glassmorphism Effect */
+.glass-effect {
+  background-color: light-dark(rgba(250, 250, 255, 0.7), rgba(22, 26, 43, 0.7));
+  backdrop-filter: blur(16px);
+  border: 1px solid light-dark(rgba(226, 232, 240, 0.6), rgba(36, 43, 68, 0.6));
+}
+
+/* Animation System */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* AI Glow Pulse effect */
+.ai-glow-pulse {
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.15);
+  animation: aiPulse 2.5s infinite ease-in-out;
+}
+
+@keyframes aiPulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.15);
+    border-color: rgba(99, 102, 241, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(99, 102, 241, 0.35);
+    border-color: rgba(99, 102, 241, 0.5);
+  }
+}
+
+/* Shimmer Effect for loading/empty states */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.05) 20%,
+    rgba(255, 255, 255, 0.1) 60%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Custom View Transition for Dark Mode Circular Wipe from top-right corner button */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* Old screen stays underneath */
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+/* New screen sweeps over it from top-right (where the theme toggle is located) */
+::view-transition-new(root) {
+  z-index: 9999;
+  animation: circularWipe 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes circularWipe {
+  from {
+    clip-path: circle(0% at calc(100% - 80px) 40px);
+  }
+  to {
+    clip-path: circle(150% at calc(100% - 80px) 40px);
+  }
+}
+
