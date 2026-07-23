@@ -1,36 +1,82 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CareerOS Next.js Frontend Client Dashboard
 
-## Getting Started
+This directory houses the frontend user interface for **CareerOS**, built on Next.js 16 (App Router) and Tailwind CSS, and wired to a global Zustand data store.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 📂 Directory Structure
+
+The frontend application code is organized as follows:
+
+```
+client/src/
+├── app/                  # Next.js App Router Page layouts
+│   ├── analytics/        # Executive Analytics Dashboard (benchmarks & curves)
+│   ├── applications/     # Job Intelligence Matcher & pipeline tracking
+│   ├── coach/            # Contextual AI Chat Coach interface
+│   ├── dashboard/        # Main focus actions command board
+│   ├── dna/              # Profile Target Roles, Milestones, and Skills Profiles
+│   ├── interview/        # Interactive technical mock reviews and transcripts
+│   ├── portfolio/        # Git repositories documentation and quality audits
+│   ├── resume/           # ATS keywords comparison and resume scoring
+│   ├── roadmap/          # Adaptive checkpoints roadmap tracks
+│   └── settings/         # AI Preferences and Account control center
+├── components/           # Reusable UI & Layout blocks
+│   ├── layout/           # Sidebar navigation and desktop frames
+│   └── ui/               # Badge, Button, Card, and PoweredBy engines indicators
+├── hooks/                # Custom React hooks (useAuth authentication helper)
+├── store/                # Zustand global state (careerStore.ts)
+└── types/                # Core TypeScript interfaces (index.ts)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## ⚡ Setup & Development
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 1. Configure Environment Variables
+Create a `.env.local` or `.env` file in the `client` directory to point to your backend API server:
+```env
+NEXT_PUBLIC_API_BASE_URL=http://localhost:5000/api
+```
 
-## Learn More
+### 2. Install Dependencies
+Ensure you have run `npm install` inside the client folder:
+```bash
+npm install
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 3. Run Development Server
+Start the Next.js server locally:
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser to inspect the application.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 4. Build Production Bundle
+To compile and optimize the client application for deployment:
+```bash
+npm run build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## 🎨 Design Tokens & Theming
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The application uses custom design themes declared in global stylesheets, featuring:
+- **Glassmorphism panels**: Translucent background colors combined with border-glass variables for a premium SaaS feel.
+- **Accents colors**: Deep custom gradients (`--primary` and `--secondary`) matching the dynamic dark-mode system configuration.
+- **Typography**: Responsive, clean spacing utilizing sans-serif font families (Geist, Outfit).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## 🔄 Global Zustand Store (`careerStore.ts`)
+
+State updates are managed through the central hook [careerStore.ts](file:///home/work/ai-career-platform/client/src/store/careerStore.ts). 
+- It handles network synchronization with the Express backend APIs.
+- Features automatic local state fallbacks when running in offline/sandbox modes, ensuring the application remains interactive and functional.
+- Core actions:
+  - `fetchDashboardData()`: Unifies profile progress, streak trackers, and recommendation actions.
+  - `updateProfileSettings()`: Saves preferences to MongoDB and forces global re-calculations.
+  - `uploadResume()`: Triggers ATS text scans and audits.
+  - `syncDeveloperProfile()`: Runs repository audits.
+  - `startMockInterview()` / `submitInterviewAnswer()`: Orchestrates mock transcripts.
