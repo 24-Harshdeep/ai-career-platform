@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Sparkles, Brain } from "lucide-react";
+import PoweredBy from "@/components/ui/PoweredBy";
 
 export const IntelligenceHeader: React.FC = () => {
   return (
@@ -33,12 +34,40 @@ export const IntelligenceHeader: React.FC = () => {
         </div>
 
         {/* Confidence Badge */}
-        <div className="flex flex-col items-end shrink-0 bg-card/60 backdrop-blur-md border border-border px-4 py-2.5 rounded-xl md:text-right">
-          <div className="flex items-center space-x-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-primary" />
-            <span className="text-[11px] text-muted font-medium">AI Confidence</span>
+        <div className="flex flex-col items-end shrink-0 gap-2">
+          <div className="flex flex-col items-end bg-card/60 backdrop-blur-md border border-border px-4 py-2.5 rounded-xl md:text-right w-full sm:w-auto">
+            <div className="flex items-center space-x-1.5 justify-end">
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
+              <span className="text-[11px] text-muted font-medium">AI Confidence</span>
+            </div>
+            <span className="text-lg font-bold text-foreground mt-0.5">87%</span>
           </div>
-          <span className="text-lg font-bold text-foreground mt-0.5">87%</span>
+          <PoweredBy engines={[
+            {
+              type: "user",
+              label: "User Data",
+              description: "Tracks progress directly updated by user actions.",
+              points: ["Learning progress", "Completed missions", "Uploaded resume"]
+            },
+            {
+              type: "engine",
+              label: "Career Intelligence Engine",
+              description: "Our proprietary scoring and statistics calculator.",
+              points: ["Career Score", "Readiness Indexes", "Weekly statistics & Growth velocity"]
+            },
+            {
+              type: "ai",
+              label: "AI Coach",
+              description: "Specialized coaching models providing synthesis and recommendations.",
+              points: ["Weekly performance summary", "Personalized insights", "Next action suggestions"]
+            },
+            {
+              type: "api",
+              label: "External Integrations",
+              description: "Syncs information from developer networks and file providers.",
+              points: ["GitHub statistics & repository checks", "Cloudinary resume storage"]
+            }
+          ]} />
         </div>
       </div>
     </div>

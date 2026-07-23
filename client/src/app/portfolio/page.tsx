@@ -6,6 +6,7 @@ import Card from "@/components/ui/Card/Card";
 import Button from "@/components/ui/Button/Button";
 import Badge from "@/components/ui/Badge/Badge";
 import { FolderGit, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw, BarChart4, Wrench, Globe, Link, Settings, Sparkles } from "lucide-react";
+import PoweredBy from "@/components/ui/PoweredBy";
 
 export const PortfolioPage: React.FC = () => {
   const developerProfile = useCareerStore((state) => state.developerProfile);
@@ -70,7 +71,7 @@ export const PortfolioPage: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in-up pb-12">
       {/* Title */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-border/60 pb-5">
         <div className="flex items-center space-x-3">
           <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl">
             <FolderGit className="w-6 h-6" />
@@ -81,16 +82,46 @@ export const PortfolioPage: React.FC = () => {
           </div>
         </div>
 
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={handleScanGithub}
-          isLoading={analyzing}
-          className="cursor-pointer"
-        >
-          <RefreshCw className="w-4 h-4 mr-1.5" />
-          <span>Sync GitHub</span>
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <PoweredBy engines={[
+            {
+              type: "api",
+              label: "GitHub API",
+              description: "Inspects live codebases for developer activity.",
+              points: ["Reads repositories & languages", "Analyzes commit frequencies"]
+            },
+            {
+              type: "user",
+              label: "User Portfolios",
+              description: "User submits URLs for automated evaluation.",
+              points: ["Submits GitHub username", "Registers live project URLs"]
+            },
+            {
+              type: "engine",
+              label: "Audit Engines",
+              description: "Calculates scores for standard development practices.",
+              points: ["Performance, SEO, & Accessibility audits", "Security & Documentation checks"]
+            },
+            {
+              type: "ai",
+              label: "AI Suggestions",
+              description: "Improves project documentation and README structures.",
+              points: ["Suggests README improvements", "Refines project description highlights"]
+            }
+          ]} />
+
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={handleScanGithub}
+            isLoading={analyzing}
+            className="cursor-pointer shrink-0"
+          >
+            <RefreshCw className="w-4 h-4 mr-1.5" />
+            <span>Sync GitHub</span>
+          </Button>
+        </div>
       </div>
 
       {/* Grid Layout */}

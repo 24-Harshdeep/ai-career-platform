@@ -6,6 +6,8 @@ import {
   JobApplication,
   Notification,
   ChatMessage,
+  CareerProfile,
+  SkillSet,
 } from "@/types";
 
 export interface CareerStats {
@@ -279,6 +281,7 @@ export interface AnalyticsDashboardData {
 
 interface CareerState {
   user: UserProfile;
+  profile: CareerProfile | null;
   roadmap: UserRoadmapTrack[];
   missions: Mission[];
   applications: JobApplication[];
@@ -308,9 +311,11 @@ interface CareerState {
   fetchDashboardData: () => Promise<void>;
   updateGoal: (goal: string) => Promise<void>;
   updateExperience: (exp: UserProfile["experience"]) => Promise<void>;
+  updateProfileSettings: (profileData: Partial<CareerProfile>) => Promise<void>;
   updateScore: (points: number) => void;
   completeMission: (id: string) => Promise<void>;
   toggleSubSkillMastery: (subSkillId: string, mastered: boolean) => Promise<void>;
+  toggleSkill: (skillName: string) => Promise<void>;
   fetchResumeAnalysis: () => Promise<void>;
   uploadResume: (fileOrFilename: File | string, text?: string) => Promise<boolean>;
   fetchDeveloperProfile: () => Promise<void>;
@@ -324,7 +329,7 @@ interface CareerState {
   deleteJobOpportunity: (id: string) => Promise<void>;
   fetchInterviewHistory: () => Promise<void>;
   fetchInterviewReadiness: () => Promise<void>;
-  startMockInterview: (role: string, type: string, difficulty: string) => Promise<void>;
+  startMockInterview: (role: string, type: string, difficulty: string, questionCount?: number) => Promise<void>;
   submitInterviewAnswer: (sessionId: string, answerText: string, durationSeconds: number) => Promise<void>;
   concludeMockInterview: (sessionId: string) => Promise<InterviewSessionData | null>;
   fetchAnalyticsDashboard: () => Promise<void>;
@@ -402,6 +407,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
   interviewReadiness: 75,
   unresolvedMistakes: [],
   analyticsData: null,
+  profile: null,
 
   hasResumeScanned: true,
   hasGithubScanned: false,
@@ -429,6 +435,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         const data = envelope.data;
         set({
           user: data.user,
+          profile: data.profile || null,
           roadmap: data.roadmap,
           missions: data.missions,
           applications: data.applications,
@@ -490,6 +497,37 @@ export const useCareerStore = create<CareerState>((set, get) => ({
       }
     } catch (err) {
       set((state) => ({ user: { ...state.user, experience } }));
+    }
+  },
+
+  updateProfileSettings: async (profileData) => {
+    const token = localStorage.getItem("careeros_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/career/profile`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(profileData)
+      });
+
+      if (res.ok) {
+        await get().fetchDashboardData();
+      }
+    } catch (err) {
+      console.error("Failed to save profile settings:", err);
+      set((state) => {
+        if (!state.profile) return {};
+        return {
+          profile: {
+            ...state.profile,
+            ...profileData
+          }
+        };
+      });
     }
   },
 
@@ -556,6 +594,106 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
   },
 
+  toggleSkill: async (skillName: string) => {
+    const profile = get().profile;
+    if (!profile) return;
+
+    const SKILL_CATEGORY_MAP: Record<string, keyof SkillSet> = {
+      "React": "frameworks",
+      "Next.js": "frameworks",
+      "Tailwind CSS": "frameworks",
+      "Node.js": "frameworks",
+      "SQL": "languages",
+      "Redis": "cloud",
+      "Git": "tools",
+      "Testing": "technical",
+      "Docker": "tools",
+      "AWS": "cloud"
+    };
+
+    const category = SKILL_CATEGORY_MAP[skillName];
+    if (!category) return;
+
+    const currentPossessed = profile.skillsPossessed || {
+      technical: [], soft: [], tools: [], frameworks: [], languages: [], cloud: [], devops: []
+    };
+
+    const currentList = currentPossessed[category] || [];
+    let newList: string[];
+    if (currentList.includes(skillName)) {
+      newList = currentList.filter((s) => s !== skillName);
+    } else {
+      newList = [...currentList, skillName];
+    }
+
+    const updatedPossessed = {
+      ...currentPossessed,
+      [category]: newList
+    };
+
+    const token = localStorage.getItem("careeros_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    const getSkillsCount = (skillsObj: any) => {
+      if (!skillsObj) return 0;
+      return [
+        ...(skillsObj.technical || []),
+        ...(skillsObj.soft || []),
+        ...(skillsObj.tools || []),
+        ...(skillsObj.frameworks || []),
+        ...(skillsObj.languages || []),
+        ...(skillsObj.cloud || []),
+        ...(skillsObj.devops || [])
+      ].length;
+    };
+    const newCount = getSkillsCount(updatedPossessed);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/career/skills`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ possessed: updatedPossessed })
+      });
+
+      if (res.ok) {
+        await get().fetchDashboardData();
+      } else {
+        // Fallback update
+        set((state) => {
+          if (!state.profile) return {};
+          return {
+            profile: {
+              ...state.profile,
+              skillsPossessed: updatedPossessed
+            },
+            user: {
+              ...state.user,
+              skillsCount: newCount
+            }
+          };
+        });
+      }
+    } catch (err) {
+      // Fallback update
+      set((state) => {
+        if (!state.profile) return {};
+        return {
+          profile: {
+            ...state.profile,
+            skillsPossessed: updatedPossessed
+          },
+          user: {
+            ...state.user,
+            skillsCount: newCount
+          }
+        };
+      });
+    }
+  },
+
   fetchResumeAnalysis: async () => {
     const token = localStorage.getItem("careeros_token");
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -613,6 +751,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
       }
     } catch (err) {
       console.error("Failed to upload resume document:", err);
+      return false;
     }
   },
 
@@ -916,7 +1055,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
   },
 
-  startMockInterview: async (role, type, difficulty) => {
+  startMockInterview: async (role, type, difficulty, questionCount) => {
     const token = localStorage.getItem("careeros_token");
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) {
@@ -927,7 +1066,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
       const res = await fetch(`${API_BASE_URL}/interview/start`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ role, type, difficulty })
+        body: JSON.stringify({ role, type, difficulty, questionCount })
       });
 
       if (res.ok) {

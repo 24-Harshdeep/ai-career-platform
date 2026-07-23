@@ -37,8 +37,8 @@ export const Sidebar: React.FC = () => {
     { name: "Career Coach", href: "/coach", icon: MessageSquareCode },
     { name: "Resume Intelligence", href: "/resume", icon: FileText },
     { name: "Portfolio Intelligence", href: "/portfolio", icon: FolderGit },
-    { name: "Job Applications", href: "/applications", icon: Briefcase },
-    { name: "Interview Prep", href: "/interview", icon: GraduationCap },
+    { name: "Job Intelligence", href: "/applications", icon: Briefcase },
+    { name: "Interview Intelligence", href: "/interview", icon: GraduationCap },
     { name: "Career Analytics", href: "/analytics", icon: LineChart },
     { name: "Settings", href: "/settings", icon: Settings },
   ];
@@ -49,7 +49,7 @@ export const Sidebar: React.FC = () => {
     { name: "Career DNA", href: "/dna", icon: Dna },
     { name: "Career Coach", href: "/coach", icon: MessageSquareCode },
     { name: "Resume", href: "/resume", icon: FileText },
-    { name: "Applications", href: "/applications", icon: Briefcase },
+    { name: "Job Intel", href: "/applications", icon: Briefcase },
   ];
 
   const getInitials = (name: string) => {

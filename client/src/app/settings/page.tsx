@@ -1,27 +1,173 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCareerStore } from "@/store/careerStore";
 import Card from "@/components/ui/Card/Card";
 import Button from "@/components/ui/Button/Button";
 import Badge from "@/components/ui/Badge/Badge";
-import { Settings, User, Key, Bell, Shield, LogOut, UserCheck } from "lucide-react";
+import {
+  Settings,
+  User,
+  Key,
+  Bell,
+  Shield,
+  LogOut,
+  UserCheck,
+  Sparkles,
+  FileText,
+  CheckCircle,
+  X,
+  ChevronRight,
+  TrendingUp,
+  Award,
+  AlertTriangle,
+  Clock,
+  Target
+} from "lucide-react";
+
+type SettingsTab = "profile" | "ai" | "documents" | "notifications" | "accounts" | "theme" | "security";
 
 export default function SettingsPage() {
-  const { user, signOut, switchUser, isAuthenticated } = useAuth();
+  const { user, signOut } = useAuth();
   const storeUser = useCareerStore((state) => state.user);
+  const profile = useCareerStore((state) => state.profile);
+  const updateProfileSettings = useCareerStore((state) => state.updateProfileSettings);
+  const fetchDashboardData = useCareerStore((state) => state.fetchDashboardData);
   const addNotification = useCareerStore((state) => state.addNotification);
 
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [weeklyDigest, setWeeklyDigest] = useState(false);
+  // Active Tab
+  const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
+  const [saving, setSaving] = useState(false);
 
-  const handleToggleNotifications = () => {
-    setNotificationsEnabled(!notificationsEnabled);
-    addNotification(
-      `Push notifications ${!notificationsEnabled ? "enabled" : "disabled"}.`,
-      "info"
-    );
+  // Form states: Profile & Career
+  const [nameInput, setNameInput] = useState(storeUser?.name || user?.name || "Harshdeep K");
+  const [emailInput, setEmailInput] = useState(user?.email || "harshdeep@career.os");
+  const [targetRoleInput, setTargetRoleInput] = useState(profile?.targetRole || storeUser?.goal || "Backend Developer");
+  const [experienceInput, setExperienceInput] = useState<"Beginner" | "Intermediate" | "Advanced">(
+    (profile?.experienceLevel as any) || (storeUser?.experience as any) || "Intermediate"
+  );
+  const [industryInput, setIndustryInput] = useState("Fintech");
+  const [countryInput, setCountryInput] = useState("United States");
+  const [salaryInput, setSalaryInput] = useState("$130,000");
+  const [workTypeInput, setWorkTypeInput] = useState<"Remote" | "Hybrid" | "Onsite">("Remote");
+
+  // Form states: AI Preferences
+  const [aiPersonality, setAiPersonality] = useState("Career Coach");
+  const [aiResponseLength, setAiResponseLength] = useState("Detailed");
+  const [learningStyle, setLearningStyle] = useState("Practical");
+  const [recommendationFreq, setRecommendationFreq] = useState("Daily");
+  const [aiTemperature, setAiTemperature] = useState(0.5);
+
+  // Form states: Resume Defaults & Links
+  const [primaryResume, setPrimaryResume] = useState("Harshdeep_Resume_2026.pdf");
+  const [primaryPortfolio, setPrimaryPortfolio] = useState("GitHub Integration Portfolio");
+  const [linkedinUrl, setLinkedinUrl] = useState("https://linkedin.com/in/harshdeep");
+  const [githubUrl, setGithubUrl] = useState("https://github.com/harshdeep");
+  const [portfolioUrl, setPortfolioUrl] = useState("https://harshdeep.dev");
+
+  // Load and synchronize profile
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  useEffect(() => {
+    if (profile) {
+      setTargetRoleInput(profile.targetRole || "Backend Developer");
+      setExperienceInput((profile.experienceLevel as any) || "Intermediate");
+      setIndustryInput(profile.preferredIndustry || "Fintech");
+      setCountryInput(profile.countryLocale || "United States");
+      setSalaryInput(profile.targetSalary || "$130,000");
+      setWorkTypeInput((profile.workType as any) || "Remote");
+      setAiPersonality(profile.aiPersonality || "Career Coach");
+      setAiResponseLength(profile.aiResponseLength || "Detailed");
+      setLearningStyle(profile.preferredLearningStyle || "Practical");
+      setRecommendationFreq(profile.aiRecommendationFreq || "Daily");
+      setAiTemperature(profile.aiTemperature !== undefined ? profile.aiTemperature : 0.5);
+    }
+  }, [profile]);
+
+  // Form states: Notifications
+  const [notifSettings, setNotifSettings] = useState({
+    scoreAlerts: true,
+    roadmapAlerts: true,
+    resumeAlerts: true,
+    weaknessAlerts: false,
+    reminderAlerts: true,
+    missionAlerts: true,
+    digestAlerts: false
+  });
+
+  // Form states: Connected Accounts toggles (interactive demo simulation)
+  const [connectedAccs, setConnectedAccs] = useState<Record<string, boolean>>({
+    GitHub: true,
+    LinkedIn: false,
+    Google: true,
+    "OpenAI / Gemini API": true
+  });
+
+  // Form states: Theme
+  const [themeMode, setThemeMode] = useState("Dark");
+  const [accentColor, setAccentColor] = useState("Purple");
+
+  const handleToggleNotif = (name: string) => {
+    setNotifSettings((prev) => {
+      const next = { ...prev, [name]: !prev[name as keyof typeof prev] };
+      addNotification(
+        `${name.replace("Alerts", "")} notifications updated.`,
+        "info"
+      );
+      return next;
+    });
+  };
+
+  const handleToggleAccount = (name: string) => {
+    setConnectedAccs((prev) => {
+      const isConnected = !prev[name];
+      addNotification(
+        `${name} account ${isConnected ? "connected" : "disconnected"} successfully.`,
+        isConnected ? "success" : "warning"
+      );
+      return { ...prev, [name]: isConnected };
+    });
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    await updateProfileSettings({
+      targetRole: targetRoleInput,
+      experienceLevel: experienceInput,
+      preferredIndustry: industryInput,
+      countryLocale: countryInput,
+      targetSalary: salaryInput,
+      workType: workTypeInput
+    });
+    addNotification("Profile and target career preferences synchronized successfully.", "success");
+    setSaving(false);
+  };
+
+  const handleSaveAI = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    await updateProfileSettings({
+      aiPersonality,
+      aiResponseLength,
+      preferredLearningStyle: learningStyle,
+      aiRecommendationFreq: recommendationFreq,
+      aiTemperature
+    });
+    addNotification("AI personality and model parameters synchronized successfully.", "success");
+    setSaving(false);
+  };
+
+  const handleSaveDocs = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setTimeout(() => {
+      addNotification("Document defaults and external links saved.", "success");
+      setSaving(false);
+    }, 500);
   };
 
   const handleMockSignOut = async () => {
@@ -29,132 +175,542 @@ export default function SettingsPage() {
     addNotification("Logged out successfully.", "info");
   };
 
-  const handleSwitchRole = (role: string, name: string) => {
-    switchUser(role, name);
-    addNotification(`Switched user profile to ${name} (${role}).`, "success");
-  };
-
   return (
     <div className="space-y-6 animate-fade-in-up pb-12">
       {/* Title */}
-      <div className="flex items-center space-x-3">
-        <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl">
-          <Settings className="w-6 h-6" />
-        </div>
-        <div>
-          <h2 className="text-xl font-bold text-foreground">Account Settings</h2>
-          <p className="text-xs text-muted">Manage profile details, system preferences, and session security.</p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border/60 pb-5">
+        <div className="flex items-center space-x-3">
+          <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl">
+            <Settings className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-foreground">System Configuration</h2>
+            <p className="text-xs text-muted">Configure profile targets, customize AI behavior, manage links, and review connected accounts.</p>
+          </div>
         </div>
       </div>
 
-      {/* Grid Layout */}
+      {/* Grid: Left tabs menu sidebar vs Right forms card */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Sessions & Auth */}
-        <div className="lg:col-span-5 space-y-6">
-          {/* Active Session info */}
-          <Card className="p-6 space-y-6">
-            <div className="flex items-center space-x-2 border-b border-border pb-3">
-              <Shield className="w-5 h-5 text-primary" />
-              <h3 className="text-sm font-semibold text-foreground">Authentication Session</h3>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-start space-x-3 p-3 bg-success/5 border border-success/20 rounded-xl">
-                <UserCheck className="w-5 h-5 text-success shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <span className="text-xs font-bold text-success">Secure Session Active</span>
-                  <p className="text-[10px] text-muted">
-                    Logged in as <span className="font-semibold">{storeUser.name || user.name}</span>
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-1 bg-accent/10 border border-border p-3.5 rounded-xl text-xs">
-                <div className="flex justify-between py-1">
-                  <span className="text-muted">Username</span>
-                  <span className="text-foreground font-semibold">{storeUser.name || user.name}</span>
-                </div>
-                <div className="flex justify-between py-1">
-                  <span className="text-muted">Email</span>
-                  <span className="text-foreground font-semibold">{user.email}</span>
-                </div>
-                <div className="flex justify-between py-1">
-                  <span className="text-muted">Target Goal</span>
-                  <span className="text-foreground font-semibold">{storeUser.goal || user.role}</span>
-                </div>
-              </div>
-
-              <Button
-                variant="danger"
-                className="w-full text-xs font-semibold flex items-center justify-center cursor-pointer"
-                onClick={handleMockSignOut}
+        
+        {/* Left Column: Navigation Sidebar */}
+        <div className="lg:col-span-3 space-y-1 bg-accent/5 p-2 rounded-2xl border border-border/60 h-fit">
+          {[
+            { id: "profile", label: "Profile & Career", icon: User },
+            { id: "ai", label: "AI Configuration", icon: Sparkles },
+            { id: "documents", label: "Resumes & Links", icon: FileText },
+            { id: "notifications", label: "Notifications", icon: Bell },
+            { id: "accounts", label: "Connected Accounts", icon: Shield },
+            { id: "theme", label: "Appearance & Theme", icon: Settings },
+            { id: "security", label: "Security & Privacy", icon: Key }
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as SettingsTab)}
+                className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  isActive
+                    ? "bg-primary text-white shadow-sm"
+                    : "text-muted hover:text-foreground hover:bg-accent/10"
+                }`}
               >
-                <LogOut className="w-4 h-4 mr-2" />
-                <span>Sign Out</span>
-              </Button>
-            </div>
+                <Icon className="w-4 h-4 shrink-0" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+
+          <div className="pt-4 mt-4 border-t border-border/40">
+            <button
+              onClick={handleMockSignOut}
+              className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-danger hover:bg-danger/10 transition-all cursor-pointer"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              <span>Sign Out</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Right Column: Forms panel card */}
+        <div className="lg:col-span-9">
+          <Card className="p-6">
+            
+            {/* 1. Profile Tab */}
+            {activeTab === "profile" && (
+              <form onSubmit={handleSaveProfile} className="space-y-4">
+                <div className="flex items-center space-x-2 border-b border-border pb-3">
+                  <User className="w-5 h-5 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">Profile & Career Target</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">Candidate Name</label>
+                    <input
+                      type="text"
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">Email Address</label>
+                    <input
+                      type="email"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">Target Role</label>
+                    <select
+                      value={targetRoleInput}
+                      onChange={(e) => setTargetRoleInput(e.target.value)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
+                    >
+                      <option value="Backend Developer">Backend Developer</option>
+                      <option value="Frontend Developer">Frontend Developer</option>
+                      <option value="DevOps Engineer">DevOps Engineer</option>
+                      <option value="Full Stack Developer">Full Stack Developer</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">Experience Bracket</label>
+                    <select
+                      value={experienceInput}
+                      onChange={(e) => setExperienceInput(e.target.value as any)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
+                    >
+                      <option value="Beginner">Beginner (0-2 Years)</option>
+                      <option value="Intermediate">Intermediate (2-5 Years)</option>
+                      <option value="Advanced">Advanced (5+ Years)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">Preferred Industry</label>
+                    <select
+                      value={industryInput}
+                      onChange={(e) => setIndustryInput(e.target.value)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
+                    >
+                      <option value="Fintech">Fintech</option>
+                      <option value="SaaS / Enterprise">SaaS / Enterprise</option>
+                      <option value="AI & Machine Learning">AI & Machine Learning</option>
+                      <option value="Healthcare Tech">Healthcare Tech</option>
+                      <option value="E-commerce">E-commerce</option>
+                      <option value="Cybersecurity">Cybersecurity</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">Country Locale</label>
+                    <select
+                      value={countryInput}
+                      onChange={(e) => setCountryInput(e.target.value)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
+                    >
+                      <option value="United States">United States</option>
+                      <option value="Canada">Canada</option>
+                      <option value="United Kingdom">United Kingdom</option>
+                      <option value="Germany">Germany</option>
+                      <option value="India">India</option>
+                      <option value="Singapore">Singapore</option>
+                      <option value="Australia">Australia</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">Target Salary (Annual USD)</label>
+                    <input
+                      type="text"
+                      value={salaryInput}
+                      onChange={(e) => setSalaryInput(e.target.value)}
+                      placeholder="e.g. $130,000"
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase block">Work Environment Type</label>
+                    <div className="flex gap-4 pt-2 text-xs">
+                      {(["Remote", "Hybrid", "Onsite"] as const).map((wType) => (
+                        <label key={wType} className="flex items-center space-x-2 cursor-pointer text-foreground">
+                          <input
+                            type="radio"
+                            name="workType"
+                            checked={workTypeInput === wType}
+                            onChange={() => setWorkTypeInput(wType)}
+                            className="text-primary focus:ring-primary"
+                          />
+                          <span>{wType}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-3">
+                  <Button type="submit" variant="ai" isLoading={saving} className="px-6 text-xs font-semibold">
+                    Save Preferences
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {/* 2. AI Tab */}
+            {activeTab === "ai" && (
+              <form onSubmit={handleSaveAI} className="space-y-4">
+                <div className="flex items-center space-x-2 border-b border-border pb-3">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">AI Intelligence Preferences</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">AI Coach Personality</label>
+                    <select
+                      value={aiPersonality}
+                      onChange={(e) => setAiPersonality(e.target.value)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
+                    >
+                      <option value="Mentor">Mentor (Encouraging & Explaining)</option>
+                      <option value="Recruiter">Recruiter (ATS & Keyword Focused)</option>
+                      <option value="Career Coach">Career Coach (Goal & Action Oriented)</option>
+                      <option value="Strict Interviewer">Strict Interviewer (Rigorous & Technical)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">Response Length</label>
+                    <select
+                      value={aiResponseLength}
+                      onChange={(e) => setAiResponseLength(e.target.value)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
+                    >
+                      <option value="Short">Short (Concise & Bulleted)</option>
+                      <option value="Medium">Medium (Balanced)</option>
+                      <option value="Detailed">Detailed (Elaborate & Architectural)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">Preferred Learning Style</label>
+                    <select
+                      value={learningStyle}
+                      onChange={(e) => setLearningStyle(e.target.value)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
+                    >
+                      <option value="Visual">Visual (Diagrams & Flowcharts)</option>
+                      <option value="Practical">Practical (Code & Implementation Tasks)</option>
+                      <option value="Theory">Theory (Concepts & Best Practices)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">Recommendation Frequency</label>
+                    <select
+                      value={recommendationFreq}
+                      onChange={(e) => setRecommendationFreq(e.target.value)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
+                    >
+                      <option value="Daily">Daily Actions</option>
+                      <option value="Weekly">Weekly Actions</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1 md:col-span-2">
+                    <div className="flex justify-between text-[10px] text-muted font-bold uppercase">
+                      <span>AI Model Temperature</span>
+                      <span className="text-foreground">{aiTemperature}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.2"
+                      max="0.8"
+                      step="0.1"
+                      value={aiTemperature}
+                      onChange={(e) => setAiTemperature(parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-accent rounded-lg appearance-none cursor-pointer accent-primary mt-2"
+                    />
+                    <span className="text-[9px] text-muted block mt-1">Lower values are more precise; higher values are more creative.</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-3">
+                  <Button type="submit" variant="ai" isLoading={saving} className="px-6 text-xs font-semibold">
+                    Save AI Preferences
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {/* 3. Resumes Tab */}
+            {activeTab === "documents" && (
+              <form onSubmit={handleSaveDocs} className="space-y-4">
+                <div className="flex items-center space-x-2 border-b border-border pb-3">
+                  <FileText className="w-5 h-5 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">Document Defaults & URLs</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">Primary Resume Source</label>
+                    <select
+                      value={primaryResume}
+                      onChange={(e) => setPrimaryResume(e.target.value)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
+                    >
+                      <option value="Harshdeep_Resume_2026.pdf">Harshdeep_Resume_2026.pdf (Primary)</option>
+                      <option value="Harshdeep_Resume_Draft2.pdf">Harshdeep_Resume_Draft2.pdf</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">Primary Portfolio</label>
+                    <input
+                      type="text"
+                      value={primaryPortfolio}
+                      onChange={(e) => setPrimaryPortfolio(e.target.value)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">LinkedIn Profile Link</label>
+                    <input
+                      type="url"
+                      value={linkedinUrl}
+                      onChange={(e) => setLinkedinUrl(e.target.value)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">GitHub Profile Link</label>
+                    <input
+                      type="url"
+                      value={githubUrl}
+                      onChange={(e) => setGithubUrl(e.target.value)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                    />
+                  </div>
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="text-[10px] text-muted font-bold uppercase">Portfolio Website URL</label>
+                    <input
+                      type="url"
+                      value={portfolioUrl}
+                      onChange={(e) => setPortfolioUrl(e.target.value)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-3">
+                  <Button type="submit" variant="ai" isLoading={saving} className="px-6 text-xs font-semibold">
+                    Save Document Links
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {/* 4. Notifications Tab */}
+            {activeTab === "notifications" && (
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2 border-b border-border pb-3">
+                  <Bell className="w-5 h-5 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">Notification Preferences</h3>
+                </div>
+
+                <div className="space-y-3">
+                  {[
+                    { name: "scoreAlerts", label: "Career Score Changes", desc: "Instantly alert me when my overall score goes up or down." },
+                    { name: "roadmapAlerts", label: "Roadmap Completed Checkpoints", desc: "Notify me when I verify milestone sub-checkpoints." },
+                    { name: "resumeAlerts", label: "Resume Improved Diagnostics", desc: "Alert me when my ATS resume score is recalculated." },
+                    { name: "weaknessAlerts", label: "New Weak Areas Detected", desc: "Warn me when mock interviews flag recurring concept mistakes." },
+                    { name: "reminderAlerts", label: "Interview Simulation Reminders", desc: "Send reminders for scheduled mock interviews." },
+                    { name: "missionAlerts", label: "Daily Mission Syncs", desc: "Notify me when the daily checklist updates in Career DNA." },
+                    { name: "digestAlerts", label: "Weekly Performance Digests", desc: "Send an email summary of my weekly progression." }
+                  ].map((item) => (
+                    <div key={item.name} className="flex items-center justify-between p-3.5 bg-accent/10 border border-border rounded-xl">
+                      <div className="space-y-1 pr-4 text-xs">
+                        <span className="font-bold text-foreground">{item.label}</span>
+                        <p className="text-[10px] text-muted leading-relaxed">{item.desc}</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={notifSettings[item.name as keyof typeof notifSettings]}
+                        onChange={() => handleToggleNotif(item.name)}
+                        className="w-8.5 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer relative checked:bg-primary before:content-[''] before:absolute before:h-3 before:w-3 before:left-0.5 before:bottom-0.5 before:bg-white before:rounded-full before:transition-all checked:before:left-5"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 5. Connected Accounts Tab */}
+            {activeTab === "accounts" && (
+              <div className="space-y-5">
+                <div className="flex items-center space-x-2 border-b border-border pb-3">
+                  <Shield className="w-5 h-5 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">Connected Accounts & Integrations</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    { name: "GitHub", connected: connectedAccs.GitHub, details: "Syncs repositories, readme audits, and code velocity stats." },
+                    { name: "LinkedIn", connected: connectedAccs.LinkedIn, details: "Crawls matching job alerts and exports professional profiles." },
+                    { name: "Google", connected: connectedAccs.Google, details: "Connects email digests and schedules calendar prep alerts." },
+                    { name: "OpenAI / Gemini API", connected: connectedAccs["OpenAI / Gemini API"], details: "Powers customized AI coaching and resume tailors." }
+                  ].map((acc) => (
+                    <div key={acc.name} className="p-4 bg-accent/10 border border-border rounded-2xl flex flex-col justify-between hover:bg-accent/15 transition-all">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-foreground">{acc.name}</span>
+                          <Badge variant={acc.connected ? "success" : "muted"}>
+                            {acc.connected ? "Connected" : "Disconnected"}
+                          </Badge>
+                        </div>
+                        <p className="text-[10px] text-muted leading-relaxed">{acc.details}</p>
+                      </div>
+                      <div className="flex justify-end pt-4">
+                        <Button
+                          variant={acc.connected ? "secondary" : "primary"}
+                          size="sm"
+                          onClick={() => handleToggleAccount(acc.name)}
+                          className="text-[10px] py-1 px-3 cursor-pointer"
+                        >
+                          {acc.connected ? "Configure" : "Connect"}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-3 border-t border-border/40 space-y-3">
+                  <span className="text-[10px] text-muted font-bold uppercase tracking-wider block">Additional Developer Integrations</span>
+                  <div className="grid grid-cols-3 gap-3 text-xs">
+                    {["LeetCode", "Codeforces", "HackerRank"].map((platform) => (
+                      <div key={platform} className="p-3 bg-accent/5 border border-border rounded-xl flex items-center justify-between">
+                        <span className="font-semibold text-foreground">{platform}</span>
+                        <input type="checkbox" defaultChecked className="rounded border-border text-primary focus:ring-primary cursor-pointer" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 6. Theme Tab */}
+            {activeTab === "theme" && (
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2 border-b border-border pb-3">
+                  <Settings className="w-5 h-5 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">Theme & Interface Appearance</h3>
+                </div>
+
+                <div className="space-y-4 text-xs">
+                  <div className="space-y-2">
+                    <span className="text-[10px] text-muted font-bold uppercase">Color Scheme Theme</span>
+                    <div className="grid grid-cols-3 gap-3">
+                      {["Dark", "Light", "System"].map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setThemeMode(t)}
+                          className={`p-3 border rounded-xl font-semibold cursor-pointer transition-colors ${
+                            themeMode === t ? "bg-primary border-primary text-white" : "bg-accent/10 border-border text-muted hover:text-foreground"
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <span className="text-[10px] text-muted font-bold uppercase">Interface Accent Color</span>
+                    <div className="flex gap-3">
+                      {["Purple", "Blue", "Green", "Orange"].map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => setAccentColor(color)}
+                          className={`px-3 py-1.5 border rounded-lg font-semibold cursor-pointer text-[11px] ${
+                            accentColor === color ? "bg-secondary border-secondary text-white" : "bg-card border-border hover:bg-accent/10 text-foreground"
+                          }`}
+                        >
+                          {color}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3.5 bg-accent/10 border border-border rounded-xl">
+                    <div className="space-y-1 pr-4">
+                      <span className="font-bold text-foreground">Subtle Dashboard Animations</span>
+                      <p className="text-[10px] text-muted">Toggle fade-in triggers, pulse rings, and progress loops.</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      defaultChecked
+                      className="w-8.5 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer relative checked:bg-primary before:content-[''] before:absolute before:h-3 before:w-3 before:left-0.5 before:bottom-0.5 before:bg-white before:rounded-full before:transition-all checked:before:left-5"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 7. Security Tab */}
+            {activeTab === "security" && (
+              <div className="space-y-5">
+                <div className="flex items-center space-x-2 border-b border-border pb-3">
+                  <Key className="w-5 h-5 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">Security Credentials & Privacy Control</h3>
+                </div>
+
+                <div className="space-y-4 text-xs">
+                  <div className="bg-success/5 border border-success/20 rounded-xl p-3.5 flex items-start space-x-2.5">
+                    <CheckCircle className="w-4.5 h-4.5 text-success shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <span className="font-bold text-success">Active Session Secured</span>
+                      <p className="text-[10px] text-muted">Currently authenticated from Seattle, WA (Chrome Browser on Linux OS).</p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 border border-border rounded-2xl space-y-3 bg-accent/5">
+                    <span className="text-[10px] text-muted font-bold uppercase tracking-wider block">Privacy & Logs Control</span>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center py-1 border-b border-border/40">
+                        <span className="text-muted">Profile Visibility</span>
+                        <Badge variant="primary">Private (Only You)</Badge>
+                      </div>
+                      <div className="flex justify-between items-center py-1 border-b border-border/40">
+                        <span className="text-muted">Store AI Conversation History</span>
+                        <input type="checkbox" defaultChecked className="rounded border-border text-primary cursor-pointer" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <Button variant="secondary" onClick={() => addNotification("Career data exported successfully.", "success")} className="text-xs font-semibold cursor-pointer">
+                      Export Career Data
+                    </Button>
+                    <Button variant="secondary" onClick={() => addNotification("AI conversation history cleared.", "info")} className="text-xs font-semibold cursor-pointer">
+                      Clear AI Chat Logs
+                    </Button>
+                  </div>
+
+                  <div className="border-t border-border/40 pt-4 flex justify-between items-center">
+                    <div>
+                      <span className="font-bold text-foreground">Deactivate Account</span>
+                      <p className="text-[10px] text-muted">This permanently deletes all historical stats, resumes, and logs.</p>
+                    </div>
+                    <Button variant="danger" size="sm" onClick={() => addNotification("Deactivation request submitted.", "warning")} className="cursor-pointer">
+                      Delete Account
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
           </Card>
         </div>
 
-        {/* Right Column: Preferences form */}
-        <div className="lg:col-span-7 space-y-6">
-          <Card className="p-6 space-y-6">
-            <div className="flex items-center space-x-2 border-b border-border pb-3">
-              <Bell className="w-5 h-5 text-primary" />
-              <h3 className="text-sm font-semibold text-foreground">Platform Alerts & Digests</h3>
-            </div>
-
-            <div className="space-y-4">
-              {/* Push alerts */}
-              <div className="flex items-center justify-between p-3.5 bg-accent/10 border border-border rounded-xl">
-                <div className="space-y-1.5 pr-4">
-                  <span className="text-xs font-bold text-foreground">AI Career Score Alerts</span>
-                  <p className="text-[10px] text-muted leading-relaxed">
-                    Receive instant browser notifications when new missions are generated or score increases.
-                  </p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={notificationsEnabled}
-                  onChange={handleToggleNotifications}
-                  className="w-8.5 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer relative checked:bg-primary before:content-[''] before:absolute before:h-3 before:w-3 before:left-0.5 before:bottom-0.5 before:bg-white before:rounded-full before:transition-all checked:before:left-5"
-                />
-              </div>
-
-              {/* Weekly digests */}
-              <div className="flex items-center justify-between p-3.5 bg-accent/10 border border-border rounded-xl">
-                <div className="space-y-1.5 pr-4">
-                  <span className="text-xs font-bold text-foreground">Weekly Performance Digest</span>
-                  <p className="text-[10px] text-muted leading-relaxed">
-                    Get email reports of your weekly score growth, study consistency, and interview preparation feedback.
-                  </p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={weeklyDigest}
-                  onChange={() => setWeeklyDigest(!weeklyDigest)}
-                  className="w-8.5 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer relative checked:bg-primary before:content-[''] before:absolute before:h-3 before:w-3 before:left-0.5 before:bottom-0.5 before:bg-white before:rounded-full before:transition-all checked:before:left-5"
-                />
-              </div>
-            </div>
-          </Card>
-
-          {/* Security details (mock placeholder) */}
-          <Card className="p-6 space-y-4">
-            <div className="flex items-center space-x-2 border-b border-border pb-3">
-              <Key className="w-5 h-5 text-primary" />
-              <h3 className="text-sm font-semibold text-foreground">Security Credentials</h3>
-            </div>
-            <p className="text-xs text-muted leading-relaxed">
-              CareerOS uses mock tokens for sandbox authentication. Real Clerk / OAuth sessions can be enabled by linking API credentials in the environment variables.
-            </p>
-            <div className="flex justify-end pt-2">
-              <Button variant="secondary" size="sm" disabled>
-                Configure Clerk OAuth
-              </Button>
-            </div>
-          </Card>
-        </div>
       </div>
     </div>
   );

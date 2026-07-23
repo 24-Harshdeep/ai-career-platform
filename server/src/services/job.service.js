@@ -29,6 +29,7 @@ async function matchAndSaveJob(userId, jobData) {
 
     // 3. Match and Analyze JD using Gemini API
     const resumeText = resume ? resume.parsedText : "";
+    const targetRole = userDoc ? userDoc.goal : "Backend Developer";
     const prompt = `We are matching a Job Description for a "${title}" at "${company}" against a candidate's profile.
 Job Description:
 "${description}"

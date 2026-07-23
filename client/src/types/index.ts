@@ -68,3 +68,37 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
 }
+
+export interface SkillSet {
+  technical: string[];
+  soft: string[];
+  tools: string[];
+  frameworks: string[];
+  languages: string[];
+  cloud: string[];
+  devops: string[];
+}
+
+export interface CareerProfile {
+  targetRole: string;
+  experienceLevel: "Beginner" | "Intermediate" | "Advanced";
+  careerGoal: string;
+  currentPhase: string;
+  strengths: string[];
+  weaknesses: string[];
+  skillsPossessed: SkillSet;
+  skillsTarget: SkillSet;
+  preferredLearningStyle: string;
+  preferredJobType: string;
+  targetCompanies: string[];
+  isOnboardingComplete: boolean;
+  aiPersonality?: string;
+  aiResponseLength?: string;
+  aiRecommendationFreq?: string;
+  aiTemperature?: number;
+  preferredIndustry?: string;
+  countryLocale?: string;
+  targetSalary?: string;
+  workType?: string;
+  updatedAt?: string;
+}

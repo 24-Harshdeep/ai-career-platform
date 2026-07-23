@@ -27,7 +27,15 @@ const CareerProfileSchema = new mongoose.Schema({
   preferredLearningStyle: { type: String, default: "Practical / Build-oriented" },
   preferredJobType: { type: String, default: "Full-Time Remote" },
   targetCompanies: [{ type: String }],
-  isOnboardingComplete: { type: Boolean, default: false }
+  isOnboardingComplete: { type: Boolean, default: false },
+  aiPersonality: { type: String, default: "Career Coach" },
+  aiResponseLength: { type: String, default: "Detailed" },
+  aiRecommendationFreq: { type: String, default: "Daily" },
+  aiTemperature: { type: Number, default: 0.5 },
+  preferredIndustry: { type: String, default: "Fintech" },
+  countryLocale: { type: String, default: "United States" },
+  targetSalary: { type: String, default: "$130,000" },
+  workType: { type: String, default: "Remote" }
 }, { timestamps: true });
 
 module.exports = mongoose.model("CareerProfile", CareerProfileSchema);

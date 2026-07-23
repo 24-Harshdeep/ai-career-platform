@@ -26,7 +26,7 @@ const errorResponse = (res, message, errors = [], status = 400) => {
 
 // 1. Start a mock interview session
 router.post("/start", authMiddleware, async (req, res) => {
-  const { role, type, difficulty } = req.body;
+  const { role, type, difficulty, questionCount } = req.body;
   if (!role) {
     return errorResponse(res, "Missing parameter: 'role' is required.");
   }
@@ -35,7 +35,8 @@ router.post("/start", authMiddleware, async (req, res) => {
     const data = await interviewService.startSession(req.user._id || req.user.id, {
       role,
       type: type || "Technical",
-      difficulty: difficulty || "Intermediate"
+      difficulty: difficulty || "Intermediate",
+      questionCount: questionCount ? parseInt(questionCount, 10) : undefined
     });
     return successResponse(res, "Mock interview session started successfully.", data);
   } catch (err) {

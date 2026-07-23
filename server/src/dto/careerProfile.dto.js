@@ -17,6 +17,14 @@ function toCareerProfileDTO(profile) {
     preferredJobType: profile.preferredJobType,
     targetCompanies: profile.targetCompanies || [],
     isOnboardingComplete: profile.isOnboardingComplete || false,
+    aiPersonality: profile.aiPersonality || "Career Coach",
+    aiResponseLength: profile.aiResponseLength || "Detailed",
+    aiRecommendationFreq: profile.aiRecommendationFreq || "Daily",
+    aiTemperature: profile.aiTemperature !== undefined ? profile.aiTemperature : 0.5,
+    preferredIndustry: profile.preferredIndustry || "Fintech",
+    countryLocale: profile.countryLocale || "United States",
+    targetSalary: profile.targetSalary || "$130,000",
+    workType: profile.workType || "Remote",
     updatedAt: profile.updatedAt
   };
 }

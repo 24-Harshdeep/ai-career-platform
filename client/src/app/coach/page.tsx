@@ -8,6 +8,7 @@ import PromptSuggestions from "@/components/coach/PromptSuggestions";
 import Card from "@/components/ui/Card/Card";
 import Button from "@/components/ui/Button/Button";
 import { Send, Brain } from "lucide-react";
+import PoweredBy from "@/components/ui/PoweredBy";
 
 function CoachChatContent() {
   const searchParams = useSearchParams();
@@ -71,14 +72,30 @@ function CoachChatContent() {
   return (
     <div className="h-[calc(100vh-140px)] flex flex-col space-y-6 animate-fade-in-up">
       {/* Top Title Bar */}
-      <div className="flex items-center space-x-3 shrink-0">
-        <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl">
-          <Brain className="w-6 h-6" />
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border/60 pb-5 shrink-0">
+        <div className="flex items-center space-x-3">
+          <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl">
+            <Brain className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-foreground">{coachTitle}</h2>
+            <p className="text-xs text-muted">{coachDesc}</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-xl font-bold text-foreground">{coachTitle}</h2>
-          <p className="text-xs text-muted">{coachDesc}</p>
-        </div>
+        <PoweredBy engines={[
+          {
+            type: "ai",
+            label: "Multi-Agent LLM",
+            description: "A cooperative network of specialized agents backing the user.",
+            points: ["Resume Coach", "Interview Coach", "Learning Coach", "Project Coach", "Career Advisor"]
+          },
+          {
+            type: "engine",
+            label: "Profile Context",
+            description: "Pipes real-time database state to feed agent memory.",
+            points: ["Injects Career DNA state", "Pipes Resume & Project audits", "Loads Interview history"]
+          }
+        ]} />
       </div>
 
       {/* Main Chat Panel */}

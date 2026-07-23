@@ -17,6 +17,7 @@ import {
   Layout,
   Gauge
 } from "lucide-react";
+import PoweredBy from "@/components/ui/PoweredBy";
 
 export default function ResumePage() {
   const resumeAnalysis = useCareerStore((state) => state.resumeAnalysis);
@@ -58,7 +59,7 @@ export default function ResumePage() {
         } catch (err) {
           console.error(err);
           setScanState("idle");
-          addNotification("Failed to analyze resume. Make sure it is a valid PDF.", "error");
+          addNotification("Failed to analyze resume. Make sure it is a valid PDF.", "warning");
         }
       } else {
         setScanProgress(currentProgress);
@@ -91,14 +92,36 @@ export default function ResumePage() {
   return (
     <div className="space-y-6 animate-fade-in-up pb-12">
       {/* Page Title */}
-      <div className="flex items-center space-x-3">
-        <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl">
-          <FileText className="w-6 h-6" />
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border/60 pb-5">
+        <div className="flex items-center space-x-3">
+          <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl">
+            <FileText className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-foreground">Resume Intelligence</h2>
+            <p className="text-xs text-muted">ATS analysis, parser checks, and optimization suggestions.</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-xl font-bold text-foreground">Resume Intelligence</h2>
-          <p className="text-xs text-muted">ATS analysis, parser checks, and optimization suggestions.</p>
-        </div>
+        <PoweredBy engines={[
+          {
+            type: "user",
+            label: "User Document",
+            description: "Allows the user to upload their resume text or document.",
+            points: ["Resume PDF / TXT uploads"]
+          },
+          {
+            type: "engine",
+            label: "Resume Engines",
+            description: "Backend engines parsing and grading the credentials.",
+            points: ["PDF Text parser", "ATS Score calculation engine", "Keyword matcher engine", "Formatting checking engine"]
+          },
+          {
+            type: "ai",
+            label: "AI Optimizer",
+            description: "Uses LLMs to re-draft and optimize your qualifications.",
+            points: ["Generates bullet point enhancements", "Identifies missing high-impact keywords", "Drafts resume optimizations"]
+          }
+        ]} />
       </div>
 
       {/* Grid Layout */}

@@ -98,8 +98,42 @@ async function completeDailyMission(userId, missionId) {
     const userDoc = await User.findById(userId);
     if (!userDoc) throw new Error("User document empty.");
 
-    // Simple mission resolution (in future, load from DB)
-    const mission = { id: missionId, xpReward: 50, scoreReward: 3 };
+    const Mission = require("../models/Mission");
+    const mongoose = require("mongoose");
+    let query = { userId };
+    if (mongoose.Types.ObjectId.isValid(missionId)) {
+      query._id = missionId;
+    }
+
+    let dbMission = null;
+    if (query._id) {
+      dbMission = await Mission.findOne(query);
+    }
+
+    // Fallback lookup for legacy/mock string IDs (like "m-1", "m-2")
+    if (!dbMission && typeof missionId === "string" && missionId.startsWith("m-")) {
+      const titles = {
+        "m-1": "Build API Authentication (Complete JWT Module)",
+        "m-2": "Optimize database index queries",
+        "m-3": "Complete resume upload audit"
+      };
+      const title = titles[missionId];
+      if (title) {
+        dbMission = await Mission.findOne({ userId, title });
+      }
+    }
+
+    if (dbMission) {
+      dbMission.completed = true;
+      await dbMission.save();
+    }
+
+    // Resolution values for scoring engine
+    const mission = { 
+      id: missionId, 
+      xpReward: 50, 
+      scoreReward: dbMission ? dbMission.scoreReward : 3 
+    };
 
     // Trigger mission engine
     const rewards = calculateMissionReward(mission, userDoc.xp, userDoc.level);

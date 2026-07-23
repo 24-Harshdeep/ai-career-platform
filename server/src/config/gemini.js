@@ -23,10 +23,11 @@ async function generateGeminiContent(prompt, systemInstruction = DEFAULT_SYSTEM_
 
 async function generateGemini(prompt, systemInstruction, jsonMode, apiKey) {
   const FALLBACK_MODELS = [
+    "gemini-1.5-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
     "gemini-flash-latest",
     "gemini-2.0-flash",
-    "gemini-3.1-flash-lite",
-    "gemini-2.5-flash-lite",
     "gemini-pro-latest"
   ];
 

@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const CareerProfile = require("../models/CareerProfile");
+const Mission = require("../models/Mission");
 const { mockDb } = require("../config/mockDb");
 
 const { getCareerStats } = require("./career.service");
@@ -44,15 +45,28 @@ async function getDashboardData(userId) {
       };
     });
 
+    // Fetch or seed missions from database
+    let dbMissions = await Mission.find({ userId });
+    if (dbMissions.length === 0) {
+      dbMissions = await Mission.create([
+        { userId, title: "Build API Authentication (Complete JWT Module)", completed: false, scoreReward: 3 },
+        { userId, title: "Optimize database index queries", completed: false, scoreReward: 2 },
+        { userId, title: "Complete resume upload audit", completed: true, scoreReward: 1 }
+      ]);
+    }
+
+    const formattedMissions = dbMissions.map(m => ({
+      id: m._id.toString(),
+      title: m.title,
+      completed: m.completed,
+      scoreReward: m.scoreReward
+    }));
+
     const dashboardPayload = {
       user: userDoc,
       profile: profileDoc,
       roadmap: dashboardRoadmap,
-      missions: [
-        { id: "m-1", title: "Build API Authentication (Complete JWT Module)", completed: false, scoreReward: 3 },
-        { id: "m-2", title: "Optimize database index queries", completed: false, scoreReward: 2 },
-        { id: "m-3", title: "Complete resume upload audit", completed: true, scoreReward: 1 }
-      ],
+      missions: formattedMissions,
       applications: [],
       notifications: [],
       stats

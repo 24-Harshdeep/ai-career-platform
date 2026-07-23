@@ -63,6 +63,14 @@ async function updateProfile(userId, profileData) {
     if (profileData.preferredJobType) profile.preferredJobType = profileData.preferredJobType;
     if (profileData.targetCompanies) profile.targetCompanies = profileData.targetCompanies;
     if (profileData.isOnboardingComplete !== undefined) profile.isOnboardingComplete = profileData.isOnboardingComplete;
+    if (profileData.aiPersonality) profile.aiPersonality = profileData.aiPersonality;
+    if (profileData.aiResponseLength) profile.aiResponseLength = profileData.aiResponseLength;
+    if (profileData.aiRecommendationFreq) profile.aiRecommendationFreq = profileData.aiRecommendationFreq;
+    if (profileData.aiTemperature !== undefined) profile.aiTemperature = profileData.aiTemperature;
+    if (profileData.preferredIndustry) profile.preferredIndustry = profileData.preferredIndustry;
+    if (profileData.countryLocale) profile.countryLocale = profileData.countryLocale;
+    if (profileData.targetSalary) profile.targetSalary = profileData.targetSalary;
+    if (profileData.workType) profile.workType = profileData.workType;
 
     await profile.save();
 

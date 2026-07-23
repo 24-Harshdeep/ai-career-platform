@@ -1,16 +1,29 @@
-function auditPerformance(htmlText) {
+function auditPerformance(htmlText, latencyMs = 200) {
   const text = (htmlText || "").toLowerCase();
   
-  let score = 90;
-  if (text.includes("bundle.js") || text.includes("large-asset.png")) {
-    score -= 15;
+  let score = 95;
+  
+  // Latency-based performance scoring
+  if (latencyMs < 300) {
+    score -= 0; // Excellent
+  } else if (latencyMs < 750) {
+    score -= 10; // Good
+  } else if (latencyMs < 1500) {
+    score -= 25; // Slow
+  } else {
+    score -= 45; // Poor / Heavy Latency
   }
-  if (!text.includes("async") && !text.includes("defer")) {
+
+  if (text.includes("bundle.js") || text.includes("large-asset.png")) {
     score -= 10;
+  }
+  
+  if (!text.includes("async") && !text.includes("defer") && text.includes("<script")) {
+    score -= 5;
   }
 
   return {
-    score: Math.max(40, score)
+    score: Math.max(30, score)
   };
 }
 
