@@ -32,7 +32,7 @@ export const Navbar: React.FC = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const displayName = storeUser.name || user.name;
+  const displayName = storeUser?.name || user?.name || "Harshdeep";
   const unreadCount = Array.isArray(notifications) ? notifications.filter((n) => n && !n.read).length : 0;
   const pathname = usePathname();
 

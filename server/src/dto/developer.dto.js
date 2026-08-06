@@ -34,18 +34,61 @@ function toDeveloperIntelligenceDTO(profile, repos, analyses) {
     }
   }
 
+  // Calculate dynamic technology coverage from repository characteristics
+  let frontendCount = 0;
+  let backendCount = 0;
+  let databaseCount = 0;
+  let devopsCount = 0;
+  let totalCount = 0;
+
+  (repos || []).forEach(repo => {
+    const lang = (repo.primaryLanguage || "").toLowerCase();
+    totalCount++;
+    if (["typescript", "javascript", "html", "css", "scss"].includes(lang)) {
+      frontendCount++;
+    } else if (["go", "python", "ruby", "php", "java", "c#", "rust", "c++", "c"].includes(lang)) {
+      backendCount++;
+    } else if (["sql", "plsql"].includes(lang)) {
+      databaseCount++;
+    } else if (["dockerfile", "shell", "hcl", "yaml", "makefile"].includes(lang)) {
+      devopsCount++;
+    } else {
+      // General fallback based on repository name keywords
+      const name = repo.name.toLowerCase();
+      if (name.includes("client") || name.includes("frontend") || name.includes("ui") || name.includes("web")) {
+        frontendCount++;
+      } else if (name.includes("server") || name.includes("backend") || name.includes("api") || name.includes("service")) {
+        backendCount++;
+      } else if (name.includes("db") || name.includes("sql") || name.includes("mongo")) {
+        databaseCount++;
+      } else if (name.includes("docker") || name.includes("ci") || name.includes("cd") || name.includes("devops") || name.includes("infra")) {
+        devopsCount++;
+      } else {
+        backendCount++; // Default fallback
+      }
+    }
+  });
+
+  const frontendPct = totalCount > 0 ? Math.round((frontendCount / totalCount) * 100) : 50;
+  const backendPct = totalCount > 0 ? Math.round((backendCount / totalCount) * 100) : 40;
+  const databasePct = totalCount > 0 ? Math.round((databaseCount / totalCount) * 100) : 10;
+  const devopsPct = totalCount > 0 ? Math.round((devopsCount / totalCount) * 100) : 0;
+
   return {
     overallHealth: profile.overallHealth,
     engineeringLevel: profile.engineeringLevel,
+    repositoryCount: profile.repositoryCount || repoList.length,
+    bestRepository: profile.bestRepository || "",
+    weakestRepository: profile.weakestRepository || "",
     careerImpact: profile.careerImpact || 3,
     jobReadinessImpact: profile.jobReadinessImpact || 5,
     repositories: repoList,
     languageDistribution: languageMap,
     technologyCoverage: {
-      Frontend: languageMap.Frontend || 50,
-      Backend: languageMap.Backend || 40,
-      Database: languageMap.Database || 10,
-      DevOps: languageMap.DevOps || 0
+      Frontend: frontendPct,
+      Backend: backendPct,
+      Database: databasePct,
+      DevOps: devopsPct
     },
     missingPractices: profile.missingPractices || [],
     strengths: ["Clean code layouts", "Consistent documentation conventions"],

@@ -61,6 +61,9 @@ async function compileDashboardData(userId) {
     // Execute Engines
     const growthData = calculateGrowthDeltas(score, snapshots);
     const consistencyData = compileConsistencyActivity(events);
+    if (userDoc) {
+      consistencyData.streakDays = userDoc.streakDays;
+    }
     const skills = userDoc ? userDoc.skillsPossessed : ["React", "Express", "Node.js", "MongoDB"];
     const skillTrendData = compileSkillTrend(skills);
 

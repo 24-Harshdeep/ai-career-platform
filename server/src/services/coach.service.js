@@ -2,6 +2,7 @@ const User = require("../models/User");
 const Resume = require("../models/Resume");
 const ResumeAnalysis = require("../models/ResumeAnalysis");
 const DeveloperProfile = require("../models/DeveloperProfile");
+const CoachMessage = require("../models/CoachMessage");
 const { mockDb } = require("../config/mockDb");
 const { routeCoachPrompt } = require("../engines/ai/coachRouter.engine");
 const { generateGeminiContent } = require("../config/gemini");
@@ -50,6 +51,34 @@ async function generateCoachReply(userId, activePath, userMessage) {
     };
   }
 
+  // Save User's incoming message to DB first
+  try {
+    await CoachMessage.create({
+      userId,
+      sender: "user",
+      text: userMessage,
+      activePath
+    });
+  } catch (e) {
+    console.error("[Coach Service] Failed to save user message:", e);
+  }
+
+  // Query past messages for context window
+  let historyLogs = [];
+  try {
+    historyLogs = await CoachMessage.find({ userId }).sort({ createdAt: 1 });
+    // slice last 10 messages
+    if (historyLogs.length > 10) {
+      historyLogs = historyLogs.slice(-10);
+    }
+  } catch (e) {
+    console.error("[Coach Service] Failed to fetch past messages history:", e);
+  }
+
+  const formattedHistory = historyLogs
+    .map(m => `${m.sender === "user" ? "User" : "Coach"}: ${m.text}`)
+    .join("\n");
+
   // 1. Get routed prompt
   const routed = routeCoachPrompt(activePath, context);
   const userTextLower = (userMessage || "").toLowerCase();
@@ -64,6 +93,9 @@ GitHub Repos Health: ${context.overallHealth}%
 Missing Project Practices: ${context.missingPractices.join(", ") || "None"}
 Active learning subskill: ${context.nextSubSkill}
 Active Page: ${activePath}
+
+Past Conversation History:
+${formattedHistory || "None"}
 
 User Message: "${userMessage}"
 
@@ -84,6 +116,18 @@ Dynamic Length Scaling:
 
   const geminiResponse = await generateGeminiContent(prompt, systemInstruction);
   if (geminiResponse) {
+    // Save AI reply to DB
+    try {
+      await CoachMessage.create({
+        userId,
+        sender: "coach",
+        text: geminiResponse,
+        activePath
+      });
+    } catch (e) {
+      console.error("[Coach Service] Failed to save coach reply:", e);
+    }
+
     return {
       role: routed.role,
       reply: geminiResponse
@@ -125,10 +169,43 @@ Dynamic Length Scaling:
     reply = `${notice}Greetings! I am your Career Coach. Your overall Career Score stands at **${context.score}**. Based on your target role as a **${context.goal}**, your next highest impact step is: Connect & Scan GitHub Portfolio to gain +3 score. Let me know if you need guidelines on where to start!`;
   }
 
+  // Save fallback AI reply to DB as well for continuity
+  try {
+    await CoachMessage.create({
+      userId,
+      sender: "coach",
+      text: reply,
+      activePath
+    });
+  } catch (e) {
+    console.error("[Coach Service] Failed to save fallback coach reply:", e);
+  }
+
   return {
     role: routed.role,
     reply
   };
 }
 
-module.exports = { generateCoachReply };
+// 4. Retrieve persistent chat history
+async function getCoachChatHistory(userId) {
+  try {
+    const messages = await CoachMessage.find({ userId }).sort({ createdAt: 1 });
+    return messages.map(m => ({
+      id: m._id.toString(),
+      sender: m.sender,
+      text: m.text,
+      timestamp: new Date(m.createdAt).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit"
+      })
+    }));
+  } catch (err) {
+    return [];
+  }
+}
+
+module.exports = { 
+  generateCoachReply,
+  getCoachChatHistory
+};

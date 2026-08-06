@@ -242,15 +242,17 @@ export default function RoadmapPage() {
   const storeRoadmap = useCareerStore((state) => state.roadmap);
   const toggleSubSkillMastery = useCareerStore((state) => state.toggleSubSkillMastery);
   const fetchDashboardData = useCareerStore((state) => state.fetchDashboardData);
+  const fetchRoadmap = useCareerStore((state) => state.fetchRoadmap);
   const addNotification = useCareerStore((state) => state.addNotification);
   const stats = useCareerStore((state) => state.stats);
 
   const [expandedSubSkill, setExpandedSubSkill] = useState<string | null>(null);
 
-  // Sync dashboard values on initial render
+  // Sync dashboard values and full roadmap details on initial render
   useEffect(() => {
     fetchDashboardData();
-  }, [fetchDashboardData]);
+    fetchRoadmap();
+  }, [fetchDashboardData, fetchRoadmap]);
 
   // Handler to toggle subskill mastery
   const toggleSubskill = async (subSkillId: string, currentlyMastered: boolean, name: string) => {

@@ -21,130 +21,201 @@ const { recalculateUserStats } = require("./career.service");
 const MOCK_REPOS_API = [
   { name: "careeros-client", description: "Frontend Next.js dashboard client application", fork: false, archived: false, language: "TypeScript", stargazers_count: 5, forks_count: 1, watchers_count: 5 },
   { name: "careeros-server", description: "Express backend API server systems", fork: false, archived: false, language: "JavaScript", stargazers_count: 3, forks_count: 0, watchers_count: 3 },
-  { name: "dsa-challenges", description: "Solved algorithms and sorting puzzles", fork: false, archived: false, language: "Go", stargazers_count: 1, forks_count: 0, watchers_count: 1 },
-  { name: "react-native-old", description: "Legacy mobile application test", fork: false, archived: true, language: "JavaScript", stargazers_count: 0, forks_count: 0, watchers_count: 0 }
+  { name: "dsa-challenges", description: "Solved algorithms and sorting puzzles", fork: false, archived: false, language: "Go", stargazers_count: 1, forks_count: 0, watchers_count: 1 }
 ];
 
-// 1. Trigger full developer profile sync & analysis
+// 1. Trigger full developer profile sync & analysis from public GitHub API
 async function syncDeveloperProfile(userId, githubUsername) {
+  const username = (githubUsername || "harshdeep").trim();
+  let reposList = [];
+
   try {
-    // 1. Sync repositories candidates
-    const syncedCandidates = syncRepositories(MOCK_REPOS_API);
-    const savedRepos = [];
-    const savedAnalyses = [];
+    // Crawl user public repositories list
+    const res = await fetch(`https://api.github.com/users/${username}/repos?per_page=6&sort=updated`, {
+      headers: { "User-Agent": "CareerOS-DeveloperScanner/1.0" }
+    });
+    
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        reposList = data;
+      }
+    } else {
+      console.warn(`[GitHub Sync] API returned status ${res.status}, falling back to mock.`);
+    }
+  } catch (err) {
+    console.error("[GitHub Sync] Failed to retrieve repos from GitHub REST API:", err.message);
+  }
 
-    for (const raw of syncedCandidates) {
-      const meta = discoverRepositoryMetadata(raw);
-      
-      // Upsert Repository record
-      const repo = await GithubRepository.findOneAndUpdate(
-        { userId, name: meta.name },
-        { ...meta, lastSyncedAt: new Date() },
-        { upsert: true, new: true }
-      );
-      savedRepos.push(repo);
+  // Fallback to offline mock configurations if API is unreachable
+  if (reposList.length === 0) {
+    reposList = MOCK_REPOS_API;
+  }
 
-      // Run auditing engines on candidate parameters
-      const readmeAuditLog = auditReadme("Overview. Installation guidelines. Usage scripts. License: MIT.");
-      const testingAuditLog = auditTesting(["tests/main.test.js"], "jest devDependency");
-      const projectStructureLog = auditProjectStructure([".gitignore", ".env.example", "package.json"]);
-      const commitFrequencyLog = analyzeCommitFrequency(45, new Date().toISOString());
+  const savedRepos = [];
+  const savedAnalyses = [];
 
-      const scoreData = calculateRepositoryScore(
-        readmeAuditLog,
-        testingAuditLog,
-        projectStructureLog,
-        commitFrequencyLog
-      );
+  for (const raw of reposList) {
+    const name = raw.name;
+    const description = raw.description || "Project repository systems";
+    const url = raw.html_url || `https://github.com/${username}/${name}`;
+    const primaryLanguage = raw.language || "JavaScript";
+    const stars = raw.stargazers_count || 0;
+    const forks = raw.forks_count || 0;
 
-      // Save Repository Analysis document
-      const analysis = await GithubRepositoryAnalysis.create({
-        repositoryId: repo._id,
-        healthScore: scoreData.healthScore,
-        documentationScore: scoreData.documentationScore,
-        testingScore: scoreData.testingScore,
-        architectureScore: scoreData.architectureScore,
-        activityScore: scoreData.activityScore,
-        maintainabilityScore: scoreData.maintainabilityScore,
-        securityScore: scoreData.securityScore,
-        missingPractices: [
-          ...readmeAuditLog.missingPractices,
-          ...testingAuditLog.missingPractices,
-          ...projectStructureLog.missingPractices
-        ],
-        analysisVersion: "v1.0.0"
+    // Discover repository file details via GitHub contents API
+    let filesList = [];
+    try {
+      const filesRes = await fetch(`https://api.github.com/repos/${username}/${name}/contents`, {
+        headers: { "User-Agent": "CareerOS-DeveloperScanner/1.0" },
+        signal: AbortSignal.timeout(3000)
       });
-      savedAnalyses.push(analysis);
+      
+      if (filesRes.ok) {
+        const filesData = await filesRes.json();
+        if (Array.isArray(filesData)) {
+          filesList = filesData.map(f => f.name.toLowerCase());
+        }
+      }
+    } catch (filesErr) {
+      console.warn(`[GitHub Sync] Contents scan failed for ${name}:`, filesErr.message);
     }
 
-    // 2. Compute language distribution
-    const languages = analyzeLanguageDistribution(savedRepos);
+    // Default mock contents if unauthenticated rate limit is exhausted
+    if (filesList.length === 0) {
+      filesList = [".gitignore", "package.json", "readme.md"];
+      if (name.includes("server")) filesList.push("dockerfile");
+      if (name.includes("client")) filesList.push(".env.example", "test.js");
+    }
 
-    // 3. Evaluate developer health aggregates
-    const healthData = evaluateDeveloperHealth(savedRepos, savedAnalyses);
+    // Dynamic audits based on file presence
+    const hasReadme = filesList.some(f => f === "readme.md" || f === "readme.txt");
+    const hasDocker = filesList.some(f => f.includes("docker"));
+    const hasEnvExample = filesList.some(f => f === ".env.example");
+    const hasTests = filesList.some(f => f.includes("test") || f.includes("spec") || f === "tests");
+    const hasLicense = filesList.some(f => f === "license" || f === "license.txt");
 
-    // 4. Save Developer Profile document
-    const profile = await DeveloperProfile.findOneAndUpdate(
-      { userId },
+    const documentationScore = hasReadme ? 95 : 40;
+    const testingScore = hasTests ? 90 : 30;
+    const securityScore = hasEnvExample ? 85 : 50;
+    const architectureScore = hasDocker ? 90 : 60;
+    const activityScore = stars > 2 ? 90 : 70;
+    const maintainabilityScore = hasLicense ? 95 : 65;
+
+    const healthScore = Math.round(
+      (documentationScore + testingScore + securityScore + architectureScore + activityScore + maintainabilityScore) / 6
+    );
+
+    // Upsert Repository record
+    const repo = await GithubRepository.findOneAndUpdate(
+      { userId, name },
       {
-        overallHealth: healthData.overallHealth,
-        engineeringLevel: healthData.engineeringLevel,
-        repositoryCount: healthData.repositoryCount,
-        bestRepository: healthData.bestRepository,
-        weakestRepository: healthData.weakestRepository,
-        languageDistribution: languages,
-        missingPractices: healthData.missingPractices,
-        lastAnalysis: new Date(),
-        careerImpact: 3,
-        jobReadinessImpact: 5
+        name,
+        description,
+        url,
+        primaryLanguage,
+        stars,
+        forks,
+        lastSyncedAt: new Date()
       },
       { upsert: true, new: true }
     );
+    savedRepos.push(repo);
 
-    // 5. Update User profile indicators
-    const userDoc = await User.findById(userId);
-    if (userDoc) {
-      userDoc.hasGithubScanned = true;
-      await userDoc.save();
+    const missingPractices = [];
+    if (!hasReadme) missingPractices.push(`${name}: Missing README.md file`);
+    if (!hasDocker) missingPractices.push(`${name}: Missing Dockerfile container configurations`);
+    if (!hasEnvExample) missingPractices.push(`${name}: Missing .env.example configuration file`);
+    if (!hasTests) missingPractices.push(`${name}: Missing unit test suites`);
+    if (!hasLicense) missingPractices.push(`${name}: Missing LICENSE file`);
+
+    // Save Repository Analysis document
+    const analysis = await GithubRepositoryAnalysis.create({
+      repositoryId: repo._id,
+      healthScore,
+      documentationScore,
+      testingScore,
+      architectureScore,
+      activityScore,
+      maintainabilityScore,
+      securityScore,
+      missingPractices,
+      analysisVersion: "v1.0.0"
+    });
+    savedAnalyses.push(analysis);
+  }
+
+  // 2. Compute language distribution
+  const languages = {};
+  savedRepos.forEach(r => {
+    const lang = r.primaryLanguage || "Other";
+    languages[lang] = (languages[lang] || 0) + 1;
+  });
+  const total = savedRepos.length;
+  Object.keys(languages).forEach(k => {
+    languages[k] = Math.round((languages[k] / total) * 100);
+  });
+
+  // Evaluate developer profile health aggregates
+  const totalScore = savedAnalyses.reduce((acc, a) => acc + a.healthScore, 0);
+  const overallHealth = Math.round(totalScore / savedAnalyses.length);
+  
+  let bestRepo = savedRepos[0]?.name || "";
+  let weakestRepo = savedRepos[0]?.name || "";
+  let highestHealth = 0;
+  let lowestHealth = 100;
+
+  savedAnalyses.forEach(a => {
+    const repoObj = savedRepos.find(r => r._id.toString() === a.repositoryId.toString());
+    if (!repoObj) return;
+    if (a.healthScore > highestHealth) {
+      highestHealth = a.healthScore;
+      bestRepo = repoObj.name;
     }
+    if (a.healthScore < lowestHealth) {
+      lowestHealth = a.healthScore;
+      weakestRepo = repoObj.name;
+    }
+  });
 
-    // 6. Force recalculate Career Score
-    await recalculateUserStats(userId);
+  const allMissingPractices = [];
+  savedAnalyses.forEach(a => {
+    if (a.missingPractices) {
+      allMissingPractices.push(...a.missingPractices);
+    }
+  });
 
-    return toDeveloperIntelligenceDTO(profile, savedRepos, savedAnalyses);
-  } catch (err) {
-    // Offline local fallback
-    mockDb.user.hasGithubScanned = true;
+  const engineeringLevel = overallHealth > 85 ? "Advanced" : overallHealth > 65 ? "Intermediate" : "Beginner";
 
-    const profile = {
-      overallHealth: 82,
-      engineeringLevel: "Intermediate",
-      repositoryCount: 3,
-      bestRepository: "careeros-client",
-      weakestRepository: "dsa-challenges",
-      languageDistribution: { Frontend: 60, Backend: 30, Database: 10, DevOps: 0 },
-      missingPractices: [
-        "dsa-challenges: Missing LICENSE file",
-        "careeros-server: Missing Docker container configurations"
-      ],
+  // 4. Save Developer Profile document
+  const profile = await DeveloperProfile.findOneAndUpdate(
+    { userId },
+    {
+      overallHealth,
+      engineeringLevel,
+      repositoryCount: savedRepos.length,
+      bestRepository: bestRepo,
+      weakestRepository: weakestRepo,
+      languageDistribution: languages,
+      missingPractices: allMissingPractices.slice(0, 5),
+      lastAnalysis: new Date(),
       careerImpact: 3,
       jobReadinessImpact: 5
-    };
+    },
+    { upsert: true, new: true }
+  );
 
-    const mockRepos = [
-      { id: "repo-1", name: "careeros-client", description: "Dashboard client application", url: "", primaryLanguage: "TypeScript", stars: 5, forks: 1 },
-      { id: "repo-2", name: "careeros-server", description: "Express backend API systems", url: "", primaryLanguage: "JavaScript", stars: 3, forks: 0 },
-      { id: "repo-3", name: "dsa-challenges", description: "Solved algorithm puzzles", url: "", primaryLanguage: "Go", stars: 1, forks: 0 }
-    ];
-
-    const mockAnalyses = [
-      { repositoryId: "repo-1", healthScore: 88, documentationScore: 90, testingScore: 85, architectureScore: 90, activityScore: 85 },
-      { repositoryId: "repo-2", healthScore: 78, documentationScore: 80, testingScore: 70, architectureScore: 80, activityScore: 75 },
-      { repositoryId: "repo-3", healthScore: 68, documentationScore: 60, testingScore: 50, architectureScore: 70, activityScore: 60 }
-    ];
-
-    return toDeveloperIntelligenceDTO(profile, mockRepos, mockAnalyses);
+  // 5. Update User profile indicators
+  const userDoc = await User.findById(userId);
+  if (userDoc) {
+    userDoc.hasGithubScanned = true;
+    await userDoc.save();
   }
+
+  // 6. Force recalculate Career Score
+  await recalculateUserStats(userId);
+
+  return toDeveloperIntelligenceDTO(profile, savedRepos, savedAnalyses);
 }
 
 // 2. Fetch Developer Profile DTO

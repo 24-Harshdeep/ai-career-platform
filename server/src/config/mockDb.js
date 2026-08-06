@@ -43,7 +43,14 @@ const mockDb = {
     preferredLearningStyle: "Practical / Build-oriented",
     preferredJobType: "Full-Time Remote",
     targetCompanies: ["Stripe", "Vercel", "Linear"],
-    isOnboardingComplete: true
+    isOnboardingComplete: true,
+    themeMode: "Dark",
+    accentColor: "Purple",
+    primaryResume: "Harshdeep_Resume_2026.pdf",
+    primaryPortfolio: "GitHub Integration Portfolio",
+    linkedinUrl: "",
+    portfolioUrl: "",
+    githubUrl: ""
   },
   roadmap: [
     {

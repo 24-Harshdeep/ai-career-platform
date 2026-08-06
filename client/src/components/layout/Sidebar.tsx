@@ -26,10 +26,10 @@ export const Sidebar: React.FC = () => {
   const { user } = useAuth();
   const storeUser = useCareerStore((state) => state.user);
 
-  const displayName = storeUser.name || user.name;
-  const displayGoal = storeUser.goal || user.role;
+  const displayName = storeUser?.name || user?.name || "Harshdeep";
+  const displayGoal = storeUser?.goal || user?.role || "Full Stack Developer";
 
-  // New refined 10-item list (structured logically)
+  // New refined 9-item list (structured logically)
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Career DNA", href: "/dna", icon: Dna },
@@ -37,19 +37,17 @@ export const Sidebar: React.FC = () => {
     { name: "Career Coach", href: "/coach", icon: MessageSquareCode },
     { name: "Resume Intelligence", href: "/resume", icon: FileText },
     { name: "Portfolio Intelligence", href: "/portfolio", icon: FolderGit },
-    { name: "Job Intelligence", href: "/applications", icon: Briefcase },
     { name: "Interview Intelligence", href: "/interview", icon: GraduationCap },
     { name: "Career Analytics", href: "/analytics", icon: LineChart },
     { name: "Settings", href: "/settings", icon: Settings },
   ];
 
-  // Mobile navigation bar items (top 5 essential targets)
+  // Mobile navigation bar items (top 4 essential targets)
   const mobileNavItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Career DNA", href: "/dna", icon: Dna },
     { name: "Career Coach", href: "/coach", icon: MessageSquareCode },
     { name: "Resume", href: "/resume", icon: FileText },
-    { name: "Job Intel", href: "/applications", icon: Briefcase },
   ];
 
   const getInitials = (name: string) => {
@@ -74,7 +72,7 @@ export const Sidebar: React.FC = () => {
                 className="absolute top-0 left-1/2 transform -translate-x-1/2 h-[72px] max-w-none"
               />
             </div>
-            <span className="text-2xl font-black tracking-tight bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent group-hover:opacity-90 transition-opacity duration-200 translate-y-[1px]">
+            <span className="text-2xl font-black tracking-tight bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] bg-clip-text text-transparent group-hover:opacity-90 transition-opacity duration-200 translate-y-[1px]">
               CareerOS
             </span>
           </Link>

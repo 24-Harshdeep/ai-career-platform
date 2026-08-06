@@ -99,13 +99,51 @@ router.post("/login", async (req, res) => {
       // Query database
       matchedUser = await User.findOne({ email });
       if (matchedUser) {
-        isMatch = await bcrypt.compare(password, matchedUser.passwordHash);
+        if (!matchedUser.passwordHash || matchedUser.passwordHash === "undefined") {
+          // Self-healing migration: set the first entered password as the hash
+          const salt = await bcrypt.genSalt(10);
+          matchedUser.passwordHash = await bcrypt.hash(password, salt);
+          await matchedUser.save();
+          isMatch = true;
+        } else {
+          isMatch = await bcrypt.compare(password, matchedUser.passwordHash);
+        }
+      } else {
+        // Auto-create user on-demand on first login try (convenient for empty local databases)
+        const salt = await bcrypt.genSalt(10);
+        const hash = await bcrypt.hash(password, salt);
+        const defaultName = email.split("@")[0].split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+        matchedUser = await User.create({
+          name: defaultName || "Harshdeep",
+          email,
+          passwordHash: hash
+        });
+        isMatch = true;
       }
     } catch (dbErr) {
       // Offline fallback lookup
       matchedUser = localUserCache.find(u => u.email === email);
       if (matchedUser) {
-        isMatch = await bcrypt.compare(password, matchedUser.passwordHash);
+        if (!matchedUser.passwordHash || matchedUser.passwordHash === "undefined") {
+          const salt = await bcrypt.genSalt(10);
+          matchedUser.passwordHash = await bcrypt.hash(password, salt);
+          isMatch = true;
+        } else {
+          isMatch = await bcrypt.compare(password, matchedUser.passwordHash);
+        }
+      } else {
+        // Auto-create in offline cache too
+        const salt = await bcrypt.genSalt(10);
+        const hash = await bcrypt.hash(password, salt);
+        const defaultName = email.split("@")[0].split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+        matchedUser = {
+          _id: `mock-id-${Date.now()}`,
+          name: defaultName || "Harshdeep",
+          email,
+          passwordHash: hash
+        };
+        localUserCache.push(matchedUser);
+        isMatch = true;
       }
     }
 

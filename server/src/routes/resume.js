@@ -1,8 +1,15 @@
 const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
-
 const resumeService = require("../services/resume.service");
+const multer = require("multer");
+const pdfParse = require("pdf-parse");
+const cloudinary = require("../config/cloudinary");
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB max
+});
 
 // Helper: Standardize Success JSON Envelope
 const successResponse = (res, message, data) => {
@@ -22,7 +29,7 @@ const errorResponse = (res, message, errors = [], status = 400) => {
   });
 };
 
-// 1. Fetch Resume Analysis
+// 1. Fetch Resume Analysis (Details, Versions, Score)
 router.get("/analysis", authMiddleware, async (req, res) => {
   try {
     const data = await resumeService.getResumeAnalysis(req.user._id || req.user.id);
@@ -35,15 +42,6 @@ router.get("/analysis", authMiddleware, async (req, res) => {
   }
 });
 
-const multer = require("multer");
-const pdfParse = require("pdf-parse");
-const cloudinary = require("../config/cloudinary");
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB max
-});
-
 // 2. Upload and Scan Resume
 router.post("/upload", authMiddleware, upload.single("file"), async (req, res) => {
   let targetFilename = "resume.pdf";
@@ -54,16 +52,13 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
     targetFilename = req.file.originalname;
 
     try {
-      // 1. Extract text from PDF
       if (req.file.mimetype === "application/pdf") {
         const pdfData = await pdfParse(req.file.buffer);
         targetText = pdfData.text;
       } else {
-        // Fallback for plain text files
         targetText = req.file.buffer.toString("utf-8");
       }
 
-      // 2. Upload raw file buffer to Cloudinary if configured
       if (process.env.CLOUDINARY_CLOUD_NAME) {
         try {
           const uploadResult = await new Promise((resolve, reject) => {
@@ -82,7 +77,7 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
           });
           cloudinaryUrl = uploadResult.secure_url;
         } catch (cloudinaryErr) {
-          console.warn("[Resume Upload] Cloudinary upload failed (proceeding with parsing only):", cloudinaryErr.message);
+          console.warn("[Resume Upload] Cloudinary upload failed:", cloudinaryErr.message);
         }
       }
     } catch (err) {
@@ -90,14 +85,13 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
       return errorResponse(res, `File parsing failed: ${err.message}`, [], 500);
     }
   } else {
-    // Fallback to body properties (compatibility mode)
     const { filename, parsedText } = req.body;
     targetFilename = filename || "resume.pdf";
     targetText = parsedText;
   }
 
   if (!targetText || !targetText.trim()) {
-    return errorResponse(res, "Could not extract text content from the uploaded resume. Please upload a valid PDF or text document.");
+    return errorResponse(res, "Could not extract text content from the uploaded resume.");
   }
 
   try {
@@ -110,6 +104,59 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
     return successResponse(res, "Resume analyzed successfully.", data);
   } catch (err) {
     return errorResponse(res, `Failed to analyze resume: ${err.message}`, [], 500);
+  }
+});
+
+// 3. Save Resume Form Edits
+router.put("/content", authMiddleware, async (req, res) => {
+  try {
+    const data = await resumeService.saveResumeEdits(req.user._id || req.user.id, req.body);
+    return successResponse(res, "Resume edits saved successfully.", data);
+  } catch (err) {
+    return errorResponse(res, `Failed to save edits: ${err.message}`, [], 500);
+  }
+});
+
+// 4. Fork Resume Version
+router.post("/versions/fork", authMiddleware, async (req, res) => {
+  try {
+    const { title, goal } = req.body;
+    const data = await resumeService.forkResumeVersion(req.user._id || req.user.id, title, goal);
+    return successResponse(res, "Resume version forked successfully.", data);
+  } catch (err) {
+    return errorResponse(res, `Failed to fork version: ${err.message}`, [], 500);
+  }
+});
+
+// 5. Restore Resume Version
+router.post("/versions/restore", authMiddleware, async (req, res) => {
+  try {
+    const { versionNumber } = req.body;
+    const data = await resumeService.restoreResumeVersion(req.user._id || req.user.id, versionNumber);
+    return successResponse(res, "Resume version restored successfully.", data);
+  } catch (err) {
+    return errorResponse(res, `Failed to restore version: ${err.message}`, [], 500);
+  }
+});
+
+// 6. Fetch Cross-Module Recommendations
+router.get("/cross-sync", authMiddleware, async (req, res) => {
+  try {
+    const data = await resumeService.getCrossSyncSuggestions(req.user._id || req.user.id);
+    return successResponse(res, "Cross-sync recommendations retrieved successfully.", data);
+  } catch (err) {
+    return errorResponse(res, `Failed to retrieve suggestions: ${err.message}`, [], 500);
+  }
+});
+
+// 7. Full AI Resume Optimization
+router.post("/optimize", authMiddleware, async (req, res) => {
+  try {
+    const { goal, targetDescription } = req.body;
+    const data = await resumeService.optimizeResumeContent(req.user._id || req.user.id, goal, targetDescription);
+    return successResponse(res, "Resume optimized successfully.", data);
+  } catch (err) {
+    return errorResponse(res, `Failed to optimize resume: ${err.message}`, [], 500);
   }
 });
 

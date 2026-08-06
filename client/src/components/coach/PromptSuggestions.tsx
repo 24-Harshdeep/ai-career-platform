@@ -1,28 +1,36 @@
 "use client";
 
 import React from "react";
-import { Sparkles, FileText, Code2, Map } from "lucide-react";
+import { Sparkles, FileText, Code2, Map, CheckSquare, MessageSquare } from "lucide-react";
 
 interface PromptSuggestionsProps {
   onSelect: (prompt: string) => void;
+  userName?: string;
+  targetRole?: string;
+  atsScore?: number;
 }
 
-export const PromptSuggestions: React.FC<PromptSuggestionsProps> = ({ onSelect }) => {
+export const PromptSuggestions: React.FC<PromptSuggestionsProps> = ({
+  onSelect,
+  userName = "Candidate",
+  targetRole = "Full Stack Developer",
+  atsScore = 82
+}) => {
   const suggestions = [
     {
-      text: "Improve my resume",
+      text: "Fix ATS Keywords",
       icon: FileText,
-      prompt: "How can I improve my resume to increase my ATS score and match target jobs?",
+      prompt: `How can I fix the missing ATS keywords in my resume to raise my score of ${atsScore}% for a ${targetRole} position?`,
     },
     {
-      text: "Analyze my GitHub",
+      text: "Prepare Mock Interview",
+      icon: MessageSquare,
+      prompt: `Let's start a mock technical interview focusing on database query tuning and systems design challenges for a ${targetRole} role.`,
+    },
+    {
+      text: "Optimize Project README",
       icon: Code2,
-      prompt: "Can you analyze my GitHub repositories and recommend portfolio improvements?",
-    },
-    {
-      text: "Plan my roadmap",
-      icon: Map,
-      prompt: "I want to map out my study goals. What backend modules should I focus on next?",
+      prompt: `I want to audit my portfolio repositories. What specific changes should I make to my GitHub README documentation to impress FAANG engineering recruiters?`,
     },
   ];
 

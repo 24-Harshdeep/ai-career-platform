@@ -3,7 +3,8 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import Button from "@/components/ui/Button/Button";
 import Card from "@/components/ui/Card/Card";
-import { KeyRound, Mail, User as UserIcon, ShieldAlert } from "lucide-react";
+import { KeyRound, Mail, User as UserIcon, ShieldAlert, Eye, EyeOff } from "lucide-react";
+import { useCareerStore } from "@/store/careerStore";
 
 export interface SessionUser {
   name: string;
@@ -26,7 +27,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const API_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000/api"}/auth`;
+const API_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/auth`;
 
 export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session>({
@@ -133,6 +134,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (res.ok) {
         const data = await res.json();
         localStorage.setItem("careeros_token", data.token);
+        localStorage.setItem("careeros_show_profile_onboarding", "true");
         setSession({
           user: {
             name: data.user.name,
@@ -193,12 +195,31 @@ export const useSession = () => {
 // 🔐 Client AuthGuard Interface Form Component
 export const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { session, signIn, signUp } = useSession();
+  const fetchDashboardData = useCareerStore((state) => state.fetchDashboardData);
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Onboarding profile inputs
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [githubUrlOnboard, setGithubUrlOnboard] = useState("");
+  const [linkedinUrlOnboard, setLinkedinUrlOnboard] = useState("");
+  const [portfolioUrlOnboard, setPortfolioUrlOnboard] = useState("");
+  const [onboardLoading, setOnboardLoading] = useState(false);
+  const [onboardError, setOnboardError] = useState("");
+
+  useEffect(() => {
+    if (session.status === "authenticated") {
+      const show = localStorage.getItem("careeros_show_profile_onboarding");
+      if (show === "true") {
+        setShowOnboarding(true);
+      }
+    }
+  }, [session.status]);
 
   if (session.status === "loading") {
     return (
@@ -308,16 +329,24 @@ export const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children })
 
             <div className="space-y-1.5">
               <label className="text-[10px] uppercase font-bold text-muted tracking-wider">Password</label>
-              <div className="flex items-center bg-accent/20 border border-border rounded-xl px-3.5 py-2.5 transition-all focus-within:border-primary/50">
+              <div className="flex items-center bg-accent/20 border border-border rounded-xl px-3.5 py-2.5 transition-all focus-within:border-primary/50 relative">
                 <KeyRound className="w-4 h-4 text-muted mr-2 shrink-0" />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="bg-transparent border-none outline-none text-xs text-foreground w-full placeholder-muted"
+                  className="bg-transparent border-none outline-none text-xs text-foreground w-full pr-8 placeholder-muted"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
+                  title={showPassword ? "Hide Password" : "Show Password"}
+                >
+                  {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                </button>
               </div>
             </div>
 
@@ -347,6 +376,164 @@ export const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children })
               {isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
             </button>
           </div>
+        </Card>
+      </div>
+    );
+  }
+
+  const handleSkipOnboarding = async () => {
+    localStorage.removeItem("careeros_show_profile_onboarding");
+    try {
+      await fetchDashboardData();
+    } catch (e) {
+      console.error(e);
+    }
+    setShowOnboarding(false);
+    window.location.href = "/dashboard";
+  };
+
+  const handleSaveOnboarding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setOnboardError("");
+    setOnboardLoading(true);
+
+    const urlPattern = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([\/\w .-]*)*\/?$/i;
+    if (githubUrlOnboard && !urlPattern.test(githubUrlOnboard)) {
+      setOnboardError("Please enter a valid GitHub Profile URL.");
+      setOnboardLoading(false);
+      return;
+    }
+    if (linkedinUrlOnboard && !urlPattern.test(linkedinUrlOnboard)) {
+      setOnboardError("Please enter a valid LinkedIn Profile URL.");
+      setOnboardLoading(false);
+      return;
+    }
+    if (portfolioUrlOnboard && !urlPattern.test(portfolioUrlOnboard)) {
+      setOnboardError("Please enter a valid Portfolio Website URL.");
+      setOnboardLoading(false);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("careeros_token");
+       const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/career/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          githubUrl: githubUrlOnboard,
+          linkedinUrl: linkedinUrlOnboard,
+          portfolioUrl: portfolioUrlOnboard
+        })
+      });
+
+      if (res.ok) {
+        localStorage.removeItem("careeros_show_profile_onboarding");
+        try {
+          await fetchDashboardData();
+        } catch (e) {
+          console.error(e);
+        }
+        setShowOnboarding(false);
+        window.location.href = "/dashboard";
+      } else {
+        setOnboardError("Failed to save links. Please try again.");
+      }
+    } catch (err) {
+      setOnboardError("Network connection error. Try again.");
+    } finally {
+      setOnboardLoading(false);
+    }
+  };
+
+  if (showOnboarding) {
+    return (
+      <div className="min-h-screen w-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
+        {/* Abstract background graphics */}
+        <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full bg-primary/5 blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full bg-secondary/5 blur-[120px] pointer-events-none" />
+
+        <Card className="w-full max-w-md p-8 bg-card/60 border-border/80 backdrop-blur-lg rounded-3xl shadow-2xl relative z-10 space-y-6">
+          <div className="flex flex-col items-center text-center space-y-2">
+            <h2 className="text-xl font-bold text-foreground">
+              Complete Your Professional Profile
+            </h2>
+            <p className="text-xs text-muted leading-relaxed">
+              Add your professional links to help build a stronger profile. You can skip this step and add them later.
+            </p>
+          </div>
+
+          <form onSubmit={handleSaveOnboarding} className="space-y-4 pt-2">
+            {onboardError && (
+              <div className="flex items-start space-x-2.5 p-3.5 bg-red-500/10 border border-red-500/20 text-red-500 rounded-2xl text-xs font-semibold">
+                <ShieldAlert className="w-4.5 h-4.5 shrink-0 mt-0.5" />
+                <span>{onboardError}</span>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] uppercase font-bold text-muted tracking-wider">GitHub Profile URL (Optional)</label>
+              <div className="flex items-center bg-accent/20 border border-border rounded-xl px-3.5 py-2.5 transition-all focus-within:border-primary/50">
+                <input
+                  type="text"
+                  placeholder="https://github.com/username"
+                  value={githubUrlOnboard}
+                  onChange={(e) => setGithubUrlOnboard(e.target.value)}
+                  className="bg-transparent border-none outline-none text-xs text-foreground w-full placeholder-muted"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] uppercase font-bold text-muted tracking-wider">LinkedIn Profile URL (Optional)</label>
+              <div className="flex items-center bg-accent/20 border border-border rounded-xl px-3.5 py-2.5 transition-all focus-within:border-primary/50">
+                <input
+                  type="text"
+                  placeholder="https://linkedin.com/in/username"
+                  value={linkedinUrlOnboard}
+                  onChange={(e) => setLinkedinUrlOnboard(e.target.value)}
+                  className="bg-transparent border-none outline-none text-xs text-foreground w-full placeholder-muted"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] uppercase font-bold text-muted tracking-wider">Portfolio Website URL (Optional)</label>
+              <div className="flex items-center bg-accent/20 border border-border rounded-xl px-3.5 py-2.5 transition-all focus-within:border-primary/50">
+                <input
+                  type="text"
+                  placeholder="https://yourportfolio.dev"
+                  value={portfolioUrlOnboard}
+                  onChange={(e) => setPortfolioUrlOnboard(e.target.value)}
+                  className="bg-transparent border-none outline-none text-xs text-foreground w-full placeholder-muted"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-4 pt-2">
+              <button
+                type="button"
+                onClick={handleSkipOnboarding}
+                className="flex-1 py-3 text-xs font-bold rounded-xl border border-border hover:bg-accent/20 text-muted transition-colors cursor-pointer text-center animate-pulse"
+              >
+                Skip for Now
+              </button>
+              <Button
+                type="submit"
+                variant="primary"
+                className="flex-1 py-3 text-xs font-bold rounded-xl flex items-center justify-center cursor-pointer"
+                disabled={onboardLoading}
+              >
+                {onboardLoading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <span>Save & Continue</span>
+                )}
+              </Button>
+            </div>
+          </form>
         </Card>
       </div>
     );

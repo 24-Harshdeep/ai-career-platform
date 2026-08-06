@@ -17,6 +17,7 @@ const { calculateReadinessIncrease } = require("../engines/interview/readiness.e
 
 const { toInterviewSessionDTO } = require("../dto/interview.dto");
 const { recalculateUserStats } = require("./career.service");
+const { logCareerEvent } = require("./analytics.service");
 
 // Simple in-memory cache for offline/fallback sessions
 const offlineSessions = new Map();
@@ -506,6 +507,22 @@ Output a JSON object conforming exactly to this structure:
     }
 
     await session.save();
+
+    // Increment mastered questions count for the user
+    const userDoc = await User.findById(userId);
+    if (userDoc) {
+      userDoc.masteredQuestionsCount = (userDoc.masteredQuestionsCount || 0) + 1;
+      await userDoc.save();
+    }
+
+    // Log Activity Event for Real-Time Analytics
+    await logCareerEvent(
+      userId,
+      `Mock Interview Completed (${session.type})`,
+      "Interview Coach",
+      10,
+      { sessionId: session._id, overallScore: session.overallScore }
+    );
 
     // Force recalculate Career Score
     await recalculateUserStats(userId);

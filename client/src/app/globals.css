@@ -17,6 +17,7 @@
 
 /* Force dark mode overrides when document has color-scheme = dark */
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --background: #0F111A;
   --foreground: #F1F5F9;
   --card: #161A2B;
@@ -32,6 +33,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --background: #0F111A;
     --foreground: #F1F5F9;
     --card: #161A2B;
@@ -181,4 +183,11 @@ body {
     clip-path: circle(150% at calc(100% - 80px) 40px);
   }
 }
+
+/* Dropdown Options Color Management (Fix low contrast white-on-gray text) */
+select option {
+  background-color: var(--card) !important;
+  color: var(--foreground) !important;
+}
+
 

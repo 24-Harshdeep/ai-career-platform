@@ -41,4 +41,14 @@ router.post("/chat", authMiddleware, async (req, res) => {
   }
 });
 
+// 2. Get Chat History Logs
+router.get("/history", authMiddleware, async (req, res) => {
+  try {
+    const data = await coachService.getCoachChatHistory(req.user._id || req.user.id);
+    return successResponse(res, "Chat history retrieved successfully.", data);
+  } catch (err) {
+    return errorResponse(res, `Failed to retrieve chat history: ${err.message}`, [], 500);
+  }
+});
+
 module.exports = router;

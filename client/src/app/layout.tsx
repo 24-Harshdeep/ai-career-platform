@@ -4,6 +4,7 @@ import "./globals.css";
 import Sidebar from "@/components/layout/Sidebar";
 import Navbar from "@/components/layout/Navbar";
 import { SessionProvider, AuthGuard } from "@/lib/auth";
+import ThemeProvider from "@/components/layout/ThemeProvider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -27,24 +28,26 @@ export default function RootLayout({
       <body className="h-full bg-background text-foreground">
         <SessionProvider>
           <AuthGuard>
-            <div className="flex min-h-screen">
-              {/* Left Sidebar */}
-              <Sidebar />
+            <ThemeProvider>
+              <div className="flex min-h-screen">
+                {/* Left Sidebar */}
+                <Sidebar />
 
-              {/* Main Area */}
-              <div
-                id="main-scroll-container"
-                className="flex-1 flex flex-col min-w-0 overflow-y-auto custom-scrollbar"
-              >
-                {/* Navbar Header */}
-                <Navbar />
+                {/* Main Area */}
+                <div
+                  id="main-scroll-container"
+                  className="flex-1 flex flex-col min-w-0 overflow-y-auto custom-scrollbar"
+                >
+                  {/* Navbar Header */}
+                  <Navbar />
 
-                {/* Page Content */}
-                <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto relative">
-                  {children}
-                </main>
+                  {/* Page Content */}
+                  <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto relative">
+                    {children}
+                  </main>
+                </div>
               </div>
-            </div>
+            </ThemeProvider>
           </AuthGuard>
         </SessionProvider>
       </body>

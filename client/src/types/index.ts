@@ -80,6 +80,8 @@ export interface SkillSet {
 }
 
 export interface CareerProfile {
+  name?: string;
+  email?: string;
   targetRole: string;
   experienceLevel: "Beginner" | "Intermediate" | "Advanced";
   careerGoal: string;
@@ -100,5 +102,12 @@ export interface CareerProfile {
   countryLocale?: string;
   targetSalary?: string;
   workType?: string;
+  githubUrl?: string;
+  themeMode?: string;
+  accentColor?: string;
+  primaryResume?: string;
+  primaryPortfolio?: string;
+  linkedinUrl?: string;
+  portfolioUrl?: string;
   updatedAt?: string;
 }

@@ -13,13 +13,14 @@ const UserSchema = new mongoose.Schema({
   },
   score: { type: Number, default: 82 },
   scoreTrend: { type: Number, default: 4 },
-  hasResumeScanned: { type: Boolean, default: true },
+  hasResumeScanned: { type: Boolean, default: false },
   hasGithubScanned: { type: Boolean, default: false },
   projectsCount: { type: Number, default: 3 },
   skillsCount: { type: Number, default: 7 },
   masteredQuestionsCount: { type: Number, default: 1 },
   streakDays: { type: Number, default: 7 },
   longestStreak: { type: Number, default: 7 },
+  lastActivityDate: { type: Date, default: Date.now },
   xp: { type: Number, default: 250 },
   level: { type: Number, default: 2 }
 }, { timestamps: true });

@@ -13,9 +13,12 @@ function calculateStreak(input) {
   const lastDate = new Date(lastActivityDate);
   const today = new Date(todayDate);
   
-  // Calculate difference in days
-  const diffTime = Math.abs(today - lastDate);
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  // Normalize both dates to midnight (00:00:00.000) to compute true calendar days difference
+  const d1 = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate());
+  const d2 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  
+  const diffTime = d2 - d1;
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
   let newStreak = currentStreak;
   let broken = false;

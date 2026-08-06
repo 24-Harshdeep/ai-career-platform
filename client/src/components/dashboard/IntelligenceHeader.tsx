@@ -30,17 +30,24 @@ export const IntelligenceHeader: React.FC = () => {
               "Your frontend skills are exceptionally strong. Your biggest immediate opportunity is{" "}
               <span className="text-secondary font-semibold">backend architecture</span>."
             </p>
+            <p className="text-xs text-primary font-bold mt-2.5 leading-relaxed bg-primary/10 border border-primary/20 px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm max-w-2xl">
+              <span>💡</span>
+              <span>Your next best step today is optimizing your resume for backend roles. Completing this task could increase your ATS score by approximately 3 points and improve your interview readiness.</span>
+            </p>
           </div>
         </div>
 
         {/* Confidence Badge */}
         <div className="flex flex-col items-end shrink-0 gap-2">
-          <div className="flex flex-col items-end bg-card/60 backdrop-blur-md border border-border px-4 py-2.5 rounded-xl md:text-right w-full sm:w-auto">
+          <div className="flex flex-col items-end bg-card/60 backdrop-blur-md border border-border px-4 py-2.5 rounded-xl md:text-right w-full sm:w-auto shadow-sm">
             <div className="flex items-center space-x-1.5 justify-end">
               <Sparkles className="w-3.5 h-3.5 text-primary" />
               <span className="text-[11px] text-muted font-medium">AI Confidence</span>
             </div>
             <span className="text-lg font-bold text-foreground mt-0.5">87%</span>
+            <span className="text-[9px] text-muted-foreground mt-1 max-w-[155px] text-right leading-normal block">
+              Based on Resume, GitHub, Roadmap, and Interview logs.
+            </span>
           </div>
           <PoweredBy engines={[
             {

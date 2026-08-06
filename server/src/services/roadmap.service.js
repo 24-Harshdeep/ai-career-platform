@@ -9,6 +9,7 @@ const { toRoadmapDTO } = require("../dto/roadmap.dto");
 const { calculateMissionReward } = require("../engines/mission.engine");
 const { calculateStreak } = require("../engines/streak.engine");
 const { recalculateUserStats } = require("./career.service");
+const { logCareerEvent } = require("./analytics.service");
 
 // Find a sub-skill reward configuration across all templates
 function findSubSkillConfig(subSkillId) {
@@ -78,6 +79,15 @@ async function updateSubSkillMastery(userId, subSkillId, mastered) {
         }
       }
     }
+
+    // Log Activity Event for Real-Time Analytics
+    await logCareerEvent(
+      userId,
+      `Roadmap Progress: ${subSkillId.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}`,
+      "Roadmap Engine",
+      5,
+      { subSkillId, progress }
+    );
 
     // Force stats calculations updates
     await recalculateUserStats(userId);
@@ -164,6 +174,15 @@ async function completeDailyMission(userId, missionId) {
         { upsert: true }
       );
     }
+
+    // Log Activity Event for Real-Time Analytics
+    await logCareerEvent(
+      userId,
+      `Completed Daily Mission`,
+      "Mission Control",
+      10,
+      { missionId }
+    );
 
     // Recalculate dashboard stats
     await recalculateUserStats(userId);

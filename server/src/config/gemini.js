@@ -1,23 +1,29 @@
 const DEFAULT_SYSTEM_INSTRUCTION = "You are CareerOS, a premium AI Career Intelligence Platform. Always format your responses in clean, professional markdown. Focus on action-oriented advice, technical evidence, and measurable career progression metrics.";
-const DEFAULT_OPENAI_MODEL = "gpt-4.1";
+const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 
 async function generateGeminiContent(prompt, systemInstruction = DEFAULT_SYSTEM_INSTRUCTION, jsonMode = false) {
   const geminiKey = process.env.GEMINI_API_KEY;
-  const openaiKey = process.env.OPENAI_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY || process.env.OPEN_AI_API_KEY;
 
+  // Try Gemini first if key is configured
+  if (geminiKey) {
+    const geminiResult = await generateGemini(prompt, systemInstruction, jsonMode, geminiKey);
+    if (geminiResult) {
+      return geminiResult;
+    }
+    console.warn("[AI API] Gemini failed, falling back to OpenAI if available.");
+  }
+
+  // Fallback to OpenAI if Gemini fails or is not configured
   if (openaiKey) {
     const openaiResult = await generateOpenAI(prompt, systemInstruction, jsonMode, openaiKey);
     if (openaiResult) {
       return openaiResult;
     }
-    console.warn("[AI API] OpenAI failed, falling back to Gemini if available.");
+    console.warn("[AI API] OpenAI fallback failed.");
   }
 
-  if (geminiKey) {
-    return await generateGemini(prompt, systemInstruction, jsonMode, geminiKey);
-  }
-
-  console.warn("[AI API] WARNING: No GEMINI_API_KEY or OPENAI_API_KEY configured. Falling back to local heuristics.");
+  console.warn("[AI API] WARNING: No GEMINI_API_KEY or OPENAI_API_KEY configured/working. Falling back to local heuristics.");
   return null;
 }
 
@@ -54,7 +60,7 @@ async function generateGemini(prompt, systemInstruction, jsonMode, apiKey) {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
       const res = await fetch(url, {
@@ -105,7 +111,7 @@ async function generateOpenAI(prompt, systemInstruction, jsonMode, apiKey) {
   };
 
   if (jsonMode) {
-    payload.response_format = { type: "json" };
+    payload.response_format = { type: "json_object" };
   }
 
   try {

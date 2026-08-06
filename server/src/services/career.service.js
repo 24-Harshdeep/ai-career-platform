@@ -71,6 +71,20 @@ async function updateProfile(userId, profileData) {
     if (profileData.countryLocale) profile.countryLocale = profileData.countryLocale;
     if (profileData.targetSalary) profile.targetSalary = profileData.targetSalary;
     if (profileData.workType) profile.workType = profileData.workType;
+    if (profileData.githubUrl !== undefined) profile.githubUrl = profileData.githubUrl;
+    if (profileData.themeMode) profile.themeMode = profileData.themeMode;
+    if (profileData.accentColor) profile.accentColor = profileData.accentColor;
+    if (profileData.primaryResume) profile.primaryResume = profileData.primaryResume;
+    if (profileData.primaryPortfolio) profile.primaryPortfolio = profileData.primaryPortfolio;
+    if (profileData.linkedinUrl !== undefined) profile.linkedinUrl = profileData.linkedinUrl;
+    if (profileData.portfolioUrl !== undefined) profile.portfolioUrl = profileData.portfolioUrl;
+
+    if (profileData.name || profileData.email) {
+      const userUpdate = {};
+      if (profileData.name) userUpdate.name = profileData.name;
+      if (profileData.email) userUpdate.email = profileData.email;
+      await User.findByIdAndUpdate(userId, userUpdate);
+    }
 
     await profile.save();
 
@@ -93,6 +107,18 @@ async function updateProfile(userId, profileData) {
     if (profileData.preferredLearningStyle) mockDb.profile.preferredLearningStyle = profileData.preferredLearningStyle;
     if (profileData.targetCompanies) mockDb.profile.targetCompanies = profileData.targetCompanies;
     if (profileData.isOnboardingComplete !== undefined) mockDb.profile.isOnboardingComplete = profileData.isOnboardingComplete;
+    if (profileData.themeMode) mockDb.profile.themeMode = profileData.themeMode;
+    if (profileData.accentColor) mockDb.profile.accentColor = profileData.accentColor;
+    if (profileData.primaryResume) mockDb.profile.primaryResume = profileData.primaryResume;
+    if (profileData.primaryPortfolio) mockDb.profile.primaryPortfolio = profileData.primaryPortfolio;
+    if (profileData.linkedinUrl !== undefined) mockDb.profile.linkedinUrl = profileData.linkedinUrl;
+    if (profileData.portfolioUrl !== undefined) mockDb.profile.portfolioUrl = profileData.portfolioUrl;
+    if (profileData.githubUrl !== undefined) mockDb.profile.githubUrl = profileData.githubUrl;
+
+    if (profileData.name || profileData.email) {
+      if (profileData.name) mockDb.user.name = profileData.name;
+      if (profileData.email) mockDb.user.email = profileData.email;
+    }
 
     return toCareerProfileDTO(mockDb.profile);
   }

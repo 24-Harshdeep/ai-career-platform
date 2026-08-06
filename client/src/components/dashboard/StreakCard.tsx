@@ -3,11 +3,30 @@
 import React from "react";
 import Card from "@/components/ui/Card/Card";
 import { Flame, Sparkles } from "lucide-react";
+import { useCareerStore } from "@/store/careerStore";
 
 export const StreakCard: React.FC = () => {
+  const streak = useCareerStore((state) => state.streakDays);
   const days = ["M", "T", "W", "T", "F", "S", "S"];
-  // Mock current active streak days (all active except Sunday, which is today or next)
-  const activeDays = [true, true, true, true, true, true, false];
+
+  // Calculate active days dynamically ending on today's weekday index
+  // (new Date().getDay() + 6) % 7 maps: Monday -> 0, Tuesday -> 1, ..., Sunday -> 6
+  const todayIdx = (new Date().getDay() + 6) % 7;
+
+  const activeDays = days.map((_, idx) => {
+    if (streak >= 7) return true;
+    if (streak <= 0) return false;
+
+    // Start index of the streak window
+    const startIdx = todayIdx - streak + 1;
+    if (startIdx >= 0) {
+      return idx >= startIdx && idx <= todayIdx;
+    } else {
+      // Handles wrapping if start index falls in the previous week
+      const wrappedStartIdx = startIdx + 7;
+      return idx <= todayIdx || idx >= wrappedStartIdx;
+    }
+  });
 
   return (
     <Card className="h-full flex flex-col justify-between p-6 overflow-hidden relative">
@@ -22,8 +41,8 @@ export const StreakCard: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center space-x-1">
-              <span className="text-xl font-extrabold text-foreground">7 Day</span>
-              <Sparkles className="w-3.5 h-3.5 text-warning" />
+              <span className="text-xl font-extrabold text-foreground">{streak} Day</span>
+              {streak > 0 && <Sparkles className="w-3.5 h-3.5 text-warning" />}
             </div>
             <p className="text-xs text-muted font-medium">Learning Streak</p>
           </div>
@@ -31,7 +50,9 @@ export const StreakCard: React.FC = () => {
 
         <div>
           <p className="text-xs text-foreground font-medium leading-relaxed">
-            "You're improving faster than 89% of developers in your cohort. Keep building momentum!"
+            {streak >= 3
+              ? "You're improving faster than 89% of developers in your cohort. Keep building momentum!"
+              : "Complete roadmap lessons or mock interviews daily to build your streak and unlock score multipliers!"}
           </p>
         </div>
 

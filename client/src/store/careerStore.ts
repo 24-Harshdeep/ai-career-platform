@@ -42,8 +42,75 @@ export interface CareerStats {
   }[];
 }
 
+export interface ResumeVersionInfo {
+  versionNumber: number;
+  title: string;
+  optimizationGoal: string;
+  createdAt: string;
+}
+
+export interface ResumeVersionContent {
+  personalInfo: {
+    name: string;
+    email: string;
+    phone: string;
+    location: string;
+    githubUrl: string;
+    linkedinUrl: string;
+    portfolioUrl: string;
+  };
+  summary: string;
+  workExperience: {
+    company: string;
+    position: string;
+    location: string;
+    startDate: string;
+    endDate: string;
+    description: string;
+    bulletPoints: string[];
+  }[];
+  projects: {
+    title: string;
+    technologies: string[];
+    description: string;
+    bulletPoints: string[];
+    link: string;
+  }[];
+  skills: {
+    languages: string[];
+    frontend: string[];
+    backend: string[];
+    database: string[];
+    tools: string[];
+    other: string[];
+  };
+  education: {
+    institution: string;
+    degree: string;
+    major: string;
+    startDate: string;
+    endDate: string;
+    gpa: string;
+  }[];
+  achievements: string[];
+  certifications: string[];
+}
+
+export interface ResumeChangeLogEntry {
+  section: string;
+  originalText: string;
+  rewrittenText: string;
+  reason: string;
+}
+
 export interface ResumeAnalysisData {
+  resumeId: string;
+  filename: string;
+  activeVersionId: number;
+  versionsList: ResumeVersionInfo[];
+  activeVersionContent: ResumeVersionContent;
   atsScore: number;
+  aiConfidence: number;
   breakdown: {
     keywords: number;
     projects: number;
@@ -60,11 +127,10 @@ export interface ResumeAnalysisData {
     expectedReadinessGain: number;
   }[];
   suggestedImprovements: string[];
-  analysisVersion: string;
-  analyzedAt: string;
-  filename: string;
-  uploadDate: string | null;
+  analyzedAt?: string;
+  changeLogs?: ResumeChangeLogEntry[];
 }
+
 
 export interface DeveloperRepoData {
   id: string;
@@ -309,6 +375,7 @@ interface CareerState {
 
   // Actions
   fetchDashboardData: () => Promise<void>;
+  fetchRoadmap: () => Promise<void>;
   updateGoal: (goal: string) => Promise<void>;
   updateExperience: (exp: UserProfile["experience"]) => Promise<void>;
   updateProfileSettings: (profileData: Partial<CareerProfile>) => Promise<void>;
@@ -318,11 +385,17 @@ interface CareerState {
   toggleSkill: (skillName: string) => Promise<void>;
   fetchResumeAnalysis: () => Promise<void>;
   uploadResume: (fileOrFilename: File | string, text?: string) => Promise<boolean>;
+  saveResumeEdits: (content: ResumeVersionContent) => Promise<void>;
+  forkResumeVersion: (title: string, goal?: string) => Promise<void>;
+  restoreResumeVersion: (versionNumber: number) => Promise<void>;
+  getCrossSyncSuggestions: () => Promise<any[]>;
+  optimizeResume: (goal: string, targetDescription?: string) => Promise<any>;
   fetchDeveloperProfile: () => Promise<void>;
   syncDeveloperProfile: (githubUsername: string) => Promise<void>;
   fetchProjectHistory: () => Promise<void>;
   auditProject: (url: string, title?: string, type?: string) => Promise<void>;
   sendCoachMessage: (text: string, activePath: string) => Promise<void>;
+  fetchCoachHistory: () => Promise<void>;
   fetchJobPipeline: () => Promise<void>;
   matchJobDescription: (jdText: string, title?: string, company?: string) => Promise<JobOpportunityData | null>;
   updateJobOpportunityStatus: (id: string, status: JobOpportunityData["status"]) => Promise<void>;
@@ -341,7 +414,7 @@ interface CareerState {
   addChatMessage: (sender: ChatMessage["sender"], text: string) => void;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 const initialStats: CareerStats = {
   score: 82,
@@ -433,24 +506,58 @@ export const useCareerStore = create<CareerState>((set, get) => ({
       if (res.ok) {
         const envelope = await res.json();
         const data = envelope.data;
+        const existingRoadmap = get().roadmap || [];
+        const mergedRoadmap = (data.roadmap || []).map((track: any) => {
+          const matched = existingRoadmap.find((t: any) => t.id === track.id);
+          if (matched && matched.modules) {
+            return {
+              ...track,
+              modules: matched.modules
+            };
+          }
+          return track;
+        });
+
         set({
           user: data.user,
           profile: data.profile || null,
-          roadmap: data.roadmap,
+          roadmap: mergedRoadmap,
           missions: data.missions,
           applications: data.applications,
           notifications: data.notifications || [],
           stats: data.stats,
-          hasResumeScanned: data.user.hasResumeScanned,
-          hasGithubScanned: data.user.hasGithubScanned,
-          projectsCount: data.user.projectsCount,
-          skillsCount: data.user.skillsCount,
-          masteredQuestionsCount: data.user.masteredQuestionsCount,
-          streakDays: data.user.streakDays
+          hasResumeScanned: data.user?.hasResumeScanned || false,
+          hasGithubScanned: data.user?.hasGithubScanned || false,
+          projectsCount: data.user?.projectsCount || 0,
+          skillsCount: data.user?.skillsCount || 0,
+          masteredQuestionsCount: data.user?.masteredQuestionsCount || 0,
+          streakDays: data.user?.streakDays || 0
         });
       }
     } catch (err) {
       console.error("Failed to sync backend dashboard state:", err);
+    }
+  },
+
+  fetchRoadmap: async () => {
+    const token = localStorage.getItem("careeros_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/roadmap`, {
+        method: "GET",
+        headers
+      });
+
+      if (res.ok) {
+        const envelope = await res.json();
+        set({ roadmap: envelope.data });
+      }
+    } catch (err) {
+      console.error("Failed to fetch full roadmap tracks:", err);
     }
   },
 
@@ -755,6 +862,126 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
   },
 
+  saveResumeEdits: async (content) => {
+    const token = localStorage.getItem("careeros_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/resume/content`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(content)
+      });
+
+      if (res.ok) {
+        const envelope = await res.json();
+        set({ resumeAnalysis: envelope.data });
+        await get().fetchDashboardData();
+      }
+    } catch (err) {
+      console.error("Failed to save resume edits:", err);
+    }
+  },
+
+  forkResumeVersion: async (title, goal = "ATS Optimization") => {
+    const token = localStorage.getItem("careeros_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/resume/versions/fork`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ title, goal })
+      });
+
+      if (res.ok) {
+        const envelope = await res.json();
+        set({ resumeAnalysis: envelope.data });
+      }
+    } catch (err) {
+      console.error("Failed to fork resume version:", err);
+    }
+  },
+
+  restoreResumeVersion: async (versionNumber) => {
+    const token = localStorage.getItem("careeros_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/resume/versions/restore`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ versionNumber })
+      });
+
+      if (res.ok) {
+        const envelope = await res.json();
+        set({ resumeAnalysis: envelope.data });
+        await get().fetchDashboardData();
+      }
+    } catch (err) {
+      console.error("Failed to restore resume version:", err);
+    }
+  },
+
+  getCrossSyncSuggestions: async () => {
+    const token = localStorage.getItem("careeros_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/resume/cross-sync`, {
+        method: "GET",
+        headers
+      });
+
+      if (res.ok) {
+        const envelope = await res.json();
+        return envelope.data || [];
+      }
+    } catch (err) {
+      console.error("Failed to fetch cross-sync suggestions:", err);
+    }
+    return [];
+  },
+
+  optimizeResume: async (goal, targetDescription) => {
+    const token = localStorage.getItem("careeros_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/resume/optimize`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ goal, targetDescription })
+      });
+
+      if (res.ok) {
+        const envelope = await res.json();
+        set({ resumeAnalysis: envelope.data });
+        await get().fetchDashboardData();
+        return envelope.data;
+      }
+    } catch (err) {
+      console.error("Failed to optimize resume content:", err);
+    }
+    return null;
+  },
+
   fetchDeveloperProfile: async () => {
     const token = localStorage.getItem("careeros_token");
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -906,6 +1133,28 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     } catch (err) {
       console.error("AI Coach failed to reply:", err);
       get().addChatMessage("coach", "I'm sorry, I encountered a connection error. Please try again.");
+    }
+  },
+
+  fetchCoachHistory: async () => {
+    const token = localStorage.getItem("careeros_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/coach/history`, {
+        method: "GET",
+        headers
+      });
+
+      if (res.ok) {
+        const envelope = await res.json();
+        set({ chatHistory: envelope.data || [] });
+      }
+    } catch (err) {
+      console.error("Failed to fetch coach chat history:", err);
     }
   },
 

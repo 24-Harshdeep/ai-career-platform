@@ -124,9 +124,9 @@ export default function CareerDnaPage() {
   const fetchDashboardData = useCareerStore((state) => state.fetchDashboardData);
   const addNotification = useCareerStore((state) => state.addNotification);
 
-  const [goalInput, setGoalInput] = useState(storeUser.goal || "Full Stack Developer");
-  const [experienceInput, setExperienceInput] = useState<typeof storeUser.experience>(
-    storeUser.experience || "Intermediate"
+  const [goalInput, setGoalInput] = useState(storeUser?.goal || "Full Stack Developer");
+  const [experienceInput, setExperienceInput] = useState<any>(
+    storeUser?.experience || "Intermediate"
   );
   const [saving, setSaving] = useState(false);
 
@@ -146,13 +146,13 @@ export default function CareerDnaPage() {
 
   // Synchronize state when storeUser data is asynchronously loaded from the database
   useEffect(() => {
-    if (storeUser.goal) {
+    if (storeUser?.goal) {
       setGoalInput(storeUser.goal);
     }
-    if (storeUser.experience) {
+    if (storeUser?.experience) {
       setExperienceInput(storeUser.experience);
     }
-  }, [storeUser.goal, storeUser.experience]);
+  }, [storeUser?.goal, storeUser?.experience]);
 
   // Live timer tick to format elapsed time
   useEffect(() => {

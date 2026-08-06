@@ -35,7 +35,14 @@ const CareerProfileSchema = new mongoose.Schema({
   preferredIndustry: { type: String, default: "Fintech" },
   countryLocale: { type: String, default: "United States" },
   targetSalary: { type: String, default: "$130,000" },
-  workType: { type: String, default: "Remote" }
+  workType: { type: String, default: "Remote" },
+  githubUrl: { type: String, default: "" },
+  themeMode: { type: String, default: "Dark" },
+  accentColor: { type: String, default: "Purple" },
+  primaryResume: { type: String, default: "Harshdeep_Resume_2026.pdf" },
+  primaryPortfolio: { type: String, default: "GitHub Integration Portfolio" },
+  linkedinUrl: { type: String, default: "" },
+  portfolioUrl: { type: String, default: "" }
 }, { timestamps: true });
 
 module.exports = mongoose.model("CareerProfile", CareerProfileSchema);

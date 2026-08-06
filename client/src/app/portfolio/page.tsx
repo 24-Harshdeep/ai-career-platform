@@ -8,7 +8,29 @@ import Badge from "@/components/ui/Badge/Badge";
 import { FolderGit, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw, BarChart4, Wrench, Globe, Link, Settings, Sparkles } from "lucide-react";
 import PoweredBy from "@/components/ui/PoweredBy";
 
+function extractGithubUsername(urlOrName: string): string {
+  if (!urlOrName) return "harshdeep";
+  const trimmed = urlOrName.trim();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    try {
+      const parsedUrl = new URL(trimmed);
+      const pathname = parsedUrl.pathname;
+      const parts = pathname.split("/").filter(Boolean);
+      if (parts.length > 0) return parts[0];
+    } catch (e) {
+      // Fallback
+    }
+  }
+  if (trimmed.includes("/")) {
+    const parts = trimmed.split("/");
+    const lastPart = parts[parts.length - 1];
+    if (lastPart) return lastPart;
+  }
+  return trimmed;
+}
+
 export const PortfolioPage: React.FC = () => {
+  const profile = useCareerStore((state) => state.profile);
   const developerProfile = useCareerStore((state) => state.developerProfile);
   const projectHistory = useCareerStore((state) => state.projectHistory);
   const fetchDeveloperProfile = useCareerStore((state) => state.fetchDeveloperProfile);
@@ -33,8 +55,10 @@ export const PortfolioPage: React.FC = () => {
 
   const handleScanGithub = async () => {
     setAnalyzing(true);
-    await syncDeveloperProfile("harshdeep");
-    addNotification("GitHub repository synchronization complete. Quality indexes updated.", "success");
+    const githubUrl = profile?.githubUrl || "https://github.com/harshdeep";
+    const username = extractGithubUsername(githubUrl);
+    await syncDeveloperProfile(username);
+    addNotification(`GitHub repository synchronization complete for '${username}'.`, "success");
     setAnalyzing(false);
   };
 
@@ -209,6 +233,61 @@ export const PortfolioPage: React.FC = () => {
                   <div className="h-full bg-warning rounded-full" style={{ width: `${coverage.DevOps}%` }} />
                 </div>
               </div>
+            </div>
+          </Card>
+
+          {/* Scanned GitHub Repositories */}
+          <Card className="p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center space-x-2">
+                <FolderGit className="w-5 h-5 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Scanned GitHub Repositories</h3>
+              </div>
+              <Badge variant="info">{repos.length} Found</Badge>
+            </div>
+
+            <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+              {repos.map((repo: any, idx) => {
+                const isBest = developerProfile?.bestRepository === repo.name;
+                const score = repo.healthScore || 80;
+                
+                // Construct recommendation text
+                let recommendation = "Recommended as a portfolio project highlight.";
+                if (score >= 85) {
+                  recommendation = "Highly Recommended: Demonstrates production-grade structure (README, tests).";
+                } else if (repo.name.includes("challenges") || score < 70) {
+                  recommendation = "Optional: Useful for skills evidence, but wrap in a larger application structure.";
+                }
+
+                return (
+                  <div key={repo.id || idx} className="bg-card border border-border p-3.5 rounded-2xl text-xs space-y-2 relative hover:border-primary/30 transition-colors">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-bold text-foreground flex items-center gap-1.5">
+                          {repo.name}
+                          {isBest && (
+                            <span className="text-[9px] bg-success/15 text-success border border-success/20 px-1 rounded-md font-bold uppercase">
+                              Best Repo
+                            </span>
+                          )}
+                        </h4>
+                        <p className="text-[10px] text-muted line-clamp-1 mt-0.5">{repo.description}</p>
+                      </div>
+                      <Badge variant={score >= 80 ? "success" : "warning"}>
+                        {score}% Health
+                      </Badge>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/50 text-[10px]">
+                      <div className="flex items-center space-x-1">
+                        <span className="w-2.5 h-2.5 rounded-full bg-primary" />
+                        <span className="text-foreground font-semibold uppercase">{repo.language || "TypeScript"}</span>
+                      </div>
+                      <span className="text-muted italic">{recommendation}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </Card>
         </div>

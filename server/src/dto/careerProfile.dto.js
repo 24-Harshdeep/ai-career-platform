@@ -25,6 +25,13 @@ function toCareerProfileDTO(profile) {
     countryLocale: profile.countryLocale || "United States",
     targetSalary: profile.targetSalary || "$130,000",
     workType: profile.workType || "Remote",
+    githubUrl: profile.githubUrl || "",
+    themeMode: profile.themeMode || "Dark",
+    accentColor: profile.accentColor || "Purple",
+    primaryResume: profile.primaryResume || "Harshdeep_Resume_2026.pdf",
+    primaryPortfolio: profile.primaryPortfolio || "GitHub Integration Portfolio",
+    linkedinUrl: profile.linkedinUrl || "",
+    portfolioUrl: profile.portfolioUrl || "",
     updatedAt: profile.updatedAt
   };
 }

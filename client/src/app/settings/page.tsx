@@ -39,6 +39,7 @@ export default function SettingsPage() {
   // Active Tab
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
   const [saving, setSaving] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   // Form states: Profile & Career
   const [nameInput, setNameInput] = useState(storeUser?.name || user?.name || "Harshdeep K");
@@ -62,9 +63,9 @@ export default function SettingsPage() {
   // Form states: Resume Defaults & Links
   const [primaryResume, setPrimaryResume] = useState("Harshdeep_Resume_2026.pdf");
   const [primaryPortfolio, setPrimaryPortfolio] = useState("GitHub Integration Portfolio");
-  const [linkedinUrl, setLinkedinUrl] = useState("https://linkedin.com/in/harshdeep");
-  const [githubUrl, setGithubUrl] = useState("https://github.com/harshdeep");
-  const [portfolioUrl, setPortfolioUrl] = useState("https://harshdeep.dev");
+  const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [githubUrl, setGithubUrl] = useState("");
+  const [portfolioUrl, setPortfolioUrl] = useState("");
 
   // Load and synchronize profile
   useEffect(() => {
@@ -72,20 +73,35 @@ export default function SettingsPage() {
   }, [fetchDashboardData]);
 
   useEffect(() => {
-    if (profile) {
+    if (storeUser) {
+      setNameInput(storeUser.name || "Harshdeep K");
+      setEmailInput(storeUser.email || "harshdeep@career.os");
+    }
+  }, [storeUser]);
+
+  useEffect(() => {
+    if (profile && !profileLoaded) {
       setTargetRoleInput(profile.targetRole || "Backend Developer");
       setExperienceInput((profile.experienceLevel as any) || "Intermediate");
       setIndustryInput(profile.preferredIndustry || "Fintech");
       setCountryInput(profile.countryLocale || "United States");
       setSalaryInput(profile.targetSalary || "$130,000");
       setWorkTypeInput((profile.workType as any) || "Remote");
+      setGithubUrl(profile.githubUrl ?? "");
       setAiPersonality(profile.aiPersonality || "Career Coach");
       setAiResponseLength(profile.aiResponseLength || "Detailed");
       setLearningStyle(profile.preferredLearningStyle || "Practical");
       setRecommendationFreq(profile.aiRecommendationFreq || "Daily");
       setAiTemperature(profile.aiTemperature !== undefined ? profile.aiTemperature : 0.5);
+      setThemeMode(profile.themeMode || "Dark");
+      setAccentColor(profile.accentColor || "Purple");
+      setPrimaryResume(profile.primaryResume || "Harshdeep_Resume_2026.pdf");
+      setPrimaryPortfolio(profile.primaryPortfolio || "GitHub Integration Portfolio");
+      setLinkedinUrl(profile.linkedinUrl ?? "");
+      setPortfolioUrl(profile.portfolioUrl ?? "");
+      setProfileLoaded(true);
     }
-  }, [profile]);
+  }, [profile, profileLoaded]);
 
   // Form states: Notifications
   const [notifSettings, setNotifSettings] = useState({
@@ -136,15 +152,19 @@ export default function SettingsPage() {
     e.preventDefault();
     setSaving(true);
     await updateProfileSettings({
+      name: nameInput,
+      email: emailInput,
       targetRole: targetRoleInput,
       experienceLevel: experienceInput,
       preferredIndustry: industryInput,
       countryLocale: countryInput,
       targetSalary: salaryInput,
-      workType: workTypeInput
+      workType: workTypeInput,
+      githubUrl: githubUrl
     });
     addNotification("Profile and target career preferences synchronized successfully.", "success");
     setSaving(false);
+    setProfileLoaded(false);
   };
 
   const handleSaveAI = async (e: React.FormEvent) => {
@@ -159,15 +179,62 @@ export default function SettingsPage() {
     });
     addNotification("AI personality and model parameters synchronized successfully.", "success");
     setSaving(false);
+    setProfileLoaded(false);
   };
 
-  const handleSaveDocs = (e: React.FormEvent) => {
+  const handleSaveDocs = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    setTimeout(() => {
-      addNotification("Document defaults and external links saved.", "success");
-      setSaving(false);
-    }, 500);
+    await updateProfileSettings({
+      primaryResume,
+      primaryPortfolio,
+      linkedinUrl,
+      githubUrl,
+      portfolioUrl
+    });
+    addNotification("Document defaults and external links saved successfully.", "success");
+    setSaving(false);
+    setProfileLoaded(false);
+  };
+
+  const handleSaveTheme = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    await updateProfileSettings({
+      themeMode,
+      accentColor
+    });
+    localStorage.setItem("careeros_theme", themeMode);
+    localStorage.setItem("careeros_accent", accentColor);
+    addNotification("Theme appearance and color preferences synchronized successfully.", "success");
+    setSaving(false);
+    setProfileLoaded(false);
+  };
+
+  const handleSelectThemeMode = (theme: string) => {
+    setThemeMode(theme);
+    const root = document.documentElement;
+    if (theme === "Dark") {
+      root.setAttribute("data-theme", "dark");
+    } else {
+      root.setAttribute("data-theme", "light");
+    }
+  };
+
+  const handleSelectAccentColor = (color: string) => {
+    setAccentColor(color);
+    const root = document.documentElement;
+    const colors: Record<string, { primary: string; secondary: string }> = {
+      Purple: { primary: "#6366F1", secondary: "#8B5CF6" },
+      Blue: { primary: "#2563EB", secondary: "#3B82F6" },
+      Emerald: { primary: "#059669", secondary: "#10B981" },
+      Indigo: { primary: "#4F46E5", secondary: "#6366F1" },
+      Amber: { primary: "#D97706", secondary: "#F59E0B" },
+      Rose: { primary: "#E11D48", secondary: "#F43F5E" }
+    };
+    const choice = colors[color] || colors.Purple;
+    root.style.setProperty("--primary", choice.primary);
+    root.style.setProperty("--secondary", choice.secondary);
   };
 
   const handleMockSignOut = async () => {
@@ -604,34 +671,25 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-4 text-xs">
-                  <div className="space-y-2">
-                    <span className="text-[10px] text-muted font-bold uppercase">Color Scheme Theme</span>
-                    <div className="grid grid-cols-3 gap-3">
-                      {["Dark", "Light", "System"].map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => setThemeMode(t)}
-                          className={`p-3 border rounded-xl font-semibold cursor-pointer transition-colors ${
-                            themeMode === t ? "bg-primary border-primary text-white" : "bg-accent/10 border-border text-muted hover:text-foreground"
-                          }`}
-                        >
-                          {t}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
 
-                  <div className="space-y-2 pt-2">
+
+                                  <div className="space-y-2 pt-2">
                     <span className="text-[10px] text-muted font-bold uppercase">Interface Accent Color</span>
-                    <div className="flex gap-3">
-                      {["Purple", "Blue", "Green", "Orange"].map((color) => (
+                    <div className="flex flex-wrap gap-3">
+                      {["Purple", "Blue", "Emerald", "Indigo", "Amber", "Rose"].map((color) => (
                         <button
                           key={color}
                           type="button"
-                          onClick={() => setAccentColor(color)}
+                          onClick={() => handleSelectAccentColor(color)}
                           className={`px-3 py-1.5 border rounded-lg font-semibold cursor-pointer text-[11px] ${
-                            accentColor === color ? "bg-secondary border-secondary text-white" : "bg-card border-border hover:bg-accent/10 text-foreground"
+                            accentColor === color 
+                              ? color === "Purple" ? "bg-indigo-600 border-indigo-600 text-white"
+                                : color === "Blue" ? "bg-blue-600 border-blue-600 text-white"
+                                : color === "Emerald" ? "bg-emerald-600 border-emerald-600 text-white"
+                                : color === "Indigo" ? "bg-violet-600 border-violet-600 text-white"
+                                : color === "Amber" ? "bg-amber-600 border-amber-600 text-white"
+                                : "bg-rose-600 border-rose-600 text-white"
+                              : "bg-card border-border hover:bg-accent/10 text-foreground"
                           }`}
                         >
                           {color}
@@ -650,6 +708,17 @@ export default function SettingsPage() {
                       defaultChecked
                       className="w-8.5 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer relative checked:bg-primary before:content-[''] before:absolute before:h-3 before:w-3 before:left-0.5 before:bottom-0.5 before:bg-white before:rounded-full before:transition-all checked:before:left-5"
                     />
+                  </div>
+
+                  <div className="pt-4 border-t border-border flex justify-end">
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={handleSaveTheme}
+                      isLoading={saving}
+                    >
+                      Save Appearance Settings
+                    </Button>
                   </div>
                 </div>
               </div>
