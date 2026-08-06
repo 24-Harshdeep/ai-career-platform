@@ -1,0 +1,45 @@
+services:
+  # 1. Backend Web Service (Express API)
+  - type: web
+    name: careeros-backend
+    env: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+  # 2. Frontend Web Service (Next.js)
+  - type: web
+    name: careeros-frontend
+    env: node
+    rootDir: client
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          name: careeros-backend
+          type: web
+          property: host
+        # Next.js bundles NEXT_PUBLIC_ env vars during build time.
+        # Note: Render blueprints apply environment variables during build.
