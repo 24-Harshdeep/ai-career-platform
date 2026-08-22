@@ -36,7 +36,6 @@ app.use("/api/job", require("./routes/job"));
 app.use("/api/interview", require("./routes/interview"));
 app.use("/api/analytics", require("./routes/analytics"));
 app.use("/api/notifications", require("./routes/notification"));
-app.use("/api", require("./routes/api"));
 
 // Start Server
 app.listen(PORT, () => {

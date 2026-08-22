@@ -16,7 +16,6 @@ const authMiddleware = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    // Attempt database retrieval if MongoDB is connected, else use mock placeholder user
     let user = null;
     try {
       user = await User.findById(decoded.id).select("-passwordHash");
@@ -55,18 +54,11 @@ const authMiddleware = async (req, res, next) => {
         }
       }
     } catch (dbErr) {
-      // Offline fallback mode
+      return res.status(503).json({ error: "Unable to verify account ownership." });
     }
 
     if (!user) {
-      // Mock user fallback if database query is empty or offline
-      user = {
-        _id: decoded.id || "mock-user-id",
-        name: decoded.name || "Harshdeep",
-        email: decoded.email || "harshdeep@careeros.dev",
-        role: "Full Stack Developer",
-        goal: "Full Stack Developer"
-      };
+      return res.status(401).json({ error: "Account not found." });
     }
 
     req.user = user;

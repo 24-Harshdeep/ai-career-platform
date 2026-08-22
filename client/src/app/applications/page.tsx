@@ -26,6 +26,8 @@ import {
   Shield
 } from "lucide-react";
 import PoweredBy from "@/components/ui/PoweredBy";
+import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
+import PageHeader from "@/components/ui/PageHeader";
 
 export default function ApplicationsPage() {
   const skillsCount = useCareerStore((state) => state.skillsCount);
@@ -230,24 +232,10 @@ export default function ApplicationsPage() {
   };
 
   // Mapped AI Cover Letter drafts
-  const getTailoredCoverLetter = (title: string, company: string) => {
-    return `Dear ${company} Hiring Team,
-
-I am writing to express my strong interest in the ${title} position. Based on my technical background as an Intermediate Full Stack Developer, I have built extensive expertise in engineering React components, Next.js frameworks, and strict TypeScript patterns.
-
-Your job description outlines requirements that align perfectly with my background, particularly in developing robust APIs and implementing structured frontend styling. I am eager to apply my practical execution mindset and contribute to ${company}'s core engineering goals. Thank you for your time and consideration.
-
-Sincerely,
-Harshdeep K`;
-  };
+  const getTailoredCoverLetter = (_title?: string, _company?: string) => "No grounded cover letter has been generated yet.";
 
   // Mapped AI Bullet Point optimization suggestions
-  const getTailoredBulletPoints = (title: string) => {
-    return [
-      `• Engineered scalable microservice components optimized for strict TypeScript schemas, increasing target load speeds by 14%.`,
-      `• Architected modular application routes and REST middleware validations, decreasing API endpoint authentication latency by 20%.`
-    ];
-  };
+  const getTailoredBulletPoints = (_title?: string) => ["No grounded resume bullets have been generated yet."];
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -257,47 +245,16 @@ Harshdeep K`;
   };
 
   return (
-    <div className="space-y-6 animate-fade-in-up pb-12">
-      {/* Title Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border/60 pb-5">
-        <div className="flex items-center space-x-3">
-          <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl relative">
-            <Briefcase className="w-6 h-6" />
-            <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-success rounded-full border-2 border-background animate-pulse" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <h2 className="text-xl font-bold text-foreground">Job Intelligence</h2>
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-success/10 text-success border border-success/20">
-                AI Match Active
-              </span>
-            </div>
-            <p className="text-xs text-muted max-w-2xl mt-1 leading-relaxed">
-              Scan job specifications to assess skill-readiness and coordinate application pipelines.
-            </p>
-          </div>
-        </div>
-        <PoweredBy engines={[
-          {
-            type: "user",
-            label: "User Board",
-            description: "Tracks job pipeline state and job descriptions.",
-            points: ["Manages application status", "Saves job description texts"]
-          },
-          {
-            type: "engine",
-            label: "Job Matcher Engine",
-            description: "Calculates compatibility index against target profiles.",
-            points: ["Calculates Match Score %", "Highlights missing skills", "Evaluates resume compatibility"]
-          },
-          {
-            type: "ai",
-            label: "AI Preparation",
-            description: "Helps users prepare for targeted roles.",
-            points: ["Explains low score causes", "Generates custom cover letters", "Provides custom resume tweaks"]
-          }
-        ]} />
-      </div>
+    <PageTransition className="space-y-6 pb-12">
+      <StaggerItem>
+        <PageHeader
+          icon={Briefcase}
+          title="Job Intelligence"
+          description="Scan job specifications to assess skill-readiness and coordinate application pipelines."
+        >
+          <Badge variant="primary" className="hidden sm:inline-flex">AI Match Active</Badge>
+        </PageHeader>
+      </StaggerItem>
 
       {/* Grid: Search/Crawl and Match Report */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -466,17 +423,17 @@ Harshdeep K`;
                     <FileText className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-xs font-bold text-foreground block truncate" title={resumeAnalysis?.filename || "Harshdeep_Resume.pdf"}>
-                      {resumeAnalysis?.filename || "Harshdeep_Resume_2026.pdf"}
+                    <span className="text-xs font-bold text-foreground block truncate" title={resumeAnalysis?.filename || "No resume uploaded"}>
+                      {resumeAnalysis?.filename || "No resume uploaded"}
                     </span>
                     <span className="text-[10px] text-muted block mt-0.5">
-                      Analyzed {resumeAnalysis?.analyzedAt ? new Date(resumeAnalysis.analyzedAt).toLocaleDateString() : "2 days ago"}
+                      {resumeAnalysis?.analyzedAt ? `Analyzed ${new Date(resumeAnalysis.analyzedAt).toLocaleDateString()}` : "No analysis available"}
                     </span>
                   </div>
                 </div>
                 <div className="text-right shrink-0">
                   <Badge variant="primary" className="text-[10px] font-bold">
-                    {resumeAnalysis?.atsScore || 82}% ATS
+                    {resumeAnalysis?.atsScore == null ? "Not available" : `${resumeAnalysis.atsScore}% ATS`}
                   </Badge>
                 </div>
               </div>
@@ -892,6 +849,6 @@ Harshdeep K`;
           </div>
         )}
       </Card>
-    </div>
+    </PageTransition>
   );
 }

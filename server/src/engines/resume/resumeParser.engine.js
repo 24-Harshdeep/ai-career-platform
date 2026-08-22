@@ -22,8 +22,8 @@ function parseResumeText(rawText) {
       "work experience", "experience", "employment", "employment history", "work history", "practical experience",
       "projects", "personal projects", "academic projects", "key projects",
       "skills", "technical skills", "technologies", "languages", "skills inventory",
-      "education", "academic profile", "academic history", "university",
-      "certifications", "certification", "courses", "licenses", "credentials"
+      "education", "academic profile", "academic history", "university", "education and training",
+      "certifications", "certification", "courses", "licenses", "credentials", "certifications and training"
     ];
 
     // Check for exact match or matches that are dominant in the line

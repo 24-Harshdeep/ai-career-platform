@@ -26,8 +26,8 @@ export const Sidebar: React.FC = () => {
   const { user } = useAuth();
   const storeUser = useCareerStore((state) => state.user);
 
-  const displayName = storeUser?.name || user?.name || "Harshdeep";
-  const displayGoal = storeUser?.goal || user?.role || "Full Stack Developer";
+  const displayName = storeUser?.name || user?.name || "Your profile";
+  const displayGoal = storeUser?.goal || user?.role || "Complete Career DNA to personalize this space";
 
   // New refined 9-item list (structured logically)
   const navItems = [
@@ -115,7 +115,7 @@ export const Sidebar: React.FC = () => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold truncate text-foreground">
-                {displayName || "Harshdeep"}
+                {displayName}
               </p>
               <p className="text-[11px] text-muted truncate">{displayGoal}</p>
             </div>

@@ -22,6 +22,8 @@ import {
   FileText
 } from "lucide-react";
 import PoweredBy from "@/components/ui/PoweredBy";
+import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
+import PageHeader from "@/components/ui/PageHeader";
 
 // Mapped AI Metadata configuration for all subskill IDs in the templates
 const AI_ROADMAP_METADATA: Record<string, {
@@ -339,48 +341,19 @@ export default function RoadmapPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in-up pb-12">
-      {/* Title block with live indicators */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border/60 pb-5">
-        <div className="flex items-center space-x-3">
-          <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl relative">
-            <Map className="w-6 h-6" />
-            <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-success rounded-full border-2 border-background animate-pulse" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <h2 className="text-xl font-bold text-foreground">Interactive AI Career Roadmap</h2>
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-success/10 text-success border border-success/20">
-                <span className="w-1.5 h-1.5 mr-1 bg-success rounded-full animate-ping" />
-                AI Routing Engine: Active
-              </span>
-            </div>
-            <p className="text-xs text-muted max-w-2xl mt-1 leading-relaxed">
-              This personalized AI-driven learning roadmap continuously aligns your skills with real-time market demands to ensure you are fully job-ready.
-            </p>
-          </div>
-        </div>
-        <PoweredBy engines={[
-          {
-            type: "engine",
-            label: "Next Best Action Engine",
-            description: "Calculates priority paths for training sequencing.",
-            points: ["Calculates task priority", "Determines skill dependencies", "Generates optimal learning sequence"]
-          },
-          {
-            type: "user",
-            label: "User Action",
-            description: "Tracks user progress through training modules.",
-            points: ["Marks sub-skills as Mastered", "Tracks overall track progress"]
-          },
-          {
-            type: "ai",
-            label: "AI Explanations",
-            description: "Enriches learning cards with custom educational materials.",
-            points: ["Explains why to learn concepts", "Suggests articles/resources", "Provides mini tutorials & alternative paths"]
-          }
-        ]} />
-      </div>
+    <PageTransition className="space-y-6 pb-12">
+      <StaggerItem>
+        <PageHeader
+          icon={Map}
+          title="Interactive AI Career Roadmap"
+          description="This personalized AI-driven learning roadmap continuously aligns your skills with real-time market demands to ensure you are fully job-ready."
+        >
+          <span className="inline-flex items-center text-xs font-medium text-muted bg-accent px-2.5 py-1 rounded-full border border-border">
+            <span className="w-1.5 h-1.5 mr-2 bg-success rounded-full animate-ping" />
+            AI Routing Engine: Active
+          </span>
+        </PageHeader>
+      </StaggerItem>
 
       {/* Global Core Projections Metrics Card */}
       <Card className="p-6 bg-gradient-to-br from-card to-accent/5">
@@ -721,6 +694,6 @@ export default function RoadmapPage() {
           </div>
         )}
       </div>
-    </div>
+    </PageTransition>
   );
 }

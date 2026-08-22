@@ -22,6 +22,10 @@ const ResumeAnalysisSchema = new mongoose.Schema({
   },
   missingKeywords: [MissingKeywordSchema],
   suggestedImprovements: [{ type: String }],
+  truthfulnessReport: {
+    exaggeratedSkills: [{ type: String }],
+    missingVerifiedSkills: [{ type: String }]
+  },
   analysisVersion: { type: String, default: "v1.0.0" },
   analyzedAt: { type: Date, default: Date.now }
 }, { timestamps: true });

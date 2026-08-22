@@ -4,7 +4,7 @@ const ResumeAnalysis = require("../models/ResumeAnalysis");
 const DeveloperProfile = require("../models/DeveloperProfile");
 const JobOpportunity = require("../models/JobOpportunity");
 const JobAnalysis = require("../models/JobAnalysis");
-const { mockDb } = require("../config/mockDb");
+
 
 const { extractKeywords } = require("../engines/job/keyword.engine");
 const { auditResumeGaps } = require("../engines/job/resumeGap.engine");
@@ -19,6 +19,10 @@ const { recalculateUserStats } = require("./career.service");
 async function matchAndSaveJob(userId, jobData) {
   const { title, company, description, url, location, salaryRange, status } = jobData;
 
+  if (!title || !company || !description || !url || !/^https?:\/\//i.test(url)) {
+    throw new Error("A verified opportunity requires a title, company, description, and HTTP(S) URL.");
+  }
+
   try {
     const userDoc = await User.findById(userId);
     const resume = await Resume.findOne({ userId }).sort({ uploadDate: -1 });
@@ -27,20 +31,19 @@ async function matchAndSaveJob(userId, jobData) {
       : null;
     const devProfile = await DeveloperProfile.findOne({ userId });
 
+    const { getCareerContext } = require("./careerContext.service");
+    const userContext = await getCareerContext(userId);
+
     // 3. Match and Analyze JD using Gemini API
-    const resumeText = resume ? resume.parsedText : "";
-    const targetRole = userDoc ? userDoc.goal : "Backend Developer";
-    const prompt = `We are matching a Job Description for a "${title}" at "${company}" against a candidate's profile.
+    const targetRole = userContext.targetRole || "the user's target role";
+    const prompt = `We are matching a Job Description for a "${title}" at "${company}" against a candidate's full Career Context.
 Job Description:
 "${description}"
 
-Candidate's Resume Content:
-"${resumeText}"
+Candidate's Complete Career Context:
+${JSON.stringify(userContext, null, 2)}
 
-Candidate's Target Goal: "${targetRole}"
-Candidate's Experience: "${userDoc ? userDoc.experience : "Intermediate"}"
-
-Analyze the job description and candidate's details. Find the match scores, gaps, and next recommended actions.
+Analyze the job description and candidate's full profile (including their resume, github, and roadmap). Find the match scores, gaps, and next recommended actions.
 Output a JSON object conforming exactly to this structure:
 {
   "skills": ["React", "TypeScript", "Node.js"],
@@ -62,8 +65,8 @@ Output a JSON object conforming exactly to this structure:
   ]
 }`;
 
-    const { generateGeminiContent } = require("../config/gemini");
-    const geminiJson = await generateGeminiContent(prompt, "You are a professional recruiting parser. Respond only in valid JSON.", true);
+    const { generateAiContent } = require("../config/ai");
+    const geminiJson = await generateAiContent(prompt, "You are a professional recruiting parser. Respond only in valid JSON.", true);
     
     let jdSkills = null;
     let scoreData = null;
@@ -126,11 +129,11 @@ Output a JSON object conforming exactly to this structure:
     // 2. Save immutable Job Opportunity metadata
     const opportunity = await JobOpportunity.create({
       userId,
-      title: title || "Frontend Developer",
-      company: company || "Startup Inc",
-      url: url || "",
-      location: location || "Remote",
-      salaryRange: salaryRange || "$100,000 - $120,000",
+      title,
+      company,
+      url,
+      location: location || "",
+      salaryRange: salaryRange || "",
       description,
       status: status || "Saved",
       skills: jdSkills,
@@ -157,38 +160,8 @@ Output a JSON object conforming exactly to this structure:
 
     return toJobOpportunityDTO(opportunity, analysis);
   } catch (err) {
-    // Offline local fallback
-    const mockOpportunity = {
-      id: `opportunity-${Date.now()}`,
-      title: title || "Frontend Developer",
-      company: company || "Startup Inc",
-      url: url || "",
-      location: location || "Remote",
-      salaryRange: salaryRange || "$100k - $120k",
-      status: status || "Saved",
-      skills: ["React", "Node.js", "Docker", "Jest"],
-      lastAnalyzed: new Date()
-    };
-
-    const mockAnalysis = {
-      matchScore: 82,
-      resumeScore: 90,
-      githubScore: 80,
-      portfolioScore: 70,
-      experienceGap: "Matched",
-      salaryFit: 100,
-      recommendation: "Apply Now",
-      nextActions: [
-        { gap: "Missing Project Evidence: Docker", evidence: "No Dockerfile configurations found.", priority: "High", expectedImpact: 4 },
-        { gap: "Missing Resume Keyword: Jest", evidence: "Not found in parsed resume text.", priority: "Medium", expectedImpact: 2 }
-      ],
-      skillGap: ["Docker", "Jest"],
-      analyzedAt: new Date()
-    };
-
-    mockDb.user.score = Math.min(100, mockDb.user.score + 2);
-
-    return toJobOpportunityDTO(mockOpportunity, mockAnalysis);
+    console.error("Job Service Error in matchAndSaveJob:", err);
+    throw err;
   }
 }
 
@@ -204,8 +177,8 @@ async function getJobPipeline(userId) {
       return toJobOpportunityDTO(opp, analysis);
     }).filter(Boolean);
   } catch (err) {
-    // Offline local fallback
-    return [];
+    console.error("Job Service Error in getJobPipeline:", err);
+    throw err;
   }
 }
 
@@ -224,8 +197,8 @@ async function updateJobStatus(userId, opportunityId, status) {
 
     return toJobOpportunityDTO(opp, analysis);
   } catch (err) {
-    // Offline local fallback
-    return null;
+    console.error("Job Service Error in updateJobStatus:", err);
+    throw err;
   }
 }
 

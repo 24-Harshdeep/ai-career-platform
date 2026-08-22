@@ -25,6 +25,8 @@ import {
   Clock,
   Target
 } from "lucide-react";
+import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
+import PageHeader from "@/components/ui/PageHeader";
 
 type SettingsTab = "profile" | "ai" | "documents" | "notifications" | "accounts" | "theme" | "security";
 
@@ -42,9 +44,9 @@ export default function SettingsPage() {
   const [profileLoaded, setProfileLoaded] = useState(false);
 
   // Form states: Profile & Career
-  const [nameInput, setNameInput] = useState(storeUser?.name || user?.name || "Harshdeep K");
-  const [emailInput, setEmailInput] = useState(user?.email || "harshdeep@career.os");
-  const [targetRoleInput, setTargetRoleInput] = useState(profile?.targetRole || storeUser?.goal || "Backend Developer");
+  const [nameInput, setNameInput] = useState(storeUser?.name || user?.name || "");
+  const [emailInput, setEmailInput] = useState(user?.email || "");
+  const [targetRoleInput, setTargetRoleInput] = useState(profile?.targetRole || storeUser?.goal || "");
   const [experienceInput, setExperienceInput] = useState<"Beginner" | "Intermediate" | "Advanced">(
     (profile?.experienceLevel as any) || (storeUser?.experience as any) || "Intermediate"
   );
@@ -61,8 +63,8 @@ export default function SettingsPage() {
   const [aiTemperature, setAiTemperature] = useState(0.5);
 
   // Form states: Resume Defaults & Links
-  const [primaryResume, setPrimaryResume] = useState("Harshdeep_Resume_2026.pdf");
-  const [primaryPortfolio, setPrimaryPortfolio] = useState("GitHub Integration Portfolio");
+  const [primaryResume, setPrimaryResume] = useState("");
+  const [primaryPortfolio, setPrimaryPortfolio] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [githubUrl, setGithubUrl] = useState("");
   const [portfolioUrl, setPortfolioUrl] = useState("");
@@ -74,7 +76,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (storeUser) {
-      setNameInput(storeUser.name || "Harshdeep K");
+      setNameInput(storeUser.name || "");
       setEmailInput(storeUser.email || "harshdeep@career.os");
     }
   }, [storeUser]);
@@ -95,7 +97,7 @@ export default function SettingsPage() {
       setAiTemperature(profile.aiTemperature !== undefined ? profile.aiTemperature : 0.5);
       setThemeMode(profile.themeMode || "Dark");
       setAccentColor(profile.accentColor || "Purple");
-      setPrimaryResume(profile.primaryResume || "Harshdeep_Resume_2026.pdf");
+      setPrimaryResume(profile.primaryResume || "");
       setPrimaryPortfolio(profile.primaryPortfolio || "GitHub Integration Portfolio");
       setLinkedinUrl(profile.linkedinUrl ?? "");
       setPortfolioUrl(profile.portfolioUrl ?? "");
@@ -243,19 +245,14 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in-up pb-12">
-      {/* Title */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border/60 pb-5">
-        <div className="flex items-center space-x-3">
-          <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl">
-            <Settings className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-foreground">System Configuration</h2>
-            <p className="text-xs text-muted">Configure profile targets, customize AI behavior, manage links, and review connected accounts.</p>
-          </div>
-        </div>
-      </div>
+    <PageTransition className="space-y-6 pb-12">
+      <StaggerItem>
+        <PageHeader
+          icon={Settings}
+          title="System Configuration"
+          description="Configure profile targets, customize AI behavior, manage links, and review connected accounts."
+        />
+      </StaggerItem>
 
       {/* Grid: Left tabs menu sidebar vs Right forms card */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -524,8 +521,7 @@ export default function SettingsPage() {
                       onChange={(e) => setPrimaryResume(e.target.value)}
                       className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
                     >
-                      <option value="Harshdeep_Resume_2026.pdf">Harshdeep_Resume_2026.pdf (Primary)</option>
-                      <option value="Harshdeep_Resume_Draft2.pdf">Harshdeep_Resume_Draft2.pdf</option>
+                      {primaryResume && <option value={primaryResume}>{primaryResume} (Primary)</option>}
                     </select>
                   </div>
                   <div className="space-y-1">
@@ -781,6 +777,6 @@ export default function SettingsPage() {
         </div>
 
       </div>
-    </div>
+    </PageTransition>
   );
 }

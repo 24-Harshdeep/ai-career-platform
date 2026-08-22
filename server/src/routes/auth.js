@@ -5,18 +5,8 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const authMiddleware = require("../middleware/auth");
 
-const JWT_SECRET = process.env.JWT_SECRET || "careeros-secret-key";
-
-// Local in-memory users cache fallback for sandboxes without Mongo
-const localUserCache = [];
-
-// Enforce default mock credentials
-const DEFAULT_USER = {
-  email: "harshdeep@careeros.dev",
-  passwordHash: bcrypt.hashSync("password", 10),
-  name: "Harshdeep"
-};
-localUserCache.push(DEFAULT_USER);
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error("JWT_SECRET must be configured.");
 
 // Register Account
 router.post("/register", async (req, res) => {
@@ -47,18 +37,7 @@ router.post("/register", async (req, res) => {
         passwordHash
       });
     } catch (dbErr) {
-      // Offline Local Cache Fallback
-      const cacheExists = localUserCache.some(u => u.email === email);
-      if (cacheExists) {
-        return res.status(400).json({ error: "Email registration already exists." });
-      }
-      newUser = {
-        _id: `mock-id-${Date.now()}`,
-        name,
-        email,
-        passwordHash
-      };
-      localUserCache.push(newUser);
+      return res.status(503).json({ error: "Account storage is unavailable." });
     }
 
     // 2. Sign JWT Session Token
@@ -74,8 +53,8 @@ router.post("/register", async (req, res) => {
         id: newUser._id,
         name: newUser.name,
         email: newUser.email,
-        role: "Full Stack Developer",
-        goal: "Full Stack Developer"
+        role: newUser.role || "",
+        goal: newUser.goal || ""
       }
     });
   } catch (err) {
@@ -108,43 +87,9 @@ router.post("/login", async (req, res) => {
         } else {
           isMatch = await bcrypt.compare(password, matchedUser.passwordHash);
         }
-      } else {
-        // Auto-create user on-demand on first login try (convenient for empty local databases)
-        const salt = await bcrypt.genSalt(10);
-        const hash = await bcrypt.hash(password, salt);
-        const defaultName = email.split("@")[0].split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-        matchedUser = await User.create({
-          name: defaultName || "Harshdeep",
-          email,
-          passwordHash: hash
-        });
-        isMatch = true;
       }
     } catch (dbErr) {
-      // Offline fallback lookup
-      matchedUser = localUserCache.find(u => u.email === email);
-      if (matchedUser) {
-        if (!matchedUser.passwordHash || matchedUser.passwordHash === "undefined") {
-          const salt = await bcrypt.genSalt(10);
-          matchedUser.passwordHash = await bcrypt.hash(password, salt);
-          isMatch = true;
-        } else {
-          isMatch = await bcrypt.compare(password, matchedUser.passwordHash);
-        }
-      } else {
-        // Auto-create in offline cache too
-        const salt = await bcrypt.genSalt(10);
-        const hash = await bcrypt.hash(password, salt);
-        const defaultName = email.split("@")[0].split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-        matchedUser = {
-          _id: `mock-id-${Date.now()}`,
-          name: defaultName || "Harshdeep",
-          email,
-          passwordHash: hash
-        };
-        localUserCache.push(matchedUser);
-        isMatch = true;
-      }
+      return res.status(503).json({ error: "Account storage is unavailable." });
     }
 
     if (!matchedUser || !isMatch) {
@@ -164,8 +109,8 @@ router.post("/login", async (req, res) => {
         id: matchedUser._id,
         name: matchedUser.name,
         email: matchedUser.email,
-        role: matchedUser.role || "Full Stack Developer",
-        goal: matchedUser.goal || "Full Stack Developer"
+        role: matchedUser.role || "",
+        goal: matchedUser.goal || ""
       }
     });
   } catch (err) {

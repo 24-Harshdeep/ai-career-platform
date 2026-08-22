@@ -36,7 +36,7 @@ router.post("/github/sync", authMiddleware, async (req, res) => {
   try {
     const data = await developerService.syncDeveloperProfile(
       req.user._id || req.user.id,
-      req.body.username || "harshdeep"
+      req.body.username
     );
     return successResponse(res, "Developer profile repository sync complete.", data);
   } catch (err) {

@@ -16,7 +16,7 @@ const { calculateAtsScore } = require("../engines/resume/atsScore.engine");
 const { toResumeAnalysisDTO } = require("../dto/resume.dto");
 const { recalculateUserStats } = require("./career.service");
 const { logCareerEvent } = require("./analytics.service");
-const { generateGeminiContent } = require("../config/gemini");
+const { generateAiContent } = require("../config/ai");
 
 // Helper: fallback parsing to populate rich schema structures locally without fabricating details
 function fallbackParseToStructured(rawText, userDoc) {
@@ -26,7 +26,7 @@ function fallbackParseToStructured(rawText, userDoc) {
   let phone = "";
   let email = "";
   let location = "";
-  let name = userDoc ? userDoc.name : "Harshdeep Kaur";
+  let name = userDoc ? userDoc.name : "";
   if (userDoc) {
     email = userDoc.email;
   }
@@ -38,7 +38,7 @@ function fallbackParseToStructured(rawText, userDoc) {
       phone = line.replace(/phone:/i, "").trim();
     } else if (s.startsWith("email:") || (s.includes("@") && s.includes("mail.com"))) {
       email = line.replace(/email:/i, "").trim();
-    } else if (s.startsWith("address:") || s.includes("assam") || s.includes("dergaon")) {
+    } else if (s.startsWith("address:")) {
       location = line.replace(/address:/i, "").trim();
     }
   }
@@ -55,36 +55,51 @@ function fallbackParseToStructured(rawText, userDoc) {
   // Extract certifications
   const certifications = [];
   const rawCertLines = [
-    ...(localSections.certifications || []),
-    ...educationLines.filter(line => {
-      const s = line.toLowerCase();
-      return s.includes("certif") || s.includes("course") || s.includes("udemy") || s.includes("coursera") || s.includes("learning") || s.includes("training") || s.includes("vanderbilt") || s.includes("google via");
-    })
+    ...(localSections.certifications || [])
   ];
 
   for (const line of rawCertLines) {
     const s = line.trim();
     if (!s) continue;
     const lower = s.toLowerCase();
-    if (lower === "coursera" || lower === "certificate" || lower === "certification" || lower === "mongodb") {
+    if (lower === "coursera" || lower === "certificate" || lower === "certification") {
       continue;
     }
-    certifications.push(s);
+    
+    // Extract URL if present
+    const urlMatch = s.match(/(https?:\/\/[^\s]+)/);
+    const credentialUrl = urlMatch ? urlMatch[1] : "";
+    let name = s;
+    if (urlMatch) {
+      name = name.replace(credentialUrl, "").trim();
+    }
+    
+    certifications.push({
+      name: name,
+      issuer: "",
+      issueDate: "",
+      credentialId: "",
+      credentialUrl: credentialUrl,
+      evidenceText: line,
+      source: "resume",
+      confidence: 50,
+      isRelevant: true
+    });
   }
 
-  // Filter certifications out of education
-  const cleanEduLines = educationLines.filter(line => {
-    const s = line.toLowerCase();
-    return !(s.includes("certif") || s.includes("course") || s.includes("udemy") || s.includes("coursera") || s.includes("learning") || s.includes("training") || s.includes("vanderbilt") || s.includes("google via"));
-  });
-
   const finalEducation = [];
-  for (const line of cleanEduLines) {
+  for (const line of educationLines) {
     const s = line.toLowerCase();
+    
+    // If it's just a descriptive sentence, don't invent an education record
+    if (s.split(" ").length > 15 || s.includes("learning") || s.includes("building")) {
+      continue; 
+    }
+    
     finalEducation.push({
       institution: line,
-      degree: s.includes("bachelor") || s.includes("b.c.a") || s.includes("bca") ? "Bachelor's" : "Unconfirmed Degree",
-      major: s.includes("computer") || s.includes("software") ? "Computer Applications" : "Unconfirmed Major",
+      degree: "",
+      major: "",
       startDate: "",
       endDate: "",
       gpa: ""
@@ -97,8 +112,8 @@ function fallbackParseToStructured(rawText, userDoc) {
     if (parts.length >= 2) {
       finalWork.push({
         company: parts[0],
-        position: parts[1] || "Unconfirmed Position",
-        location: parts[2] || "Remote",
+        position: parts[1] || "",
+        location: parts[2] || "",
         startDate: "",
         endDate: "",
         description: line,
@@ -106,9 +121,9 @@ function fallbackParseToStructured(rawText, userDoc) {
       });
     } else {
       finalWork.push({
-        company: "Unconfirmed Company",
-        position: "Unconfirmed Position",
-        location: "Remote",
+        company: "",
+        position: "",
+        location: "",
         startDate: "",
         endDate: "",
         description: line,
@@ -139,7 +154,7 @@ function fallbackParseToStructured(rawText, userDoc) {
     if (parts.length >= 2) {
       finalProjects.push({
         title: parts[0],
-        technologies: parts[1] ? parts[1].split(",").map(t => t.trim()) : ["React"],
+        technologies: parts[1] ? parts[1].split(",").map(t => t.trim()) : [],
         description: line,
         bulletPoints: parts.slice(2).length > 0 ? parts.slice(2) : [line],
         link: ""
@@ -147,7 +162,7 @@ function fallbackParseToStructured(rawText, userDoc) {
     } else {
       finalProjects.push({
         title: line,
-        technologies: ["React"],
+        technologies: [],
         description: line,
         bulletPoints: [line],
         link: ""
@@ -196,11 +211,11 @@ function fallbackParseToStructured(rawText, userDoc) {
     personalInfo: {
       name,
       email,
-      phone: phone || "+1 (555) 019-2834",
-      location: location || "Dergaon, Assam",
-      githubUrl: "https://github.com/24-Harshdeep",
-      linkedinUrl: "https://www.linkedin.com/in/harshdeep-kaur-58b5a4320/",
-      portfolioUrl: "https://portfolio12h.netlify.app/"
+      phone,
+      location,
+      githubUrl: "",
+      linkedinUrl: "",
+      portfolioUrl: ""
     },
     summary: cleanSummaryLines.join(" "),
     workExperience: finalWork,
@@ -285,13 +300,23 @@ The JSON output must conform EXACTLY to this schema:
     }
   ],
   "achievements": [
-    "Achievement or certification 1"
+    "Achievement 1"
+  ],
+  "certifications": [
+    {
+      "name": "Certification Name",
+      "issuer": "Issuing Organization",
+      "issueDate": "Date",
+      "credentialId": "ID if present",
+      "credentialUrl": "URL if present (otherwise null)",
+      "evidenceText": "Original text"
+    }
   ]
 }`;
 
     let parsedContent = null;
     try {
-      const geminiParseJson = await generateGeminiContent(parsePrompt, "You are a precise ATS parser. Output JSON only.", true);
+      const geminiParseJson = await generateAiContent(parsePrompt, "You are a precise ATS parser. Output JSON only.", true);
       if (geminiParseJson) {
         parsedContent = JSON.parse(geminiParseJson);
       }
@@ -331,8 +356,17 @@ The JSON output must conform EXACTLY to this schema:
     });
 
     // 3. Compute initial ATS scoring
+    const { getCareerContext } = require("./careerContext.service");
+    const userContext = await getCareerContext(userId);
+
     const analysisPrompt = `Analyze this candidate resume parsed content for a target role as a "${targetRole}". 
 Evaluate its keywords, projects, formatting, action verbs, and quantified impact.
+Crucially, cross-reference the resume claims against their actual verified Developer Profile and GitHub analytics provided below to evaluate TRUTHFULNESS.
+If they claim skills they haven't verified, mark them as exaggerated.
+
+Verified Career Context (Source of Truth):
+${JSON.stringify(userContext.devContext || {})}
+
 Parsed Resume Content: ${JSON.stringify(parsedContent)}
 
 Output a JSON object conforming exactly to this structure:
@@ -345,6 +379,10 @@ Output a JSON object conforming exactly to this structure:
     "formatting": 90,
     "actionVerbs": 60,
     "quantifiedImpact": 50
+  },
+  "truthfulnessReport": {
+    "exaggeratedSkills": ["List of skills claimed but not verified"],
+    "missingVerifiedSkills": ["List of skills verified in Github but missing from Resume"]
   },
   "missingKeywords": [
     {
@@ -363,12 +401,13 @@ Output a JSON object conforming exactly to this structure:
 
     let scoreData = null;
     try {
-      const geminiJson = await generateGeminiContent(analysisPrompt, "You are a professional ATS resume scanner. Respond only with valid JSON.", true);
+      const geminiJson = await generateAiContent(analysisPrompt, "You are a professional ATS resume scanner. Respond only with valid JSON.", true);
       if (geminiJson) {
         const parsed = JSON.parse(geminiJson);
         scoreData = {
           atsScore: parsed.atsScore || 65,
           breakdown: parsed.breakdown || { keywords: 60, projects: 60, skills: 60, formatting: 80, actionVerbs: 60, quantifiedImpact: 50 },
+          truthfulnessReport: parsed.truthfulnessReport || { exaggeratedSkills: [], missingVerifiedSkills: [] },
           suggestedImprovements: parsed.suggestedImprovements || ["Add metrics to your experience bullets."],
           missingKeywords: parsed.missingKeywords || []
         };
@@ -401,6 +440,7 @@ Output a JSON object conforming exactly to this structure:
       scoreData = {
         atsScore: rawScore.atsScore,
         breakdown: rawScore.breakdown,
+        truthfulnessReport: { exaggeratedSkills: [], missingVerifiedSkills: [] },
         suggestedImprovements: rawScore.suggestedImprovements,
         missingKeywords: rawMatch.missingKeywords
       };
@@ -412,6 +452,7 @@ Output a JSON object conforming exactly to this structure:
       resumeId: resume._id,
       atsScore: scoreData.atsScore,
       breakdown: scoreData.breakdown,
+      truthfulnessReport: scoreData.truthfulnessReport,
       missingKeywords: scoreData.missingKeywords,
       suggestedImprovements: scoreData.suggestedImprovements,
       analysisVersion: "v1.0.0"
@@ -511,10 +552,13 @@ async function getResumeAnalysis(userId) {
       missingKeywords: analysis.missingKeywords,
       suggestedImprovements: analysis.suggestedImprovements,
       changeLogs: changeLogs.map(log => ({
+        _id: log._id,
         section: log.section,
         originalText: log.originalText,
         rewrittenText: log.rewrittenText,
-        reason: log.reason
+        editedText: log.editedText,
+        reason: log.reason,
+        status: log.status
       }))
     };
   } catch (err) {
@@ -831,6 +875,15 @@ Output a JSON object conforming exactly to this structure:
     ],
     "achievements": [
       "Factual achievement or certification"
+    ],
+    "certifications": [
+      {
+        "name": "Certification Name",
+        "issuer": "Issuing Organization",
+        "issueDate": "Date or Year",
+        "credentialUrl": "Link if any",
+        "isRelevant": true
+      }
     ]
   },
   "atsScore": 92,
@@ -853,7 +906,7 @@ Output a JSON object conforming exactly to this structure:
 
   let optimizationResponse = null;
   try {
-    const geminiJson = await generateGeminiContent(optimizePrompt, "You are a professional resume writer. Respond only in valid JSON.", true);
+    const geminiJson = await generateAiContent(optimizePrompt, "You are a professional resume writer. Respond only in valid JSON.", true);
     if (geminiJson) {
       optimizationResponse = JSON.parse(geminiJson);
     }
@@ -867,56 +920,33 @@ Output a JSON object conforming exactly to this structure:
       optimizedResume: JSON.parse(JSON.stringify(activeVersion)),
       atsScore: 88,
       aiConfidence: 90,
-      changeLog: [{
-        section: "Summary",
-        originalText: activeVersion.summary,
-        rewrittenText: activeVersion.summary,
-        reason: "Optimization failed. Restored version template details."
-      }],
+      changeLog: [],
       unquantifiedStatements: []
     };
   }
 
-  // Create Fork Snapshot
-  const nextVer = resume.versions.length + 1;
-  const newVersion = {
-    versionNumber: nextVer,
-    title: `${goal || "ATS"} Optimized Version`,
-    optimizationGoal: goal || "ATS Optimization",
-    personalInfo: optimizationResponse.optimizedResume.personalInfo || activeVersion.personalInfo,
-    summary: optimizationResponse.optimizedResume.summary || activeVersion.summary,
-    workExperience: optimizationResponse.optimizedResume.workExperience || activeVersion.workExperience,
-    projects: optimizationResponse.optimizedResume.projects || activeVersion.projects,
-    skills: optimizationResponse.optimizedResume.skills || activeVersion.skills,
-    education: optimizationResponse.optimizedResume.education || activeVersion.education,
-    achievements: optimizationResponse.optimizedResume.achievements || activeVersion.achievements,
-    certifications: optimizationResponse.optimizedResume.certifications || activeVersion.certifications || [],
-    createdAt: new Date()
-  };
+  // Clear existing pending changelogs for this active version
+  await ResumeChangeLog.deleteMany({ userId, resumeId: resume._id, versionNumber: resume.activeVersionId, status: "pending" });
 
-  resume.versions.push(newVersion);
-  resume.activeVersionId = nextVer;
-  await resume.save();
-
-  // Create Change Log Entries
+  // Create Pending Change Log Entries
   if (optimizationResponse.changeLog && optimizationResponse.changeLog.length > 0) {
     const logs = optimizationResponse.changeLog.map(item => ({
       userId,
       resumeId: resume._id,
-      versionNumber: nextVer,
+      versionNumber: resume.activeVersionId, // tie to current version for review
       section: item.section,
       originalText: item.originalText,
       rewrittenText: item.rewrittenText,
-      reason: item.reason
+      reason: item.reason,
+      status: "pending"
     }));
     await ResumeChangeLog.insertMany(logs);
   }
 
-  // Update Analysis Record
+  // Update Analysis Record (store improvements, don't overwrite real ATS score yet)
   await ResumeAnalysis.findOneAndUpdate(
     { userId, resumeId: resume._id },
     {
-      atsScore: optimizationResponse.atsScore || 85,
       suggestedImprovements: (optimizationResponse.unquantifiedStatements || []).map(q => q.originalText)
     },
     { upsert: true }
@@ -938,6 +968,71 @@ Output a JSON object conforming exactly to this structure:
   };
 }
 
+// 8. Review Pending Change Log
+async function reviewChangeLog(userId, logId, status, editedText = "") {
+  const log = await ResumeChangeLog.findOne({ _id: logId, userId });
+  if (!log) throw new Error("Change log not found.");
+  
+  log.status = status;
+  if (status === "edited") {
+    log.editedText = editedText;
+  }
+  await log.save();
+  return getResumeAnalysis(userId);
+}
+
+// 9. Apply Accepted/Edited Change Logs
+async function applyChangeLogs(userId, goal) {
+  const resume = await getOrCreateActiveResume(userId);
+  if (!resume) throw new Error("No resume exists.");
+  
+  const activeVersion = resume.versions.find(v => v.versionNumber === resume.activeVersionId);
+  if (!activeVersion) throw new Error("Active version missing.");
+
+  const logs = await ResumeChangeLog.find({ userId, resumeId: resume._id, versionNumber: resume.activeVersionId });
+  
+  const newVersionId = resume.versions.length + 1;
+  const newContent = JSON.parse(JSON.stringify(activeVersion));
+  newContent.versionNumber = newVersionId;
+  newContent.title = `${goal || "AI"} Optimized Version`;
+  newContent.createdAt = new Date();
+
+  const replaceText = (obj, original, replacement) => {
+    if (!obj) return obj;
+    if (typeof obj === 'string') {
+      return obj === original ? replacement : obj;
+    }
+    if (Array.isArray(obj)) {
+      return obj.map(item => replaceText(item, original, replacement));
+    }
+    if (typeof obj === 'object') {
+      const newObj = {};
+      for (const key in obj) {
+        newObj[key] = replaceText(obj[key], original, replacement);
+      }
+      return newObj;
+    }
+    return obj;
+  };
+
+  for (const log of logs) {
+    if (log.status === "accepted") {
+      Object.assign(newContent, replaceText(newContent, log.originalText, log.rewrittenText));
+    } else if (log.status === "edited") {
+      Object.assign(newContent, replaceText(newContent, log.originalText, log.editedText));
+    }
+  }
+
+  resume.versions.push(newContent);
+  resume.activeVersionId = newVersionId;
+  await resume.save();
+
+  // Clear logs for old version
+  await ResumeChangeLog.deleteMany({ userId, resumeId: resume._id, versionNumber: activeVersion.versionNumber });
+
+  return getResumeAnalysis(userId);
+}
+
 module.exports = {
   uploadAndAnalyzeResume,
   getResumeAnalysis,
@@ -945,5 +1040,8 @@ module.exports = {
   forkResumeVersion,
   restoreResumeVersion,
   getCrossSyncSuggestions,
-  optimizeResumeContent
+  optimizeResumeContent,
+  reviewChangeLog,
+  applyChangeLogs
 };
+

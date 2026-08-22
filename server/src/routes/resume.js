@@ -159,5 +159,25 @@ router.post("/optimize", authMiddleware, async (req, res) => {
     return errorResponse(res, `Failed to optimize resume: ${err.message}`, [], 500);
   }
 });
+// 8. Review Pending Change Log
+router.post("/changelog/review", authMiddleware, async (req, res) => {
+  try {
+    const { logId, status, editedText } = req.body;
+    const data = await resumeService.reviewChangeLog(req.user._id || req.user.id, logId, status, editedText);
+    return successResponse(res, "Change log updated.", data);
+  } catch (err) {
+    return errorResponse(res, `Failed to update change log: ${err.message}`, [], 500);
+  }
+});
 
+// 9. Apply Pending Change Logs
+router.post("/changelog/apply", authMiddleware, async (req, res) => {
+  try {
+    const { goal } = req.body;
+    const data = await resumeService.applyChangeLogs(req.user._id || req.user.id, goal);
+    return successResponse(res, "Change logs applied successfully.", data);
+  } catch (err) {
+    return errorResponse(res, `Failed to apply change logs: ${err.message}`, [], 500);
+  }
+});
 module.exports = router;

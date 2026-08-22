@@ -6,6 +6,8 @@ import Card from "@/components/ui/Card/Card";
 import Button from "@/components/ui/Button/Button";
 import Badge from "@/components/ui/Badge/Badge";
 import PoweredBy from "@/components/ui/PoweredBy";
+import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
+import PageHeader from "@/components/ui/PageHeader";
 import {
   GraduationCap,
   Sparkles,
@@ -169,51 +171,14 @@ export default function InterviewPrepPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in-up pb-12">
-      {/* Title */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border/60 pb-5">
-        <div className="flex items-center space-x-3">
-          <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl">
-            <GraduationCap className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-foreground">Interview Intelligence</h2>
-            <p className="text-xs text-muted">Simulate mock rounds, receive analysis audits, and review recurring mistake logs.</p>
-          </div>
-        </div>
-        <PoweredBy engines={[
-          {
-            type: "ai",
-            label: "AI Recruiter",
-            description: "Generates tailored mock questions, guides the flow, and reviews responses.",
-            points: [
-              "Dynamically creates realistic interview questions",
-              "Generates follow-up questions and hints",
-              "Evaluates technical depth, keywords, and concept coverage"
-            ]
-          },
-          {
-            type: "engine",
-            label: "Evaluation Engine",
-            description: "Proprietary algorithms that measure key performance dimensions.",
-            points: [
-              "Rates technical, communication, and problem-solving skills",
-              "Identifies recurring conceptual mistakes and weak areas",
-              "Computes and updates the Interview Readiness Index"
-            ]
-          },
-          {
-            type: "user",
-            label: "User Responses",
-            description: "User selects difficulty, question count, and types explanations.",
-            points: [
-              "Configures complexity: Beginner, Intermediate, Advanced, Real Interview",
-              "Chooses question count (1 to 10) for practice",
-              "Answers technical coding, behavioral STAR, or system design questions"
-            ]
-          }
-        ]} />
-      </div>
+    <PageTransition className="space-y-6 pb-12">
+      <StaggerItem>
+        <PageHeader 
+          icon={GraduationCap}
+          title="Interview Intelligence"
+          description="Simulate mock rounds, receive analysis audits, and review recurring mistake logs."
+        />
+      </StaggerItem>
 
       {/* Grid: Simulator layout vs Aggregates */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -696,6 +661,6 @@ export default function InterviewPrepPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </PageTransition>
   );
 }

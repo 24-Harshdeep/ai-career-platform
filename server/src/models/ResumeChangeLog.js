@@ -7,7 +7,9 @@ const ResumeChangeLogSchema = new mongoose.Schema({
   section: { type: String, required: true }, // e.g., "Work Experience - Google", "Summary"
   originalText: { type: String, required: true },
   rewrittenText: { type: String, required: true },
-  reason: { type: String, required: true } // e.g., "Uses stronger action verb..."
+  editedText: { type: String, default: "" }, // user's manual modifications before accepting
+  reason: { type: String, required: true }, // e.g., "Uses stronger action verb..."
+  status: { type: String, enum: ["pending", "accepted", "rejected", "edited"], default: "pending" }
 }, { timestamps: true });
 
 module.exports = mongoose.model("ResumeChangeLog", ResumeChangeLogSchema);

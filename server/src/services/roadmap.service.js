@@ -2,23 +2,25 @@ const User = require("../models/User");
 const CareerProfile = require("../models/CareerProfile");
 const LearningProgress = require("../models/LearningProgress");
 const Achievement = require("../models/Achievement");
-const { mockDb } = require("../config/mockDb");
 
-const { getTemplatesForGoal } = require("../config/roadmaps");
+
 const { toRoadmapDTO } = require("../dto/roadmap.dto");
 const { calculateMissionReward } = require("../engines/mission.engine");
 const { calculateStreak } = require("../engines/streak.engine");
+const { generatePersonalizedRoadmap } = require("../engines/roadmap.engine");
+const { getCareerContext } = require("./careerContext.service");
 const { recalculateUserStats } = require("./career.service");
 const { logCareerEvent } = require("./analytics.service");
+const Roadmap = require("../models/Roadmap");
 
-// Find a sub-skill reward configuration across all templates
-function findSubSkillConfig(subSkillId) {
-  const templates = getTemplatesForGoal("Full Stack Developer"); // scan all
-  for (const track of templates) {
-    for (const mod of track.modules) {
-      const match = mod.subSkills.find(sub => sub.id === subSkillId);
-      if (match) return match;
-    }
+// Find a sub-skill reward configuration across user templates
+async function findSubSkillConfig(userId, subSkillId) {
+  const track = await Roadmap.findOne({ userId });
+  if (!track) return null;
+  
+  for (const mod of track.modules) {
+    const match = mod.subSkills.find(sub => sub.id === subSkillId);
+    if (match) return match;
   }
   return null;
 }
@@ -26,22 +28,31 @@ function findSubSkillConfig(subSkillId) {
 // 1. Fetch User Roadmap Track DTOs
 async function getUserRoadmapTracks(userId) {
   try {
-    const userDoc = await User.findById(userId);
-    const goal = userDoc ? userDoc.goal : "Full Stack Developer";
-    const templates = getTemplatesForGoal(goal);
+    let track = await Roadmap.findOne({ userId });
+    if (!track) {
+      const userContext = await getCareerContext(userId);
+      const generatedTrack = await generatePersonalizedRoadmap(userContext);
+      
+      track = await Roadmap.create({
+        userId,
+        id: generatedTrack.id,
+        title: generatedTrack.title,
+        modules: generatedTrack.modules
+      });
+    }
 
     const progressLogs = await LearningProgress.find({ userId });
-    return toRoadmapDTO(templates, progressLogs);
+    return toRoadmapDTO([track], progressLogs);
   } catch (err) {
-    // Offline local fallback
-    return mockDb.roadmap;
+    console.error("Roadmap Service Error in getUserRoadmapTracks:", err);
+    throw err;
   }
 }
 
 // 2. Toggle Sub-Skill checklist masters
 async function updateSubSkillMastery(userId, subSkillId, mastered) {
   try {
-    const config = findSubSkillConfig(subSkillId);
+    const config = await findSubSkillConfig(userId, subSkillId);
     const xpReward = config ? config.xpReward : 50;
 
     // Upsert checklist record
@@ -86,7 +97,7 @@ async function updateSubSkillMastery(userId, subSkillId, mastered) {
       `Roadmap Progress: ${subSkillId.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}`,
       "Roadmap Engine",
       5,
-      { subSkillId, progress }
+      { subSkillId, progress: mastered ? 100 : 0 }
     );
 
     // Force stats calculations updates
@@ -94,11 +105,8 @@ async function updateSubSkillMastery(userId, subSkillId, mastered) {
 
     return await getUserRoadmapTracks(userId);
   } catch (err) {
-    // Offline local fallback
-    const track = mockDb.roadmap.find(t => 
-      t.skills.some(s => s.toLowerCase().includes(subSkillId.split("-")[0]))
-    );
-    return mockDb.roadmap;
+    console.error("Roadmap Service Error in updateSubSkillMastery:", err);
+    throw err;
   }
 }
 
@@ -194,19 +202,8 @@ async function completeDailyMission(userId, missionId) {
       level: rewards.newLevel
     };
   } catch (err) {
-    // Offline local fallback
-    const match = mockDb.missions.find(m => m.id === missionId);
-    if (match) {
-      match.completed = true;
-      mockDb.user.xp += 50;
-      mockDb.user.score += match.scoreReward;
-    }
-    return {
-      success: true,
-      xpGained: 50,
-      streak: mockDb.user.streakDays,
-      level: mockDb.user.level
-    };
+    console.error("Roadmap Service Error in completeDailyMission:", err);
+    throw err;
   }
 }
 

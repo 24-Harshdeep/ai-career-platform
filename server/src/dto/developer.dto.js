@@ -13,13 +13,13 @@ function toDeveloperIntelligenceDTO(profile, repos, analyses) {
       language: repo.primaryLanguage,
       stars: repo.stars,
       forks: repo.forks,
-      healthScore: analysis ? analysis.healthScore : 80,
-      documentationScore: analysis ? analysis.documentationScore : 80,
-      testingScore: analysis ? analysis.testingScore : 80,
-      architectureScore: analysis ? analysis.architectureScore : 80,
-      activityScore: analysis ? analysis.activityScore : 80,
-      maintainabilityScore: analysis ? analysis.maintainabilityScore : 82,
-      securityScore: analysis ? analysis.securityScore : 88
+      healthScore: analysis?.healthScore ?? null,
+      documentationScore: analysis?.documentationScore ?? null,
+      testingScore: analysis?.testingScore ?? null,
+      architectureScore: analysis?.architectureScore ?? null,
+      activityScore: analysis?.activityScore ?? null,
+      maintainabilityScore: analysis?.maintainabilityScore ?? null,
+      securityScore: analysis?.securityScore ?? null
     };
   });
 
@@ -69,9 +69,9 @@ function toDeveloperIntelligenceDTO(profile, repos, analyses) {
     }
   });
 
-  const frontendPct = totalCount > 0 ? Math.round((frontendCount / totalCount) * 100) : 50;
-  const backendPct = totalCount > 0 ? Math.round((backendCount / totalCount) * 100) : 40;
-  const databasePct = totalCount > 0 ? Math.round((databaseCount / totalCount) * 100) : 10;
+  const frontendPct = totalCount > 0 ? Math.round((frontendCount / totalCount) * 100) : null;
+  const backendPct = totalCount > 0 ? Math.round((backendCount / totalCount) * 100) : null;
+  const databasePct = totalCount > 0 ? Math.round((databaseCount / totalCount) * 100) : null;
   const devopsPct = totalCount > 0 ? Math.round((devopsCount / totalCount) * 100) : 0;
 
   return {
@@ -80,8 +80,8 @@ function toDeveloperIntelligenceDTO(profile, repos, analyses) {
     repositoryCount: profile.repositoryCount || repoList.length,
     bestRepository: profile.bestRepository || "",
     weakestRepository: profile.weakestRepository || "",
-    careerImpact: profile.careerImpact || 3,
-    jobReadinessImpact: profile.jobReadinessImpact || 5,
+    careerImpact: profile.careerImpact ?? null,
+    jobReadinessImpact: profile.jobReadinessImpact ?? null,
     repositories: repoList,
     languageDistribution: languageMap,
     technologyCoverage: {
@@ -91,10 +91,10 @@ function toDeveloperIntelligenceDTO(profile, repos, analyses) {
       DevOps: devopsPct
     },
     missingPractices: profile.missingPractices || [],
-    strengths: ["Clean code layouts", "Consistent documentation conventions"],
-    weaknesses: ["Automated coverage configs"],
-    recommendedProjects: ["Build a Full Stack deployment boilerplate featuring automated GitHub pipelines."],
-    nextActions: ["Add environment config examples to your primary repository."]
+    strengths: [],
+    weaknesses: [],
+    recommendedProjects: [],
+    nextActions: []
   };
 }
 

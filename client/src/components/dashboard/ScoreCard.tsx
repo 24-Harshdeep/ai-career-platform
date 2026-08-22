@@ -1,31 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { useCareerStore } from "@/store/careerStore";
-import { LineChart, Line, ResponsiveContainer, YAxis } from "recharts";
 import Card from "@/components/ui/Card/Card";
 import { TrendingUp } from "lucide-react";
-import { careerService } from "@/services/career.service";
 
 export const ScoreCard: React.FC = () => {
   const score = useCareerStore((state) => state.stats.score);
-  const trend = useCareerStore((state) => state.user?.scoreTrend || 0);
+  const trend = useCareerStore((state) => state.user?.scoreTrend);
   const readiness = useCareerStore((state) => state.stats.readiness);
-
-  // Custom data plotting 30 days history + future predictions
-  const richHistoryData = [
-    { label: "W1", score: 62, milestone: "Profile setup", type: "past" },
-    { label: "W2", score: 64, milestone: "GitHub Scan", type: "past" },
-    { label: "W3", score: 65, milestone: "Resume Scan", type: "past" },
-    { label: "W4", score: 70, milestone: "Mock interview", type: "past" },
-    { label: "W5", score: 72, milestone: "Roadmap Complete", type: "past" },
-    { label: "W6", score: score, milestone: "Current State", type: "past" },
-    { label: "W7 (Est)", score: Math.min(100, score + 3), milestone: "Project Scored", type: "future" },
-    { label: "W8 (Est)", score: Math.min(100, score + 6), milestone: "Interview Complete", type: "future" },
-  ];
-
-  const actualData = richHistoryData.map(d => d.type === "past" ? { ...d } : { ...d, score: null });
-  const predictedData = richHistoryData.map(d => d.type === "future" || d.label === "W6" ? { ...d } : { ...d, score: null });
 
   // Circular progress calculations
   const radius = 32;
@@ -34,9 +17,7 @@ export const ScoreCard: React.FC = () => {
   const strokeDashoffset = circumference - (score / 100) * circumference;
 
   return (
-    <Card className="flex flex-col items-center gap-6 p-6 h-full shadow-sm relative overflow-hidden">
-      {/* Decorative glow overlay */}
-      <div className="absolute right-0 top-0 w-32 h-32 bg-primary/5 rounded-full blur-2xl pointer-events-none" />
+    <Card className="flex flex-col items-center gap-6 p-6 h-full relative">
 
       <div className="flex flex-col md:flex-row items-center gap-6 w-full z-10">
         {/* Left: Circular Score Circle */}
@@ -74,54 +55,16 @@ export const ScoreCard: React.FC = () => {
             <div>
               <h3 className="text-xs font-semibold text-muted">Career Score</h3>
               <div className="flex items-center space-x-2 mt-1">
-                <span className="text-lg font-bold text-foreground">Growing</span>
-                <div className="flex items-center text-success text-[10px] font-semibold bg-success/10 border border-success/20 px-2 py-0.5 rounded-full">
+                <span className="text-lg font-bold text-foreground">{trend ? "Growing" : "No trend yet"}</span>
+                {trend ? <div className="flex items-center text-success text-[10px] font-semibold bg-success/10 border border-success/20 px-2 py-0.5 rounded-full">
                   <TrendingUp className="w-3 h-3 mr-0.5" />
                   <span>+{trend} this week</span>
-                </div>
+                </div> : null}
               </div>
             </div>
 
-            {/* Sparkline chart with predicted line overlay */}
-            <div className="h-16 w-full mt-2 relative">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={richHistoryData}>
-                  <YAxis domain={[50, 100]} hide />
-                  {/* Past actual scores line */}
-                  <Line
-                    type="monotone"
-                    data={actualData}
-                    dataKey="score"
-                    stroke="var(--primary)"
-                    strokeWidth={2.5}
-                    dot={{ r: 3, strokeWidth: 1.5, fill: "#FFF" }}
-                    activeDot={{ r: 5 }}
-                  />
-                  {/* Future predicted scores line */}
-                  <Line
-                    type="monotone"
-                    data={predictedData}
-                    dataKey="score"
-                    stroke="var(--primary)"
-                    strokeWidth={2}
-                    strokeDasharray="4 4"
-                    dot={{ r: 2.5, strokeWidth: 1, fill: "transparent", stroke: "var(--primary)" }}
-                    activeDot={{ r: 4 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Milestone annotation items */}
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {richHistoryData.filter(d => d.type === "past" && d.milestone !== "Current State").slice(-3).map((d) => (
-                <span key={d.label} className="text-[8px] bg-accent/20 border border-border px-1.5 py-0.5 rounded text-muted-foreground font-semibold">
-                  ✓ {d.label}: {d.milestone}
-                </span>
-              ))}
-              <span className="text-[8px] bg-primary/10 border border-primary/25 px-1.5 py-0.5 rounded text-primary font-semibold animate-pulse">
-                🔮 W7 (Est): Project Scored
-              </span>
+            <div className="h-16 w-full mt-2 flex items-center justify-center rounded-xl border border-dashed border-border text-[10px] text-muted">
+              Historical trend appears after CareerOS records more than one score snapshot.
             </div>
           </div>
 
@@ -140,12 +83,12 @@ export const ScoreCard: React.FC = () => {
                 <div key={idx.label} className="space-y-1">
                   <div className="flex justify-between text-[9px] font-bold">
                     <span className="text-foreground">{idx.label}</span>
-                    <span className="text-primary">{idx.val}%</span>
+                    <span className="text-primary">{idx.val == null ? "—" : `${idx.val}%`}</span>
                   </div>
                   <div className="h-1.5 w-full bg-accent/20 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-primary to-secondary rounded-full transition-all duration-500"
-                      style={{ width: `${idx.val}%` }}
+                      className="h-full bg-primary rounded-full transition-all duration-500"
+                      style={{ width: `${idx.val || 0}%` }}
                     />
                   </div>
                 </div>
@@ -173,7 +116,7 @@ export const ScoreCard: React.FC = () => {
           </div>
           <div className="space-y-1 border-l border-border/40">
             <span className="text-muted block text-[8px] uppercase tracking-wide">GitHub Audit</span>
-            <span className="font-extrabold text-foreground">76</span>
+            <span className="font-extrabold text-foreground">{readiness.portfolioReadiness || "—"}</span>
             <span className="text-[8px] text-muted-foreground block">Weight: 15%</span>
           </div>
           <div className="space-y-1 border-l border-border/40">

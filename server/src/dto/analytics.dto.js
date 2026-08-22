@@ -1,22 +1,22 @@
 function toAnalyticsDashboardDTO(snapshot, consistency, skillTrend, achievements, prediction, weeklyReport, events) {
   return {
-    careerScore: snapshot ? snapshot.careerScore : 82,
-    resumeScore: snapshot ? snapshot.resumeScore : 80,
-    developerScore: snapshot ? snapshot.developerScore : 80,
-    projectScore: snapshot ? snapshot.projectScore : 80,
-    roadmapScore: snapshot ? snapshot.roadmapScore : 50,
-    interviewScore: snapshot ? snapshot.interviewScore : 50,
-    weeklyGrowth: snapshot ? snapshot.weeklyGrowth : 2,
-    monthlyGrowth: snapshot ? snapshot.monthlyGrowth : 5,
+    careerScore: snapshot?.careerScore ?? null,
+    resumeScore: snapshot?.resumeScore ?? null,
+    developerScore: snapshot?.developerScore ?? null,
+    projectScore: snapshot?.projectScore ?? null,
+    roadmapScore: snapshot?.roadmapScore ?? null,
+    interviewScore: snapshot?.interviewScore ?? null,
+    weeklyGrowth: snapshot?.weeklyGrowth ?? null,
+    monthlyGrowth: snapshot?.monthlyGrowth ?? null,
     
     // Streaks heatmap
-    streakDays: consistency ? consistency.streakDays : 3,
-    heatMapDays: consistency ? consistency.heatMapDays : [1, 0, 2, 0, 1, 1, 0],
+    streakDays: consistency?.streakDays ?? null,
+    heatMapDays: consistency?.heatMapDays ?? [],
 
     // Radar categories
     skillsDistribution: skillTrend ? skillTrend.distribution : [],
-    strongestSkill: skillTrend ? skillTrend.strongest : "Frontend",
-    weakestSkill: skillTrend ? skillTrend.weakest : "DevOps",
+    strongestSkill: skillTrend?.strongest ?? null,
+    weakestSkill: skillTrend?.weakest ?? null,
 
     // Achievements unlocked
     achievements: (achievements || []).map(a => ({

@@ -39,12 +39,12 @@ export const NextActionCard: React.FC = () => {
   };
 
   // Fallbacks if data has not loaded from backend yet
-  const title = action ? action.title : "Connect & Scan GitHub Portfolio";
-  const reason = action ? action.reason : "Index code metrics, project document completeness scores, and commit frequencies.";
-  const impact = action ? action.impact : 3;
-  const estimatedTime = action ? action.estimatedTime : "15 mins";
-  const confidence = action ? action.confidence : 88;
-  const nextScore = action ? action.careerScoreAfterCompletion : (currentScore + 3);
+  const title = action?.title;
+  const reason = action?.reason;
+  const impact = action?.impact;
+  const estimatedTime = action?.estimatedTime;
+  const confidence = action?.confidence;
+  const nextScore = action?.careerScoreAfterCompletion;
 
   return (
     <Card variant="insight" className="h-full flex flex-col justify-between p-6">
@@ -65,12 +65,12 @@ export const NextActionCard: React.FC = () => {
         {/* Content */}
         <div className="space-y-2">
           <h4 className="text-lg font-bold text-foreground leading-tight">
-            {isCompleted ? "All Recommended Tasks Completed" : title}
+            {isCompleted ? "All Recommended Tasks Completed" : title || "No grounded action available"}
           </h4>
           <p className="text-xs text-muted leading-relaxed">
             {isCompleted
               ? "Incredible! Your profile is fully optimized for active target engineering applications."
-              : reason}
+              : reason || "CareerOS needs more verified profile, resume, project, or opportunity evidence before it can recommend a next action."}
           </p>
         </div>
 
@@ -81,7 +81,7 @@ export const NextActionCard: React.FC = () => {
             <div>
               <p className="text-[10px] text-muted font-medium">Expected Impact</p>
               <p className="text-xs font-bold text-success">
-                {isCompleted ? "Optimal" : `+${impact} Career Score`}
+                {isCompleted ? "Optimal" : impact == null ? "Not available" : `+${impact} Career Score`}
               </p>
             </div>
           </div>
@@ -90,7 +90,7 @@ export const NextActionCard: React.FC = () => {
             <div>
               <p className="text-[10px] text-muted font-medium">Est. Duration</p>
               <p className="text-xs font-bold text-foreground">
-                {isCompleted ? "N/A" : estimatedTime}
+                {isCompleted ? "N/A" : estimatedTime || "Not available"}
               </p>
             </div>
           </div>
@@ -99,7 +99,7 @@ export const NextActionCard: React.FC = () => {
             <div>
               <p className="text-[10px] text-muted font-medium">Confidence</p>
               <p className="text-xs font-bold text-foreground">
-                {isCompleted ? "100%" : `${confidence}% Match`}
+                {isCompleted ? "100%" : confidence == null ? "Not available" : `${confidence}% Match`}
               </p>
             </div>
           </div>
@@ -108,7 +108,7 @@ export const NextActionCard: React.FC = () => {
             <div>
               <p className="text-[10px] text-muted font-medium">Score Projection</p>
               <p className="text-xs font-bold text-foreground">
-                {isCompleted ? `${currentScore} Max` : `${currentScore} → ${nextScore}`}
+                {isCompleted ? `${currentScore} Max` : nextScore == null ? "Not available" : `${currentScore} → ${nextScore}`}
               </p>
             </div>
           </div>
@@ -121,6 +121,10 @@ export const NextActionCard: React.FC = () => {
           <div className="w-full flex items-center justify-center space-x-2 bg-success/15 border border-success/35 text-success rounded-xl py-2.5 text-sm font-semibold">
             <Check className="w-4.5 h-4.5" />
             <span>Profile Ready</span>
+          </div>
+        ) : !action ? (
+          <div className="w-full flex items-center justify-center bg-accent/15 border border-border text-muted rounded-xl py-2.5 text-xs text-center">
+            Add verified career evidence to unlock a grounded recommendation.
           </div>
         ) : (
           <Button

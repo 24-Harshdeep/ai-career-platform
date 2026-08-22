@@ -1,53 +1,105 @@
 @import "tailwindcss";
 
+/* ============================================
+   CareerOS Design System — Tokens & Foundation
+   ============================================ */
+
 :root {
-  --background: #FAFAFF;
+  /* Color Palette */
+  --background: #F8FAFC;
   --foreground: #1E293B;
   --card: #FFFFFF;
-  --card-foreground: #0F111A;
+  --card-foreground: #0F172A;
   --primary: #6366F1;
   --secondary: #8B5CF6;
-  --accent: #F3E8FF;
+  --accent: #F1F5F9;
   --border: #E2E8F0;
   --success: #10B981;
   --warning: #F59E0B;
+  --danger: #EF4444;
   --muted: #64748B;
+
+  /* Spacing Scale (4px base grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Border Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.04);
+
+  /* Transitions */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+
   color-scheme: light dark;
 }
 
-/* Force dark mode overrides when document has color-scheme = dark */
+/* Dark Theme */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --background: #0F111A;
+  --background: #0B0F19;
   --foreground: #F1F5F9;
-  --card: #161A2B;
+  --card: #131825;
   --card-foreground: #F8FAFC;
   --primary: #6366F1;
   --secondary: #8B5CF6;
-  --accent: #1F2438;
-  --border: #242B44;
+  --accent: #1A2036;
+  --border: #1F2B3D;
   --success: #10B981;
   --warning: #F59E0B;
+  --danger: #EF4444;
   --muted: #94A3B8;
+
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.35), 0 2px 4px -2px rgba(0,0,0,0.25);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.4), 0 4px 6px -4px rgba(0,0,0,0.3);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --background: #0F111A;
+    --background: #0B0F19;
     --foreground: #F1F5F9;
-    --card: #161A2B;
+    --card: #131825;
     --card-foreground: #F8FAFC;
     --primary: #6366F1;
     --secondary: #8B5CF6;
-    --accent: #1F2438;
-    --border: #242B44;
+    --accent: #1A2036;
+    --border: #1F2B3D;
     --success: #10B981;
     --warning: #F59E0B;
+    --danger: #EF4444;
     --muted: #94A3B8;
+
+    --shadow-xs: 0 1px 2px rgba(0,0,0,0.2);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.35), 0 2px 4px -2px rgba(0,0,0,0.25);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.4), 0 4px 6px -4px rgba(0,0,0,0.3);
   }
 }
 
+/* Tailwind Theme Bridge */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -59,9 +111,14 @@
   --color-border: var(--border);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-danger: var(--danger);
   --color-muted: var(--muted);
   --font-sans: var(--font-inter);
 }
+
+/* ============================================
+   Base Reset & Typography
+   ============================================ */
 
 * {
   box-sizing: border-box;
@@ -71,18 +128,22 @@ body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom Scrollbar Utility */
+/* ============================================
+   Scrollbar
+   ============================================ */
+
 .custom-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: light-dark(#CBD5E1, #2E3757) transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -98,18 +159,25 @@ body {
   background: light-dark(#94A3B8, #4E5B8E);
 }
 
-/* Glassmorphism Effect */
+/* ============================================
+   Glass Effect
+   ============================================ */
+
 .glass-effect {
-  background-color: light-dark(rgba(250, 250, 255, 0.7), rgba(22, 26, 43, 0.7));
+  background-color: light-dark(rgba(255, 255, 255, 0.65), rgba(19, 24, 37, 0.65));
   backdrop-filter: blur(16px);
-  border: 1px solid light-dark(rgba(226, 232, 240, 0.6), rgba(36, 43, 68, 0.6));
+  border: 1px solid light-dark(rgba(226, 232, 240, 0.5), rgba(31, 43, 61, 0.5));
 }
 
-/* Animation System */
+/* ============================================
+   Animation System
+   ============================================ */
+
+/* Page / Section entrance */
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(16px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -118,61 +186,62 @@ body {
 }
 
 .animate-fade-in-up {
-  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeInUp 0.35s var(--ease-out) both;
 }
 
-/* AI Glow Pulse effect */
-.ai-glow-pulse {
-  box-shadow: 0 0 15px rgba(99, 102, 241, 0.15);
-  animation: aiPulse 2.5s infinite ease-in-out;
-}
+/* Staggered delays for dashboard cards */
+.animate-delay-1 { animation-delay: 60ms; }
+.animate-delay-2 { animation-delay: 120ms; }
+.animate-delay-3 { animation-delay: 180ms; }
+.animate-delay-4 { animation-delay: 240ms; }
+.animate-delay-5 { animation-delay: 300ms; }
 
-@keyframes aiPulse {
-  0%, 100% {
-    box-shadow: 0 0 15px rgba(99, 102, 241, 0.15);
-    border-color: rgba(99, 102, 241, 0.2);
-  }
-  50% {
-    box-shadow: 0 0 25px rgba(99, 102, 241, 0.35);
-    border-color: rgba(99, 102, 241, 0.5);
-  }
-}
-
-/* Shimmer Effect for loading/empty states */
-.shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.05) 20%,
-    rgba(255, 255, 255, 0.1) 60%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite linear;
-}
-
+/* Skeleton / Shimmer loading */
 @keyframes shimmer {
   to {
     background-position: -200% 0;
   }
 }
 
-/* Custom View Transition for Dark Mode Circular Wipe from top-right corner button */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    light-dark(rgba(241,245,249,0.8), rgba(26,32,54,0.8)) 40%,
+    var(--accent) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}
+
+/* Number counter animation */
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-count {
+  animation: countUp 0.4s var(--ease-out) both;
+}
+
+/* ============================================
+   View Transitions (Theme Toggle)
+   ============================================ */
+
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
   mix-blend-mode: normal;
 }
 
-/* Old screen stays underneath */
 ::view-transition-old(root) {
   z-index: 1;
 }
 
-/* New screen sweeps over it from top-right (where the theme toggle is located) */
 ::view-transition-new(root) {
   z-index: 9999;
-  animation: circularWipe 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: circularWipe 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 @keyframes circularWipe {
@@ -184,10 +253,33 @@ body {
   }
 }
 
-/* Dropdown Options Color Management (Fix low contrast white-on-gray text) */
+/* ============================================
+   Reduced Motion Support
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .animate-fade-in-up {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .skeleton {
+    animation: none;
+  }
+}
+
+/* ============================================
+   Form Elements
+   ============================================ */
+
 select option {
   background-color: var(--card) !important;
   color: var(--foreground) !important;
 }
-
-

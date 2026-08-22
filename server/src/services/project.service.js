@@ -1,6 +1,6 @@
 const ProjectAudit = require("../models/ProjectAudit");
 const ProjectAnalysis = require("../models/ProjectAnalysis");
-const { mockDb } = require("../config/mockDb");
+
 
 const { auditAccessibility } = require("../engines/project/accessibility.engine");
 const { auditSeo } = require("../engines/project/seo.engine");
@@ -75,19 +75,9 @@ async function auditProject(userId, url, title, projectType) {
       : null;
 
     // 5. Gather evidence parameters
-    const mockFiles = [".gitignore", "package.json"];
-    if (repoAnalysis) {
-      // Inject real repository settings if found
-      if (repoAnalysis.securityScore > 50) mockFiles.push(".env.example");
-      if (repoAnalysis.testingScore > 40) mockFiles.push("test.js");
-      if (repoAnalysis.documentationScore > 40) mockFiles.push("readme.md");
-      if (repoAnalysis.missingPractices && !repoAnalysis.missingPractices.some(p => p.toLowerCase().includes("docker"))) {
-        mockFiles.push("dockerfile");
-      }
-    } else {
-      // General fallbacks if no GitHub sync has run
-      mockFiles.push(".env.example", "readme.md");
-    }
+    // GitHub file evidence is intentionally not inferred from an unrelated
+    // repository analysis. Only the live deployment response is authoritative.
+    const sourceFiles = [];
 
     // Compile virtual code snippet with HTML tags and evidence
     const codeSnippet = `
@@ -101,14 +91,14 @@ async function auditProject(userId, url, title, projectType) {
     const accessibilityAudit = auditAccessibility(crawledHtml);
     const seoAudit = auditSeo(crawledHtml);
     const performanceAudit = auditPerformance(crawledHtml, latencyMs);
-    const evidenceAudit = extractTechnologyEvidence(mockFiles, codeSnippet);
+    const evidenceAudit = extractTechnologyEvidence(sourceFiles, codeSnippet);
 
     const scoreData = calculateProjectScore(
       performanceAudit,
       accessibilityAudit,
       seoAudit,
       evidenceAudit,
-      mockFiles.includes("readme.md")
+      false
     );
 
     // 7. Save Project Analysis document
@@ -135,56 +125,8 @@ async function auditProject(userId, url, title, projectType) {
 
     return toProjectIntelligenceDTO(analysis, audit);
   } catch (err) {
-    // Offline local fallback
-    const mockAudit = {
-      title: title || "MERN eCommerce",
-      url,
-      projectType: projectType || "Portfolio Website",
-      deploymentPlatform: "Vercel",
-      status: "Completed",
-      lastAuditAt: new Date()
-    };
-
-    const mockAnalysis = {
-      projectId: "project-1",
-      overallScore: 84,
-      performanceScore: 90,
-      accessibilityScore: 75,
-      seoScore: 80,
-      documentationScore: 95,
-      architectureScore: 83,
-      deploymentScore: 90,
-      technologyEvidence: {
-        hasAuth: true,
-        hasDatabase: true,
-        hasRestApi: true,
-        hasDocker: false,
-        hasTesting: false,
-        hasDevOps: true
-      },
-      missingPractices: [
-        "Missing Docker container configurations",
-        "Missing unit test suites"
-      ],
-      strengths: [
-        "Secure authorization sessions configured",
-        "Structured database mapping schemas established"
-      ],
-      weaknesses: [
-        "Unprotected backend endpoints",
-        "Untested routing controller code"
-      ],
-      recommendations: [
-        "Implement Docker setups and write Jest test suites."
-      ],
-      careerImpact: 4,
-      analyzedAt: new Date()
-    };
-
-    // Update in-memory mock user
-    mockDb.user.score = Math.min(100, mockDb.user.score + 4);
-
-    return toProjectIntelligenceDTO(mockAnalysis, mockAudit);
+    console.error("Project Service Error in auditProject:", err);
+    throw err;
   }
 }
 
@@ -200,8 +142,8 @@ async function getProjectHistory(userId) {
       return toProjectIntelligenceDTO(analysis, audit);
     }).filter(Boolean);
   } catch (err) {
-    // Offline local fallback
-    return [];
+    console.error("Project Service Error in getProjectHistory:", err);
+    throw err;
   }
 }
 

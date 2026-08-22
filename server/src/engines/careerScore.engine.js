@@ -3,8 +3,8 @@ const { CAREER_SCORE_WEIGHTS } = require("../config/weights");
 function calculateCareerScore(input) {
   const weights = CAREER_SCORE_WEIGHTS;
 
-  const resumePoints = input.hasResumeScanned ? weights.resume : 10;
-  const githubPoints = input.hasGithubScanned ? weights.github : 8;
+  const resumePoints = input.hasResumeScanned ? weights.resume : 0;
+  const githubPoints = input.hasGithubScanned ? weights.github : 0;
 
   let projectsPoints = 0;
   if (input.projectsCount >= 3) projectsPoints = weights.projects;

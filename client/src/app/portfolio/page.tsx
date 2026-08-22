@@ -6,10 +6,13 @@ import Card from "@/components/ui/Card/Card";
 import Button from "@/components/ui/Button/Button";
 import Badge from "@/components/ui/Badge/Badge";
 import { FolderGit, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw, BarChart4, Wrench, Globe, Link, Settings, Sparkles } from "lucide-react";
+import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
+import PageHeader from "@/components/ui/PageHeader";
+import EmptyState from "@/components/ui/EmptyState";
 import PoweredBy from "@/components/ui/PoweredBy";
 
 function extractGithubUsername(urlOrName: string): string {
-  if (!urlOrName) return "harshdeep";
+  if (!urlOrName) return "";
   const trimmed = urlOrName.trim();
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     try {
@@ -55,8 +58,12 @@ export const PortfolioPage: React.FC = () => {
 
   const handleScanGithub = async () => {
     setAnalyzing(true);
-    const githubUrl = profile?.githubUrl || "https://github.com/harshdeep";
+    const githubUrl = profile?.githubUrl || "";
     const username = extractGithubUsername(githubUrl);
+    if (!username) {
+      addNotification("Add your GitHub profile URL before syncing.", "warning");
+      return;
+    }
     await syncDeveloperProfile(username);
     addNotification(`GitHub repository synchronization complete for '${username}'.`, "success");
     setAnalyzing(false);
@@ -74,79 +81,39 @@ export const PortfolioPage: React.FC = () => {
     setAuditing(false);
   };
 
-  const gitScore = developerProfile ? developerProfile.overallHealth : 82;
-  const level = developerProfile ? developerProfile.engineeringLevel : "Intermediate";
-  const repoCount = developerProfile ? developerProfile.repositoryCount : 3;
+  const gitScore = developerProfile?.overallHealth ?? null;
+  const level = developerProfile?.engineeringLevel ?? null;
+  const repoCount = developerProfile?.repositoryCount ?? 0;
 
-  // Fallback repos if profile is empty
-  const repos = developerProfile ? developerProfile.repositories : [
-    { id: "repo-1", name: "careeros-client", description: "Frontend Next.js dashboard client application", url: "", language: "TypeScript", stars: 5, forks: 1, healthScore: 88, documentationScore: 90, testingScore: 85, architectureScore: 90, activityScore: 85 },
-    { id: "repo-2", name: "careeros-server", description: "Express backend API server systems", url: "", language: "JavaScript", stars: 3, forks: 0, healthScore: 78, documentationScore: 80, testingScore: 70, architectureScore: 80, activityScore: 75 },
-    { id: "repo-3", name: "dsa-challenges", description: "Solved algorithms and sorting puzzles", url: "", language: "Go", stars: 1, forks: 0, healthScore: 68, documentationScore: 60, testingScore: 50, architectureScore: 70, activityScore: 60 }
-  ];
+  const repos = developerProfile?.repositories || [];
 
-  const coverage = developerProfile ? developerProfile.technologyCoverage : {
-    Frontend: 50,
-    Backend: 40,
-    Database: 10,
-    DevOps: 0
+  const coverage = developerProfile?.technologyCoverage || {
+    Frontend: null,
+    Backend: null,
+    Database: null,
+    DevOps: null
   };
 
   return (
-    <div className="space-y-6 animate-fade-in-up pb-12">
-      {/* Title */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-border/60 pb-5">
-        <div className="flex items-center space-x-3">
-          <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl">
-            <FolderGit className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-foreground">Project & Developer Intelligence</h2>
-            <p className="text-xs text-muted">Audits code repositories and deployed projects to index quality and verify technology evidence.</p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <PoweredBy engines={[
-            {
-              type: "api",
-              label: "GitHub API",
-              description: "Inspects live codebases for developer activity.",
-              points: ["Reads repositories & languages", "Analyzes commit frequencies"]
-            },
-            {
-              type: "user",
-              label: "User Portfolios",
-              description: "User submits URLs for automated evaluation.",
-              points: ["Submits GitHub username", "Registers live project URLs"]
-            },
-            {
-              type: "engine",
-              label: "Audit Engines",
-              description: "Calculates scores for standard development practices.",
-              points: ["Performance, SEO, & Accessibility audits", "Security & Documentation checks"]
-            },
-            {
-              type: "ai",
-              label: "AI Suggestions",
-              description: "Improves project documentation and README structures.",
-              points: ["Suggests README improvements", "Refines project description highlights"]
-            }
-          ]} />
-
+    <PageTransition className="space-y-6 pb-12">
+      <StaggerItem>
+        <PageHeader 
+          icon={FolderGit} 
+          title="Project & Developer Intelligence" 
+          description="Audits code repositories and deployed projects to index quality and verify technology evidence."
+        >
           <Button
             type="button"
             variant="primary"
             size="sm"
             onClick={handleScanGithub}
             isLoading={analyzing}
-            className="cursor-pointer shrink-0"
           >
             <RefreshCw className="w-4 h-4 mr-1.5" />
             <span>Sync GitHub</span>
           </Button>
-        </div>
-      </div>
+        </PageHeader>
+      </StaggerItem>
 
       {/* Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -162,11 +129,9 @@ export const PortfolioPage: React.FC = () => {
             <div className="flex justify-between items-center bg-accent/10 border border-border p-4 rounded-2xl">
               <div>
                 <span className="text-[10px] text-muted font-bold uppercase block">Developer Health Score</span>
-                <span className="text-2xl font-extrabold text-foreground mt-1 block">{gitScore}%</span>
+                <span className="text-2xl font-extrabold text-foreground mt-1 block">{gitScore == null ? "Not available" : `${gitScore}%`}</span>
               </div>
-              <Badge variant={gitScore >= 80 ? "success" : "warning"}>
-                {level} Level
-              </Badge>
+              {level && <Badge variant={gitScore !== null && gitScore >= 80 ? "success" : "warning"}>{level} Level</Badge>}
             </div>
 
             <div className="space-y-3.5 text-xs">
@@ -177,13 +142,13 @@ export const PortfolioPage: React.FC = () => {
               <div className="flex justify-between py-1 border-b border-border">
                 <span className="text-muted">Best repository</span>
                 <span className="text-success font-semibold">
-                  {developerProfile ? developerProfile.bestRepository : "careeros-client"}
+                  {developerProfile?.bestRepository || "No evidence yet"}
                 </span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-muted">Weakest repository</span>
                 <span className="text-warning font-semibold">
-                  {developerProfile ? developerProfile.weakestRepository : "dsa-challenges"}
+                  {developerProfile?.weakestRepository || "No evidence yet"}
                 </span>
               </div>
             </div>
@@ -200,37 +165,37 @@ export const PortfolioPage: React.FC = () => {
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] font-semibold">
                   <span className="text-muted">Frontend</span>
-                  <span className="text-foreground">{coverage.Frontend}%</span>
+                  <span className="text-foreground">{coverage.Frontend == null ? "Not available" : `${coverage.Frontend}%`}</span>
                 </div>
                 <div className="h-1.5 w-full bg-accent/20 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full" style={{ width: `${coverage.Frontend}%` }} />
+                  <div className="h-full bg-primary rounded-full" style={{ width: `${coverage.Frontend || 0}%` }} />
                 </div>
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] font-semibold">
                   <span className="text-muted">Backend</span>
-                  <span className="text-foreground">{coverage.Backend}%</span>
+                  <span className="text-foreground">{coverage.Backend == null ? "Not available" : `${coverage.Backend}%`}</span>
                 </div>
                 <div className="h-1.5 w-full bg-accent/20 rounded-full overflow-hidden">
-                  <div className="h-full bg-secondary rounded-full" style={{ width: `${coverage.Backend}%` }} />
+                  <div className="h-full bg-secondary rounded-full" style={{ width: `${coverage.Backend || 0}%` }} />
                 </div>
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] font-semibold">
                   <span className="text-muted">Database</span>
-                  <span className="text-foreground">{coverage.Database}%</span>
+                  <span className="text-foreground">{coverage.Database == null ? "Not available" : `${coverage.Database}%`}</span>
                 </div>
                 <div className="h-1.5 w-full bg-accent/20 rounded-full overflow-hidden">
-                  <div className="h-full bg-success rounded-full" style={{ width: `${coverage.Database}%` }} />
+                  <div className="h-full bg-success rounded-full" style={{ width: `${coverage.Database || 0}%` }} />
                 </div>
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] font-semibold">
                   <span className="text-muted">DevOps</span>
-                  <span className="text-foreground">{coverage.DevOps}%</span>
+                  <span className="text-foreground">{coverage.DevOps == null ? "Not available" : `${coverage.DevOps}%`}</span>
                 </div>
                 <div className="h-1.5 w-full bg-accent/20 rounded-full overflow-hidden">
-                  <div className="h-full bg-warning rounded-full" style={{ width: `${coverage.DevOps}%` }} />
+                  <div className="h-full bg-warning rounded-full" style={{ width: `${coverage.DevOps || 0}%` }} />
                 </div>
               </div>
             </div>
@@ -247,15 +212,15 @@ export const PortfolioPage: React.FC = () => {
             </div>
 
             <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
-              {repos.map((repo: any, idx) => {
+              {repos.length > 0 ? repos.map((repo: any, idx) => {
                 const isBest = developerProfile?.bestRepository === repo.name;
-                const score = repo.healthScore || 80;
+                const score = repo.healthScore;
                 
                 // Construct recommendation text
                 let recommendation = "Recommended as a portfolio project highlight.";
-                if (score >= 85) {
+                if (score != null && score >= 85) {
                   recommendation = "Highly Recommended: Demonstrates production-grade structure (README, tests).";
-                } else if (repo.name.includes("challenges") || score < 70) {
+                } else if (score != null && score < 70) {
                   recommendation = "Optional: Useful for skills evidence, but wrap in a larger application structure.";
                 }
 
@@ -273,21 +238,19 @@ export const PortfolioPage: React.FC = () => {
                         </h4>
                         <p className="text-[10px] text-muted line-clamp-1 mt-0.5">{repo.description}</p>
                       </div>
-                      <Badge variant={score >= 80 ? "success" : "warning"}>
-                        {score}% Health
-                      </Badge>
+                      {score != null && <Badge variant={score >= 80 ? "success" : "warning"}>{score}% Health</Badge>}
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/50 text-[10px]">
                       <div className="flex items-center space-x-1">
                         <span className="w-2.5 h-2.5 rounded-full bg-primary" />
-                        <span className="text-foreground font-semibold uppercase">{repo.language || "TypeScript"}</span>
+                        <span className="text-foreground font-semibold uppercase">{repo.language || "Language not returned"}</span>
                       </div>
                       <span className="text-muted italic">{recommendation}</span>
                     </div>
                   </div>
                 );
-              })}
+              }) : <div className="text-center py-8 text-xs text-muted">No GitHub repositories returned. Sync a verified GitHub profile to see repository evidence.</div>}
             </div>
           </Card>
         </div>
@@ -485,7 +448,7 @@ export const PortfolioPage: React.FC = () => {
           </Card>
         </div>
       </div>
-    </div>
+    </PageTransition>
   );
 };
 

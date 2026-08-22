@@ -93,14 +93,27 @@ export interface ResumeVersionContent {
     gpa: string;
   }[];
   achievements: string[];
-  certifications: string[];
+  certifications: {
+    name: string;
+    issuer: string;
+    issueDate: string;
+    credentialId: string;
+    credentialUrl: string;
+    evidenceText: string;
+    source: string;
+    confidence: number;
+    isRelevant: boolean;
+  }[];
 }
 
 export interface ResumeChangeLogEntry {
+  _id: string;
   section: string;
   originalText: string;
   rewrittenText: string;
+  editedText?: string;
   reason: string;
+  status: "pending" | "accepted" | "rejected" | "edited";
 }
 
 export interface ResumeAnalysisData {
@@ -385,11 +398,13 @@ interface CareerState {
   toggleSkill: (skillName: string) => Promise<void>;
   fetchResumeAnalysis: () => Promise<void>;
   uploadResume: (fileOrFilename: File | string, text?: string) => Promise<boolean>;
-  saveResumeEdits: (content: ResumeVersionContent) => Promise<void>;
-  forkResumeVersion: (title: string, goal?: string) => Promise<void>;
-  restoreResumeVersion: (versionNumber: number) => Promise<void>;
+  saveResumeEdits: (content: ResumeVersionContent) => Promise<boolean>;
+  forkResumeVersion: (title: string, goal: string) => Promise<boolean>;
+  restoreResumeVersion: (versionNumber: number) => Promise<boolean>;
   getCrossSyncSuggestions: () => Promise<any[]>;
-  optimizeResume: (goal: string, targetDescription?: string) => Promise<any>;
+  optimizeResume: (goal: string, targetDescription: string) => Promise<ResumeAnalysisData | null>;
+  reviewChangeLog: (logId: string, status: string, editedText?: string) => Promise<boolean>;
+  applyChangeLogs: (goal: string) => Promise<boolean>;
   fetchDeveloperProfile: () => Promise<void>;
   syncDeveloperProfile: (githubUsername: string) => Promise<void>;
   fetchProjectHistory: () => Promise<void>;
@@ -417,52 +432,38 @@ interface CareerState {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 const initialStats: CareerStats = {
-  score: 82,
+  score: 0,
   breakdown: {
-    resume: 15,
-    github: 8,
-    projects: 20,
-    skills: 15,
-    learning: 6,
-    applications: 10,
-    interview: 3,
-    consistency: 5
+    resume: 0,
+    github: 0,
+    projects: 0,
+    skills: 0,
+    learning: 0,
+    applications: 0,
+    interview: 0,
+    consistency: 0
   },
-  nextAction: {
-    actionId: "action-github-connect",
-    title: "Connect & Scan GitHub Portfolio",
-    description: "Scan commit histories, language profiles, and repository markdown configurations.",
-    type: "GitHub",
-    priority: "High",
-    impact: 3,
-    estimatedTime: "15 mins",
-    confidence: 88,
-    reason: "Index code metrics, project document completeness scores, and commit frequencies.",
-    dependencies: [],
-    careerScoreAfterCompletion: 85,
-    jobReadinessAfterCompletion: 82,
-    status: "Active"
-  },
+  nextAction: null,
   readiness: {
-    jobReadiness: 78,
-    resumeReadiness: 82,
-    portfolioReadiness: 74,
-    interviewReadiness: 50,
-    recommendation: "Polish Artifacts"
+    jobReadiness: 0,
+    resumeReadiness: null as any,
+    portfolioReadiness: null as any,
+    interviewReadiness: null as any,
+    recommendation: "Add evidence to begin"
   },
   timeline: []
 };
 
 export const useCareerStore = create<CareerState>((set, get) => ({
   user: {
-    name: "Harshdeep",
+    name: "",
     avatar: "",
-    email: "harshdeep@careeros.dev",
-    role: "Full Stack Developer",
-    goal: "Full Stack Developer",
+    email: "",
+    role: "",
+    goal: "",
     experience: "Intermediate",
-    score: 82,
-    scoreTrend: 4,
+    score: 0,
+    scoreTrend: 0,
   },
   roadmap: [],
   missions: [],
@@ -477,17 +478,18 @@ export const useCareerStore = create<CareerState>((set, get) => ({
   interviewSessions: [],
   activeInterviewSession: null,
   currentInterviewQuestion: null,
-  interviewReadiness: 75,
+  interviewReadiness: 0,
   unresolvedMistakes: [],
   analyticsData: null,
   profile: null,
+  isLoading: false,
 
-  hasResumeScanned: true,
+  hasResumeScanned: false,
   hasGithubScanned: false,
-  projectsCount: 3,
-  skillsCount: 7,
-  masteredQuestionsCount: 1,
-  streakDays: 7,
+  projectsCount: 0,
+  skillsCount: 0,
+  masteredQuestionsCount: 0,
+  streakDays: 0,
 
   // Fetch unified dashboard data from Express backend
   fetchDashboardData: async () => {
@@ -535,7 +537,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         });
       }
     } catch (err) {
-      console.error("Failed to sync backend dashboard state:", err);
+      console.warn("Failed to sync backend dashboard state:", err);
     }
   },
 
@@ -557,7 +559,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         set({ roadmap: envelope.data });
       }
     } catch (err) {
-      console.error("Failed to fetch full roadmap tracks:", err);
+      console.warn("Failed to fetch full roadmap tracks:", err);
     }
   },
 
@@ -580,8 +582,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         await get().fetchDashboardData();
       }
     } catch (err) {
-      // Local fallback
-      set((state) => ({ user: { ...state.user, goal } }));
+      console.warn("Failed to update goal on backend:", err);
     }
   },
 
@@ -603,7 +604,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         await get().fetchDashboardData();
       }
     } catch (err) {
-      set((state) => ({ user: { ...state.user, experience } }));
+      console.warn("Failed to update experience on backend:", err);
     }
   },
 
@@ -625,16 +626,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         await get().fetchDashboardData();
       }
     } catch (err) {
-      console.error("Failed to save profile settings:", err);
-      set((state) => {
-        if (!state.profile) return {};
-        return {
-          profile: {
-            ...state.profile,
-            ...profileData
-          }
-        };
-      });
+      console.warn("Failed to save profile settings:", err);
     }
   },
 
@@ -667,13 +659,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         await get().fetchDashboardData();
       }
     } catch (err) {
-      // Local fallback logic
-      set((state) => {
-        const updatedMissions = state.missions.map((m) =>
-          m.id === id ? { ...m, completed: true } : m
-        );
-        return { missions: updatedMissions };
-      });
+      console.warn("Failed to complete mission on backend:", err);
     }
   },
 
@@ -697,7 +683,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         await get().fetchDashboardData();
       }
     } catch (err) {
-      console.error("Error updating subskill progress on backend:", err);
+      console.warn("Error updating subskill progress on backend:", err);
     }
   },
 
@@ -819,7 +805,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         set({ resumeAnalysis: envelope.data });
       }
     } catch (err) {
-      console.error("Failed to fetch resume analysis details:", err);
+      console.warn("Failed to fetch resume analysis details:", err);
     }
   },
 
@@ -857,7 +843,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         throw new Error(errData.message || "Failed to analyze resume.");
       }
     } catch (err) {
-      console.error("Failed to upload resume document:", err);
+      console.warn("Failed to upload resume document:", err);
       return false;
     }
   },
@@ -880,9 +866,12 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         const envelope = await res.json();
         set({ resumeAnalysis: envelope.data });
         await get().fetchDashboardData();
+        return true;
       }
+      return false;
     } catch (err) {
-      console.error("Failed to save resume edits:", err);
+      console.warn("Failed to save resume edits:", err);
+      return false;
     }
   },
 
@@ -903,9 +892,12 @@ export const useCareerStore = create<CareerState>((set, get) => ({
       if (res.ok) {
         const envelope = await res.json();
         set({ resumeAnalysis: envelope.data });
+        return true;
       }
+      return false;
     } catch (err) {
-      console.error("Failed to fork resume version:", err);
+      console.warn("Failed to fork resume version:", err);
+      return false;
     }
   },
 
@@ -927,33 +919,70 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         const envelope = await res.json();
         set({ resumeAnalysis: envelope.data });
         await get().fetchDashboardData();
+        return true;
       }
+      return false;
     } catch (err) {
-      console.error("Failed to restore resume version:", err);
+      console.warn("Failed to restore resume version:", err);
+      return false;
     }
   },
 
   getCrossSyncSuggestions: async () => {
-    const token = localStorage.getItem("careeros_token");
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-
     try {
-      const res = await fetch(`${API_BASE_URL}/resume/cross-sync`, {
-        method: "GET",
-        headers
+      const token = localStorage.getItem("careeros_token");
+      const res = await fetch(`/api/resume/cross-sync`, {
+        headers: { "Authorization": `Bearer ${token}` }
       });
-
       if (res.ok) {
         const envelope = await res.json();
         return envelope.data || [];
       }
+      return [];
     } catch (err) {
-      console.error("Failed to fetch cross-sync suggestions:", err);
+      console.warn("Cross-sync fetch failed:", err);
+      return [];
     }
-    return [];
+  },
+
+  reviewChangeLog: async (logId: string, status: string, editedText: string = "") => {
+    try {
+      const token = localStorage.getItem("careeros_token");
+      const res = await fetch(`/api/resume/changelog/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ logId, status, editedText })
+      });
+      if (res.ok) {
+        const envelope = await res.json();
+        set({ resumeAnalysis: envelope.data });
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.warn("Failed to review change log:", err);
+      return false;
+    }
+  },
+
+  applyChangeLogs: async (goal: string) => {
+    try {
+      const token = localStorage.getItem("careeros_token");
+      const res = await fetch(`/api/resume/changelog/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ goal })
+      });
+      if (res.ok) {
+        const envelope = await res.json();
+        set({ resumeAnalysis: envelope.data });
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.warn("Failed to apply change logs:", err);
+      return false;
+    }
   },
 
   optimizeResume: async (goal, targetDescription) => {
@@ -977,7 +1006,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         return envelope.data;
       }
     } catch (err) {
-      console.error("Failed to optimize resume content:", err);
+      console.warn("Failed to optimize resume content:", err);
     }
     return null;
   },
@@ -1000,7 +1029,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         set({ developerProfile: envelope.data });
       }
     } catch (err) {
-      console.error("Failed to fetch developer profile data:", err);
+      console.warn("Failed to fetch developer profile data:", err);
     }
   },
 
@@ -1024,7 +1053,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         await get().fetchDashboardData();
       }
     } catch (err) {
-      console.error("Failed to sync developer repositories:", err);
+      console.warn("Failed to sync developer repositories:", err);
     }
   },
 
@@ -1046,7 +1075,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         set({ projectHistory: envelope.data });
       }
     } catch (err) {
-      console.error("Failed to fetch project audits history:", err);
+      console.warn("Failed to fetch project audits history:", err);
     }
   },
 
@@ -1073,7 +1102,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         await get().fetchDashboardData();
       }
     } catch (err) {
-      console.error("Failed to audit project URL:", err);
+      console.warn("Failed to audit project URL:", err);
     }
   },
 
@@ -1110,7 +1139,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
           if (textBody) errorMessage = textBody;
         }
 
-        console.error("AI Coach backend error:", errorMessage);
+        console.warn("AI Coach backend error:", errorMessage);
         get().addChatMessage(
           "coach",
           `I'm sorry, I couldn't get a response from the AI coach (${errorMessage}). Please try again.`
@@ -1131,7 +1160,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         );
       }
     } catch (err) {
-      console.error("AI Coach failed to reply:", err);
+      console.warn("AI Coach failed to reply:", err);
       get().addChatMessage("coach", "I'm sorry, I encountered a connection error. Please try again.");
     }
   },
@@ -1154,7 +1183,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         set({ chatHistory: envelope.data || [] });
       }
     } catch (err) {
-      console.error("Failed to fetch coach chat history:", err);
+      console.warn("Failed to fetch coach chat history:", err);
     }
   },
 
@@ -1176,7 +1205,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         set({ jobPipeline: envelope.data });
       }
     } catch (err) {
-      console.error("Failed to fetch hiring pipeline:", err);
+      console.warn("Failed to fetch hiring pipeline:", err);
     }
   },
 
@@ -1205,7 +1234,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         return opportunity;
       }
     } catch (err) {
-      console.error("Failed to scan and match job description:", err);
+      console.warn("Failed to scan and match job description:", err);
     }
     return null;
   },
@@ -1229,7 +1258,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         await get().fetchDashboardData();
       }
     } catch (err) {
-      console.error("Failed to update pipeline stage:", err);
+      console.warn("Failed to update pipeline stage:", err);
     }
   },
 
@@ -1253,7 +1282,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         await get().fetchDashboardData();
       }
     } catch (err) {
-      console.error("Failed to delete job opportunity:", err);
+      console.warn("Failed to delete job opportunity:", err);
     }
   },
 
@@ -1275,7 +1304,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         set({ interviewSessions: envelope.data });
       }
     } catch (err) {
-      console.error("Failed to fetch interview history:", err);
+      console.warn("Failed to fetch interview history:", err);
     }
   },
 
@@ -1300,7 +1329,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         });
       }
     } catch (err) {
-      console.error("Failed to fetch interview readiness stats:", err);
+      console.warn("Failed to fetch interview readiness stats:", err);
     }
   },
 
@@ -1326,7 +1355,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         });
       }
     } catch (err) {
-      console.error("Failed to start mock interview session:", err);
+      console.warn("Failed to start mock interview session:", err);
     }
   },
 
@@ -1352,7 +1381,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         });
       }
     } catch (err) {
-      console.error("Failed to submit mock interview answer:", err);
+      console.warn("Failed to submit mock interview answer:", err);
     }
   },
 
@@ -1383,7 +1412,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         return completedSession;
       }
     } catch (err) {
-      console.error("Failed to conclude mock interview round:", err);
+      console.warn("Failed to conclude mock interview round:", err);
     }
     return null;
   },
@@ -1406,7 +1435,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         set({ analyticsData: envelope.data });
       }
     } catch (err) {
-      console.error("Failed to fetch consolidated analytics dashboard:", err);
+      console.warn("Failed to fetch consolidated analytics dashboard:", err);
     }
   },
 
@@ -1497,7 +1526,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         await get().fetchNotifications();
       }
     } catch (err) {
-      console.error("Failed to mark notifications as read:", err);
+      console.warn("Failed to mark notifications as read:", err);
       set((state) => ({
         notifications: state.notifications.map((n) => ({ ...n, read: true })),
       }));
@@ -1522,7 +1551,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         set({ notifications: envelope.data });
       }
     } catch (err) {
-      console.error("Failed to fetch notifications:", err);
+      console.warn("Failed to fetch notifications:", err);
     }
   },
 

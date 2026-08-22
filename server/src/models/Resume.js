@@ -47,7 +47,17 @@ const ResumeVersionSchema = new mongoose.Schema({
     gpa: { type: String, default: "" }
   }],
   achievements: [{ type: String }],
-  certifications: [{ type: String }],
+  certifications: [{
+    name: { type: String, default: "" },
+    issuer: { type: String, default: "" },
+    issueDate: { type: String, default: "" },
+    credentialId: { type: String, default: "" },
+    credentialUrl: { type: String, default: "" },
+    evidenceText: { type: String, default: "" },
+    source: { type: String, default: "resume" },
+    confidence: { type: Number, default: 100 },
+    isRelevant: { type: Boolean, default: true }
+  }],
   createdAt: { type: Date, default: Date.now }
 });
 

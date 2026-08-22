@@ -9,6 +9,8 @@ import Card from "@/components/ui/Card/Card";
 import Button from "@/components/ui/Button/Button";
 import { Send, Brain } from "lucide-react";
 import PoweredBy from "@/components/ui/PoweredBy";
+import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
+import PageHeader from "@/components/ui/PageHeader";
 
 function CoachChatContent() {
   const searchParams = useSearchParams();
@@ -77,49 +79,35 @@ function CoachChatContent() {
   const storeUser = useCareerStore((state) => state.user);
   const profile = useCareerStore((state) => state.profile);
 
-  const userName = storeUser?.name || "Harshdeep";
-  const userScore = storeUser?.score || 82;
-  const userRole = profile?.targetRole || "Full Stack Developer";
+  const userName = storeUser?.name || "there";
+  const userScore = storeUser?.score;
+  const userRole = profile?.targetRole || "your target role";
 
-  const defaultGreetingText = `Good morning ${userName}. Yesterday you completed Resume Optimization. Your ATS score increased to ${userScore}%. Based on your goal of becoming a ${userRole}, your next best step is practicing Docker and completing one Backend Roadmap milestone.`;
+  const defaultGreetingText = userScore
+    ? `Good morning ${userName}. Your current career score is ${userScore}%. Based on your goal of becoming a ${userRole}, I can help you choose the highest-impact next step.`
+    : `Good morning ${userName}. I can help you choose the highest-impact next step for your career goal once your profile and artifacts are loaded.`;
 
   const defaultGreeting = {
     id: "default-greeting",
     sender: "coach" as const,
     text: defaultGreetingText,
-    timestamp: "09:00 AM"
+    timestamp: new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit"
+    })
   };
 
   const renderedMessages = chatHistory && chatHistory.length > 0 ? chatHistory : [defaultGreeting];
 
   return (
-    <div className="h-[calc(100vh-140px)] flex flex-col space-y-6 animate-fade-in-up">
-      {/* Top Title Bar */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border/60 pb-5 shrink-0">
-        <div className="flex items-center space-x-3">
-          <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl">
-            <Brain className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-foreground">{coachTitle}</h2>
-            <p className="text-xs text-muted">{coachDesc}</p>
-          </div>
-        </div>
-        <PoweredBy engines={[
-          {
-            type: "ai",
-            label: "Multi-Agent LLM",
-            description: "A cooperative network of specialized agents backing the user.",
-            points: ["Resume Coach", "Interview Coach", "Learning Coach", "Project Coach", "Career Advisor"]
-          },
-          {
-            type: "engine",
-            label: "Profile Context",
-            description: "Pipes real-time database state to feed agent memory.",
-            points: ["Injects Career DNA state", "Pipes Resume & Project audits", "Loads Interview history"]
-          }
-        ]} />
-      </div>
+    <PageTransition className="h-[calc(100vh-140px)] flex flex-col space-y-6 pb-12">
+      <StaggerItem>
+        <PageHeader
+          icon={Brain}
+          title={coachTitle}
+          description={coachDesc}
+        />
+      </StaggerItem>
 
       {/* Main Split Layout Panel */}
       <div className="flex-1 flex gap-6 min-h-0 overflow-hidden">
@@ -299,7 +287,7 @@ function CoachChatContent() {
           </div>
         </Card>
       </div>
-    </div>
+    </PageTransition>
   );
 }
 

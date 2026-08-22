@@ -26,7 +26,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       secondary: "bg-card text-foreground border border-border hover:bg-accent hover:text-foreground focus:ring-accent",
       ghost: "text-muted hover:bg-accent hover:text-foreground focus:ring-accent",
       danger: "bg-red-500 text-white hover:bg-red-600 focus:ring-red-500/50 shadow-sm border border-red-600/20",
-      ai: "bg-gradient-to-r from-primary to-secondary text-white hover:opacity-95 focus:ring-primary/50 shadow-[0_0_15px_rgba(99,102,241,0.25)] hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] border border-primary/20",
+      ai: "bg-gradient-to-r from-primary to-secondary text-white hover:opacity-95 focus:ring-primary/50 shadow-sm border border-primary/20",
     };
 
     const sizes = {

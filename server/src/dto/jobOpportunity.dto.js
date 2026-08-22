@@ -17,16 +17,16 @@ function toJobOpportunityDTO(opportunity, analysis) {
     lastAnalyzed: opportunity.lastAnalyzed,
     
     // Analyzed sub-scores
-    matchScore: analysis ? analysis.matchScore : 80,
-    resumeScore: analysis ? analysis.resumeScore : 80,
-    githubScore: analysis ? analysis.githubScore : 80,
-    portfolioScore: analysis ? analysis.portfolioScore : 80,
-    experienceGap: analysis ? analysis.experienceGap : "Matched",
-    salaryFit: analysis ? analysis.salaryFit : 100,
-    recommendation: analysis ? analysis.recommendation : "Apply Now",
+    matchScore: analysis?.matchScore ?? null,
+    resumeScore: analysis?.resumeScore ?? null,
+    githubScore: analysis?.githubScore ?? null,
+    portfolioScore: analysis?.portfolioScore ?? null,
+    experienceGap: analysis?.experienceGap ?? null,
+    salaryFit: analysis?.salaryFit ?? null,
+    recommendation: analysis?.recommendation ?? null,
     nextActions: analysis ? (analysis.nextActions || []) : [],
     skillGap: analysis ? (analysis.skillGap || []) : [],
-    daysToReady: analysis ? (analysis.nextActions ? analysis.nextActions.length * 3 : 0) : 0,
+    daysToReady: analysis?.nextActions ? analysis.nextActions.length * 3 : null,
     analyzedAt: analysis ? analysis.analyzedAt : null
   };
 }

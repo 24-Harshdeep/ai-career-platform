@@ -26,7 +26,7 @@ export const Badge: React.FC<BadgeProps> = ({
     muted:
       "bg-muted/10 text-muted border-muted/20",
     ai:
-      "bg-gradient-to-r from-primary/15 to-secondary/15 text-primary border-primary/20 shadow-[0_0_10px_rgba(99,102,241,0.1)]",
+      "bg-gradient-to-r from-primary/10 to-secondary/10 text-primary border-primary/15",
   };
 
   return (

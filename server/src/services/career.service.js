@@ -1,9 +1,8 @@
 const User = require("../models/User");
 const CareerProfile = require("../models/CareerProfile");
-const { mockDb } = require("../config/mockDb");
+
 
 const { calculateCareerScore } = require("../engines/careerScore.engine");
-const { computeNextBestAction } = require("../engines/nextBestAction.engine");
 const { calculateReadiness } = require("../engines/readiness.engine");
 const { generateTimeline } = require("../engines/timeline.engine");
 const { calculateSkillGaps } = require("../engines/skillGap.engine");
@@ -34,8 +33,8 @@ async function getProfile(userId) {
     }
     return toCareerProfileDTO(profile);
   } catch (err) {
-    // Offline local fallback
-    return toCareerProfileDTO(mockDb.profile);
+    console.error("Career Service Error in getProfile:", err);
+    throw err;
   }
 }
 
@@ -93,34 +92,8 @@ async function updateProfile(userId, profileData) {
 
     return toCareerProfileDTO(profile);
   } catch (err) {
-    // Offline local fallback
-    if (profileData.targetRole) {
-      mockDb.profile.targetRole = profileData.targetRole;
-      mockDb.user.role = profileData.targetRole;
-      mockDb.user.goal = profileData.targetRole;
-    }
-    if (profileData.experienceLevel) {
-      mockDb.profile.experienceLevel = profileData.experienceLevel;
-      mockDb.user.experience = profileData.experienceLevel;
-    }
-    if (profileData.careerGoal) mockDb.profile.careerGoal = profileData.careerGoal;
-    if (profileData.preferredLearningStyle) mockDb.profile.preferredLearningStyle = profileData.preferredLearningStyle;
-    if (profileData.targetCompanies) mockDb.profile.targetCompanies = profileData.targetCompanies;
-    if (profileData.isOnboardingComplete !== undefined) mockDb.profile.isOnboardingComplete = profileData.isOnboardingComplete;
-    if (profileData.themeMode) mockDb.profile.themeMode = profileData.themeMode;
-    if (profileData.accentColor) mockDb.profile.accentColor = profileData.accentColor;
-    if (profileData.primaryResume) mockDb.profile.primaryResume = profileData.primaryResume;
-    if (profileData.primaryPortfolio) mockDb.profile.primaryPortfolio = profileData.primaryPortfolio;
-    if (profileData.linkedinUrl !== undefined) mockDb.profile.linkedinUrl = profileData.linkedinUrl;
-    if (profileData.portfolioUrl !== undefined) mockDb.profile.portfolioUrl = profileData.portfolioUrl;
-    if (profileData.githubUrl !== undefined) mockDb.profile.githubUrl = profileData.githubUrl;
-
-    if (profileData.name || profileData.email) {
-      if (profileData.name) mockDb.user.name = profileData.name;
-      if (profileData.email) mockDb.user.email = profileData.email;
-    }
-
-    return toCareerProfileDTO(mockDb.profile);
+    console.error("Career Service Error in updateProfile:", err);
+    throw err;
   }
 }
 
@@ -146,11 +119,8 @@ async function updateSkills(userId, possessed, target) {
 
     return toCareerProfileDTO(profile);
   } catch (err) {
-    // Offline local fallback
-    if (possessed) mockDb.profile.skillsPossessed = { ...mockDb.profile.skillsPossessed, ...possessed };
-    if (target) mockDb.profile.skillsTarget = { ...mockDb.profile.skillsTarget, ...target };
-    mockDb.user.skillsCount = getSkillsCount(mockDb.profile.skillsPossessed);
-    return toCareerProfileDTO(mockDb.profile);
+    console.error("Career Service Error in updateSkills:", err);
+    throw err;
   }
 }
 
@@ -167,7 +137,7 @@ async function getCareerStats(userId) {
 
     // Fetch latest real resume analysis score
     const latestAnalysis = await ResumeAnalysis.findOne({ userId }).sort({ analyzedAt: -1 });
-    const resumeScore = latestAnalysis ? latestAnalysis.atsScore : 82;
+    const resumeScore = latestAnalysis ? latestAnalysis.atsScore : 0;
     const hasResumeScanned = latestAnalysis ? true : (user ? user.hasResumeScanned : false);
 
     // Fetch actual roadmap tracks and compute real average progress
@@ -181,11 +151,15 @@ async function getCareerStats(userId) {
     }
 
     const hasGithubScanned = user ? user.hasGithubScanned : false;
-    const projectsCount = user ? user.projectsCount : 3;
-    const masteredQuestionsCount = user ? user.masteredQuestionsCount : 1;
-    const streakDays = user ? user.streakDays : 7;
+    const projectsCount = user ? user.projectsCount : 0;
+    const masteredQuestionsCount = user ? user.masteredQuestionsCount : 0;
+    const streakDays = user ? user.streakDays : 0;
     const skillsCount = getSkillsCount(profile.skillsPossessed);
 
+    const JobOpportunity = require("../models/JobOpportunity");
+    const applicationsCount = await JobOpportunity.countDocuments({ userId });
+    const offerCount = await JobOpportunity.countDocuments({ userId, status: "Offer" });
+    
     // Trigger score engine
     const scoreData = calculateCareerScore({
       hasResumeScanned,
@@ -193,17 +167,9 @@ async function getCareerStats(userId) {
       projectsCount,
       skillsCount,
       roadmapAverageProgress: roadmapAvg,
-      applicationsCount: 3, // mock application pipeline count
+      applicationsCount,
       masteredQuestionsCount,
       streakDays
-    });
-
-    const nextAction = computeNextBestAction({
-      hasResumeScanned,
-      hasGithubScanned,
-      hasCompletedM1: false, // mock mission status
-      hasCompletedM2: false,
-      targetGoal: user ? user.goal : "Full Stack Developer"
     });
 
     const readiness = calculateReadiness({
@@ -219,7 +185,7 @@ async function getCareerStats(userId) {
       hasResumeScanned,
       hasGithubScanned,
       roadmapAverageProgress: roadmapAvg,
-      hasOfferSecured: true // mock offer status
+      hasOfferSecured: offerCount > 0
     });
 
     // Update User Score in MongoDB
@@ -231,57 +197,13 @@ async function getCareerStats(userId) {
     return {
       score: scoreData.score,
       breakdown: scoreData.breakdown,
-      nextAction,
+      nextAction: [],
       readiness,
       timeline
     };
   } catch (err) {
-    // Offline local fallback
-    const roadmapAvg = 61.6;
-    const scoreData = calculateCareerScore({
-      hasResumeScanned: mockDb.user.hasResumeScanned,
-      hasGithubScanned: mockDb.user.hasGithubScanned,
-      projectsCount: mockDb.user.projectsCount,
-      skillsCount: getSkillsCount(mockDb.profile.skillsPossessed),
-      roadmapAverageProgress: roadmapAvg,
-      applicationsCount: mockDb.applications.length,
-      masteredQuestionsCount: mockDb.user.masteredQuestionsCount,
-      streakDays: mockDb.user.streakDays
-    });
-
-    const nextAction = computeNextBestAction({
-      hasResumeScanned: mockDb.user.hasResumeScanned,
-      hasGithubScanned: mockDb.user.hasGithubScanned,
-      hasCompletedM1: mockDb.missions.find(m => m.id === "m-1").completed,
-      hasCompletedM2: mockDb.missions.find(m => m.id === "m-2").completed,
-      targetGoal: mockDb.user.goal
-    });
-
-    const readiness = calculateReadiness({
-      careerScore: scoreData.score,
-      hasResumeScanned: mockDb.user.hasResumeScanned,
-      hasGithubScanned: mockDb.user.hasGithubScanned,
-      projectsCount: mockDb.user.projectsCount,
-      masteredQuestionsCount: mockDb.user.masteredQuestionsCount
-    });
-
-    const hasOffer = mockDb.applications.some(a => a.status === "Offer");
-    const timeline = generateTimeline({
-      hasResumeScanned: mockDb.user.hasResumeScanned,
-      hasGithubScanned: mockDb.user.hasGithubScanned,
-      roadmapAverageProgress: roadmapAvg,
-      hasOfferSecured: hasOffer
-    });
-
-    mockDb.user.score = scoreData.score;
-
-    return {
-      score: scoreData.score,
-      breakdown: scoreData.breakdown,
-      nextAction,
-      readiness,
-      timeline
-    };
+    console.error("Career Service Error in getCareerStats:", err);
+    throw err;
   }
 }
 

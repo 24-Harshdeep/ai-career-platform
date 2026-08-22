@@ -19,13 +19,13 @@ function routeCoachPrompt(activePath, userContext) {
 
   // Context interpolations
   const role = userContext.goal || "Full Stack Developer";
-  const score = userContext.score || 82;
+  const score = userContext.score ?? null;
   const level = userContext.experienceLevel || "Intermediate";
 
   if (coachKey === "resume") {
     systemPrompt = systemPrompt
       .replace("{targetRole}", role)
-      .replace("{atsScore}", userContext.resumeAtsScore || 82)
+      .replace("{atsScore}", userContext.resumeAtsScore ?? "not available")
       .replace("{missingKeywords}", (userContext.missingKeywords || []).join(", "))
       .replace("{suggestedImprovements}", (userContext.suggestedImprovements || []).join("; "));
   } else if (coachKey === "roadmap") {
@@ -42,7 +42,7 @@ function routeCoachPrompt(activePath, userContext) {
     systemPrompt = systemPrompt
       .replace("{targetRole}", role)
       .replace("{repoCount}", userContext.repoCount || 3)
-      .replace("{overallHealth}", userContext.overallHealth || 80)
+      .replace("{overallHealth}", userContext.overallHealth ?? "not available")
       .replace("{missingPractices}", (userContext.missingPractices || []).join(", "));
   } else {
     systemPrompt = systemPrompt

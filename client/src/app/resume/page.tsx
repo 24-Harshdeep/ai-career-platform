@@ -35,6 +35,8 @@ import {
   ListFilter
 } from "lucide-react";
 import PoweredBy from "@/components/ui/PoweredBy";
+import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
+import PageHeader from "@/components/ui/PageHeader";
 
 type WizardStep = "upload" | "review" | "analysis" | "generating" | "editor";
 
@@ -48,6 +50,8 @@ export default function ResumePage() {
   const getCrossSyncSuggestions = useCareerStore((state) => state.getCrossSyncSuggestions);
   const optimizeResume = useCareerStore((state) => state.optimizeResume);
   const addNotification = useCareerStore((state) => state.addNotification);
+  const reviewChangeLog = useCareerStore((state) => state.reviewChangeLog);
+  const applyChangeLogs = useCareerStore((state) => state.applyChangeLogs);
 
   // Wizard state machine
   const [wizardStep, setWizardStep] = useState<WizardStep>("upload");
@@ -172,7 +176,7 @@ export default function ResumePage() {
     clearInterval(phaseInt);
 
     if (result) {
-      addNotification(`AI Optimization Complete! Created Version ${result.activeVersionId}.`, "success");
+      addNotification(`AI Optimization Complete! Please review pending changes.`, "success");
       if (result.unquantifiedStatements && result.unquantifiedStatements.length > 0) {
         setFactCheckList(result.unquantifiedStatements);
       }
@@ -180,6 +184,18 @@ export default function ResumePage() {
     } else {
       setWizardStep("analysis");
       addNotification("AI Optimization call failed. Please check credentials.", "warning");
+    }
+  };
+
+  const handleApplyLogs = async () => {
+    const success = await applyChangeLogs(targetGoal);
+    if (success) {
+      addNotification("Changes applied and new version created!", "success");
+      if (resumeAnalysis?.activeVersionContent) {
+        setFormState(JSON.parse(JSON.stringify(resumeAnalysis.activeVersionContent)));
+      }
+    } else {
+      addNotification("Failed to apply changes.", "warning");
     }
   };
 
@@ -394,7 +410,7 @@ ${p.bulletPoints.map(b => `- ${b}`).join("\n")}`).join("\n\n")}
 - **Database**: ${formState.skills.database.join(", ")}
 - **Tools**: ${formState.skills.tools.join(", ")}
 
-${formState.certifications?.length > 0 ? `## Certifications\n${formState.certifications.map(c => `- ${c}`).join("\n")}` : ""}`;
+${formState.certifications?.length > 0 ? `## Certifications\n${formState.certifications.map(c => `- ${c.name} ${c.issuer ? `(${c.issuer})` : ""}`).join("\n")}` : ""}`;
 
     const blob = new Blob([md], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
@@ -425,7 +441,7 @@ ${formState.certifications?.length > 0 ? `## Certifications\n${formState.certifi
   const colorHex = canvasColor === "emerald" ? "text-emerald-600 border-emerald-600" : (canvasColor === "amber" ? "text-amber-600 border-amber-600" : (canvasColor === "slate" ? "text-slate-700 border-slate-700" : "text-primary border-primary"));
 
   return (
-    <div className="space-y-6 animate-fade-in-up pb-12 print:p-0 print:m-0">
+    <PageTransition className="space-y-6 pb-12 print:p-0 print:m-0">
       {/* Hidden File Input */}
       <input
         type="file"
@@ -481,15 +497,13 @@ ${formState.certifications?.length > 0 ? `## Certifications\n${formState.certifi
 
       {/* Header and Sync Control bar (Hidden during print) */}
       <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 border-b border-border/60 pb-5 print-hidden">
-        <div className="flex items-center space-x-3">
-          <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl">
-            <FileText className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-foreground">CareerOS Resume Intelligence</h2>
-            <p className="text-xs text-muted">Linear optimization wizard, factual AI bullet auditing, and Canvas page rendering.</p>
-          </div>
-        </div>
+        <StaggerItem className="w-full">
+          <PageHeader
+            icon={FileText}
+            title="CareerOS Resume Intelligence"
+            description="Linear optimization wizard, factual AI bullet auditing, and Canvas page rendering."
+          />
+        </StaggerItem>
 
         {wizardStep !== "upload" && wizardStep !== "generating" && (
           <div className="flex items-center gap-3 print-hidden">
@@ -723,13 +737,25 @@ ${formState.certifications?.length > 0 ? `## Certifications\n${formState.certifi
                   <div key={idx} className="flex gap-2 items-center bg-card p-2 border border-border rounded-xl">
                     <input
                       type="text"
-                      value={c || ""}
+                      value={c?.name || ""}
                       onChange={(e) => {
                         const updated = { ...formState };
-                        updated.certifications[idx] = e.target.value;
+                        updated.certifications[idx].name = e.target.value;
                         setFormState(updated);
                       }}
                       className="flex-1 bg-transparent border-none text-xs text-foreground outline-none"
+                      placeholder="Certification Name"
+                    />
+                    <input
+                      type="text"
+                      value={c?.issuer || ""}
+                      onChange={(e) => {
+                        const updated = { ...formState };
+                        updated.certifications[idx].issuer = e.target.value;
+                        setFormState(updated);
+                      }}
+                      className="flex-1 bg-transparent border-none text-xs text-foreground outline-none border-l border-border pl-2"
+                      placeholder="Issuer (e.g. AWS)"
                     />
                     <button
                       onClick={() => {
@@ -737,7 +763,7 @@ ${formState.certifications?.length > 0 ? `## Certifications\n${formState.certifi
                         updated.certifications.splice(idx, 1);
                         setFormState(updated);
                       }}
-                      className="text-red-400 hover:text-red-500 cursor-pointer"
+                      className="text-red-400 hover:text-red-500 cursor-pointer pl-2"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -747,7 +773,17 @@ ${formState.certifications?.length > 0 ? `## Certifications\n${formState.certifi
                   onClick={() => {
                     const updated = { ...formState };
                     if (!updated.certifications) updated.certifications = [];
-                    updated.certifications.push("New Certificate Course");
+                    updated.certifications.push({
+                      name: "New Certificate",
+                      issuer: "",
+                      issueDate: "",
+                      credentialId: "",
+                      credentialUrl: "",
+                      evidenceText: "",
+                      source: "manual",
+                      confidence: 100,
+                      isRelevant: true
+                    });
                     setFormState(updated);
                   }}
                   className="text-primary hover:underline text-xs font-bold flex items-center gap-1 cursor-pointer pt-1"
@@ -1420,7 +1456,17 @@ ${formState.certifications?.length > 0 ? `## Certifications\n${formState.certifi
                             if (!formState) return;
                             const updated = { ...formState };
                             if (!updated.certifications) updated.certifications = [];
-                            updated.certifications.push("Certified Developer");
+                            updated.certifications.push({
+                              name: "New Certificate",
+                              issuer: "",
+                              issueDate: "",
+                              credentialId: "",
+                              credentialUrl: "",
+                              evidenceText: "",
+                              source: "manual",
+                              confidence: 100,
+                              isRelevant: true
+                            });
                             setFormState(updated);
                             saveResumeEdits(updated);
                           }}
@@ -1430,31 +1476,101 @@ ${formState.certifications?.length > 0 ? `## Certifications\n${formState.certifi
                         </button>
                       </div>
                       {formState?.certifications?.map((cert, idx) => (
-                        <div key={idx} className="flex gap-2 items-center bg-card border border-border p-2 rounded-xl">
-                          <input
-                            type="text"
-                            value={cert}
-                            onChange={(e) => {
-                              if (!formState) return;
-                              const updated = { ...formState };
-                              updated.certifications[idx] = e.target.value;
-                              setFormState(updated);
-                              saveResumeEdits(updated);
-                            }}
-                            className="flex-1 bg-transparent border-none text-xs text-foreground outline-none"
-                          />
-                          <button
-                            onClick={() => {
-                              if (!formState) return;
-                              const updated = { ...formState };
-                              updated.certifications.splice(idx, 1);
-                              setFormState(updated);
-                              saveResumeEdits(updated);
-                            }}
-                            className="text-red-400 hover:text-red-500 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        <div key={idx} className="flex flex-col gap-2 bg-card border border-border p-3 rounded-xl">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-muted uppercase font-bold">Certificate #{idx + 1}</span>
+                            <button
+                              onClick={() => {
+                                if (!formState) return;
+                                const updated = { ...formState };
+                                updated.certifications.splice(idx, 1);
+                                setFormState(updated);
+                                saveResumeEdits(updated);
+                              }}
+                              className="text-red-400 hover:text-red-500 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-[9px] text-muted uppercase font-bold">Name</span>
+                              <input
+                                type="text"
+                                value={cert.name}
+                                onChange={(e) => {
+                                  if (!formState) return;
+                                  const updated = { ...formState };
+                                  updated.certifications[idx].name = e.target.value;
+                                  setFormState(updated);
+                                  saveResumeEdits(updated);
+                                }}
+                                className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground outline-none"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-muted uppercase font-bold">Issuer</span>
+                              <input
+                                type="text"
+                                value={cert.issuer}
+                                onChange={(e) => {
+                                  if (!formState) return;
+                                  const updated = { ...formState };
+                                  updated.certifications[idx].issuer = e.target.value;
+                                  setFormState(updated);
+                                  saveResumeEdits(updated);
+                                }}
+                                className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground outline-none"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-muted uppercase font-bold">Credential URL</span>
+                              <input
+                                type="text"
+                                value={cert.credentialUrl}
+                                onChange={(e) => {
+                                  if (!formState) return;
+                                  const updated = { ...formState };
+                                  updated.certifications[idx].credentialUrl = e.target.value;
+                                  setFormState(updated);
+                                  saveResumeEdits(updated);
+                                }}
+                                className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground outline-none"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-muted uppercase font-bold">Date</span>
+                              <input
+                                type="text"
+                                value={cert.issueDate}
+                                onChange={(e) => {
+                                  if (!formState) return;
+                                  const updated = { ...formState };
+                                  updated.certifications[idx].issueDate = e.target.value;
+                                  setFormState(updated);
+                                  saveResumeEdits(updated);
+                                }}
+                                className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground outline-none"
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-2 mt-1">
+                            <input 
+                              type="checkbox" 
+                              checked={cert.isRelevant} 
+                              onChange={(e) => {
+                                if (!formState) return;
+                                const updated = { ...formState };
+                                updated.certifications[idx].isRelevant = e.target.checked;
+                                setFormState(updated);
+                                saveResumeEdits(updated);
+                              }}
+                              className="cursor-pointer"
+                            />
+                            <span className="text-[10px] text-muted font-bold uppercase">Relevant to target role</span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1794,24 +1910,18 @@ ${name}`;
                         <div className="space-y-2">
                           <h3 className={`text-[12px] font-black uppercase tracking-widest ${colorHex} border-b pb-1`}>Certifications & Training</h3>
                           <ul className="list-disc list-inside text-[10px] text-slate-600 space-y-1 pl-2">
-                            {formState.certifications.map((c, idx) => {
-                              const urlRegex = /(https?:\/\/[^\s]+)/g;
-                              const parts = c.split(urlRegex);
-                              return (
-                                <li key={idx} className="marker:text-slate-400">
-                                  {parts.map((part, pIdx) => {
-                                    if (part.match(urlRegex)) {
-                                      return (
-                                        <a key={pIdx} href={part} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold ml-1 print:hidden">
-                                          [View Link]
-                                        </a>
-                                      );
-                                    }
-                                    return part;
-                                  })}
-                                </li>
-                              );
-                            })}
+                            {formState.certifications.filter(c => c.isRelevant).map((c, idx) => (
+                              <li key={idx} className="marker:text-slate-400">
+                                <span className="font-bold text-slate-800">{c.name}</span>
+                                {c.issuer && <span> — {c.issuer}</span>}
+                                {c.issueDate && <span>, {c.issueDate}</span>}
+                                {c.credentialUrl && (
+                                  <a href={c.credentialUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold ml-1 print:hidden">
+                                    [View Credential]
+                                  </a>
+                                )}
+                              </li>
+                            ))}
                           </ul>
                         </div>
                       )}
@@ -1830,32 +1940,65 @@ ${name}`;
             <Card className="p-6 print-hidden space-y-4 w-full text-left">
               <div className="flex items-center space-x-2 border-b border-border pb-3">
                 <BookOpen className="w-5 h-5 text-primary" />
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">AI Optimizer Explanation Change Log</h3>
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Pending AI Optimizations</h3>
               </div>
               <div className="space-y-3">
                 {resumeAnalysis.changeLogs.map((item, idx) => (
-                  <div key={idx} className="bg-accent/5 border border-border p-4 rounded-2xl text-xs space-y-1.5">
+                  <div key={idx} className={`border p-4 rounded-2xl text-xs space-y-3 ${item.status === 'pending' ? 'bg-accent/5 border-primary/20' : 'bg-card border-border opacity-70'}`}>
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-primary">{item.section}</span>
-                      <span className="text-[10px] text-muted font-semibold font-mono">Change Log Explanation</span>
+                      <Badge variant={item.status === 'accepted' ? 'success' : item.status === 'rejected' ? 'destructive' : item.status === 'edited' ? 'warning' : 'outline'}>
+                        {item.status.toUpperCase()}
+                      </Badge>
                     </div>
+                    
                     <div className="grid grid-cols-2 gap-4 pt-1.5 border-t border-border/40">
                       <div className="space-y-1">
                         <span className="text-[9px] text-red-400 font-bold uppercase">Original Text</span>
                         <p className="text-muted italic">"{item.originalText}"</p>
                       </div>
                       <div className="space-y-1">
-                        <span className="text-[9px] text-success font-bold uppercase">Rewritten Text</span>
-                        <p className="text-foreground italic">"{item.rewrittenText}"</p>
+                        <span className="text-[9px] text-success font-bold uppercase">Proposed Rewrite</span>
+                        {item.status === 'edited' ? (
+                          <textarea 
+                            className="w-full bg-background border border-border rounded p-2 text-foreground h-20"
+                            value={item.editedText || item.rewrittenText}
+                            onChange={(e) => reviewChangeLog(item._id, "edited", e.target.value)}
+                          />
+                        ) : (
+                          <p className="text-foreground italic">"{item.rewrittenText}"</p>
+                        )}
                       </div>
                     </div>
+
                     <div className="pt-2 text-[10px] text-primary font-semibold flex items-start gap-1">
                       <Zap className="w-3.5 h-3.5 mt-0.5 text-primary" />
                       <span>Reasoning: {item.reason}</span>
                     </div>
+
+                    {item.status === 'pending' && (
+                      <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
+                        <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-500 hover:bg-red-500/10" onClick={() => reviewChangeLog(item._id, "rejected")}>Reject</Button>
+                        <Button size="sm" variant="outline" onClick={() => reviewChangeLog(item._id, "edited", item.rewrittenText)}>Edit</Button>
+                        <Button size="sm" variant="primary" onClick={() => reviewChangeLog(item._id, "accepted")}>Accept</Button>
+                      </div>
+                    )}
+                    {item.status !== 'pending' && (
+                      <div className="flex justify-end pt-2">
+                        <Button size="sm" variant="ghost" onClick={() => reviewChangeLog(item._id, "pending")}>Undo</Button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
+              
+              {resumeAnalysis.changeLogs.every(log => log.status !== 'pending') && (
+                <div className="pt-4 border-t border-border flex justify-end">
+                  <Button variant="primary" onClick={handleApplyLogs} className="shadow-lg shadow-primary/20">
+                    Apply Changes & Create Version
+                  </Button>
+                </div>
+              )}
             </Card>
           )}
         </div>
@@ -1889,6 +2032,6 @@ ${name}`;
         </div>
       )}
 
-    </div>
+    </PageTransition>
   );
 }

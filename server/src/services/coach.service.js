@@ -3,52 +3,19 @@ const Resume = require("../models/Resume");
 const ResumeAnalysis = require("../models/ResumeAnalysis");
 const DeveloperProfile = require("../models/DeveloperProfile");
 const CoachMessage = require("../models/CoachMessage");
-const { mockDb } = require("../config/mockDb");
+
 const { routeCoachPrompt } = require("../engines/ai/coachRouter.engine");
-const { generateGeminiContent } = require("../config/gemini");
+const { generateAiContent } = require("../config/ai");
 
 async function generateCoachReply(userId, activePath, userMessage) {
   let context = {};
 
   try {
-    const userDoc = await User.findById(userId);
-    
-    // Load context details
-    const resume = await Resume.findOne({ userId }).sort({ uploadDate: -1 });
-    const resumeAnalysis = resume 
-      ? await ResumeAnalysis.findOne({ userId, resumeId: resume._id }) 
-      : null;
-      
-    const devProfile = await DeveloperProfile.findOne({ userId });
-
-    context = {
-      goal: userDoc ? userDoc.goal : "Full Stack Developer",
-      score: userDoc ? userDoc.score : 82,
-      experienceLevel: userDoc ? userDoc.experience : "Intermediate",
-      resumeAtsScore: resumeAnalysis ? resumeAnalysis.atsScore : 82,
-      missingKeywords: resumeAnalysis ? (resumeAnalysis.missingKeywords || []).map(m => m.keyword) : ["Docker", "CI/CD"],
-      suggestedImprovements: resumeAnalysis ? resumeAnalysis.suggestedImprovements : ["Incorporate testing"],
-      activeTrack: "Full Stack Track",
-      nextSubSkill: "JWT Authentication",
-      repoCount: devProfile ? devProfile.repositoryCount : 3,
-      overallHealth: devProfile ? devProfile.overallHealth : 80,
-      missingPractices: devProfile ? devProfile.missingPractices : []
-    };
+    const { getCareerContext } = require("./careerContext.service");
+    context = await getCareerContext(userId);
   } catch (err) {
-    // Offline local fallback
-    context = {
-      goal: mockDb.user.goal,
-      score: mockDb.user.score,
-      experienceLevel: mockDb.user.experience,
-      resumeAtsScore: 82,
-      missingKeywords: ["Docker", "CI/CD"],
-      suggestedImprovements: ["Incorporate testing"],
-      activeTrack: "Full Stack Track",
-      nextSubSkill: "JWT Authentication",
-      repoCount: 3,
-      overallHealth: 80,
-      missingPractices: []
-    };
+    console.error("[Coach Service] Failed to load context:", err);
+    throw new Error("Unable to load user context for AI Coach");
   }
 
   // Save User's incoming message to DB first
@@ -83,15 +50,18 @@ async function generateCoachReply(userId, activePath, userMessage) {
   const routed = routeCoachPrompt(activePath, context);
   const userTextLower = (userMessage || "").toLowerCase();
 
-  // 2. Call Gemini API for real-time response
-  const prompt = `User Target Goal: ${context.goal}
-User Experience: ${context.experienceLevel}
-Career Score: ${context.score}
-Resume ATS Score: ${context.resumeAtsScore}%
-Missing Resume Keywords: ${context.missingKeywords.join(", ")}
-GitHub Repos Health: ${context.overallHealth}%
-Missing Project Practices: ${context.missingPractices.join(", ") || "None"}
-Active learning subskill: ${context.nextSubSkill}
+  const formatContextValue = (val) => {
+    if (val === undefined || val === null || val === "" || Number.isNaN(val)) {
+      return "Not set";
+    }
+    return val;
+  };
+
+  const safeTargetRole = formatContextValue(context.targetRole);
+  
+  // 2. Call AI API for real-time response
+  const prompt = `User Target Role: ${safeTargetRole}
+Full Career Context: ${JSON.stringify(context, null, 2)}
 Active Page: ${activePath}
 
 Past Conversation History:
@@ -114,76 +84,30 @@ Dynamic Length Scaling:
 - For short, simple, or conversational questions, respond with a concise, direct 2-3 sentence buddy-style reply.
 - For deep-dives (e.g., roadmap plans, code explanations, resume rewrites), provide structured, detailed breakdowns.`;
 
-  const geminiResponse = await generateGeminiContent(prompt, systemInstruction);
-  if (geminiResponse) {
-    // Save AI reply to DB
-    try {
-      await CoachMessage.create({
-        userId,
-        sender: "coach",
-        text: geminiResponse,
-        activePath
-      });
-    } catch (e) {
-      console.error("[Coach Service] Failed to save coach reply:", e);
-    }
+  const aiResponse = await generateAiContent(prompt, systemInstruction);
+  
+  let finalReply = aiResponse;
 
-    return {
-      role: routed.role,
-      reply: geminiResponse
-    };
+  // 3. Safe Local Fallback if ALL providers fail
+  if (!finalReply) {
+    finalReply = "> ⚠️ **System Alert**: AI coaching is temporarily unavailable. Your current profile does not contain enough verified information to generate a personalized recommendation or the AI providers are currently unreachable. Complete your Career DNA or add a verified resume/opportunity to continue.";
   }
 
-  // 3. Fallback to specialized mock replies if Gemini is offline
-  const apiKey = process.env.GEMINI_API_KEY;
-  let notice = "";
-  if (!apiKey) {
-    notice = "> ⚠️ **System Alert**: `GEMINI_API_KEY` is not defined in your `server/.env` configuration. Running in offline sandbox fallback mode.\n\n";
-  } else {
-    notice = "> ⚠️ **System Alert**: Google Gemini API returned a transient error (e.g., HTTP 503 high-demand spike or HTTP 429 quota exhaust). Falling back to localized guidelines.\n\n";
-  }
-
-  let reply = "";
-  if (routed.role === "Resume Coach") {
-    if (userTextLower.includes("score") || userTextLower.includes("how")) {
-      reply = `${notice}Your current ATS Score is **${context.resumeAtsScore}%**. To boost it higher, I recommend adding missing keywords like: **${context.missingKeywords.join(", ")}**. You can also rewrite your project bullets to use action verbs (e.g. 'architected Express server layers' instead of 'worked on backend').`;
-    } else {
-      reply = `${notice}Hi there! I am your AI Resume Coach. Paste a bullet point from your resume or ask me how to optimize it for ATS keywords, and I will rewrite it with active verbs and quantified metrics!`;
-    }
-  } else if (routed.role === "Learning Coach") {
-    if (userTextLower.includes("jwt") || userTextLower.includes("auth")) {
-      reply = `${notice}JWT (JSON Web Tokens) are used for stateless user sessions. In Express, you sign a token upon login: \`jwt.sign({ id: user._id }, SECRET, { expiresIn: '1d' })\`. Then write an auth middleware checking the \`Authorization: Bearer <token>\` header.`;
-    } else {
-      reply = `${notice}Hello! I am your Learning Coach. Let's conquer the next sub-skill on your track: **${context.nextSubSkill}**. Ask me to explain any concept, code block, or database queries!`;
-    }
-  } else if (routed.role === "Interview Coach") {
-    reply = `${notice}Let's run a mock technical review! Tell me: how do you optimize a search database index query, and what is the difference between a SQL join and an index scan? Take a moment to frame your response.`;
-  } else if (routed.role === "Project Coach") {
-    if (userTextLower.includes("docker")) {
-      reply = `${notice}Here is a standard Dockerfile configuration to containerize your Node server:\n\n\`\`\`dockerfile\nFROM node:18-alpine\nWORKDIR /usr/src/app\nCOPY package*.json ./\nRUN npm install --omit=dev\nCOPY . .\nEXPOSE 5000\nCMD ["node", "src/index.js"]\n\`\`\`\n\nSave this in your server root directory to resolve the Docker missing practice audit warning!`;
-    } else {
-      reply = `${notice}I am your Project Coach. I audited your repositories and found an overall health of **${context.overallHealth}%**. You have some missing practices. Let's fix them together! Ask me how to add Docker setups, unit tests, or LICENSE files.`;
-    }
-  } else {
-    // Career Coach / Default
-    reply = `${notice}Greetings! I am your Career Coach. Your overall Career Score stands at **${context.score}**. Based on your target role as a **${context.goal}**, your next highest impact step is: Connect & Scan GitHub Portfolio to gain +3 score. Let me know if you need guidelines on where to start!`;
-  }
-
-  // Save fallback AI reply to DB as well for continuity
+  // Save AI reply to DB
   try {
     await CoachMessage.create({
       userId,
       sender: "coach",
-      text: reply,
+      text: finalReply,
       activePath
     });
   } catch (e) {
-    console.error("[Coach Service] Failed to save fallback coach reply:", e);
+    console.error("[Coach Service] Failed to save coach reply:", e);
   }
 
   return {
     role: routed.role,
-    reply
+    reply: finalReply
   };
 }
 

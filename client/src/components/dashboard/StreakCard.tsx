@@ -2,7 +2,7 @@
 
 import React from "react";
 import Card from "@/components/ui/Card/Card";
-import { Flame, Sparkles } from "lucide-react";
+import { Flame } from "lucide-react";
 import { useCareerStore } from "@/store/careerStore";
 
 export const StreakCard: React.FC = () => {
@@ -29,30 +29,24 @@ export const StreakCard: React.FC = () => {
   });
 
   return (
-    <Card className="h-full flex flex-col justify-between p-6 overflow-hidden relative">
-      {/* Decorative subtle gradient background */}
-      <div className="absolute right-0 bottom-0 w-24 h-24 bg-warning/5 rounded-full blur-xl pointer-events-none" />
-
+    <Card className="h-full flex flex-col justify-between p-6">
       <div className="space-y-4">
         {/* Streak Info */}
         <div className="flex items-center space-x-3">
-          <div className="p-3 bg-warning/10 border border-warning/20 text-warning rounded-xl shrink-0 animate-bounce">
-            <Flame className="w-6 h-6 fill-warning" />
+          <div className="p-2.5 bg-warning/10 border border-warning/20 text-warning rounded-lg shrink-0">
+            <Flame className="w-5 h-5 fill-warning" />
           </div>
           <div>
-            <div className="flex items-center space-x-1">
-              <span className="text-xl font-extrabold text-foreground">{streak} Day</span>
-              {streak > 0 && <Sparkles className="w-3.5 h-3.5 text-warning" />}
-            </div>
+              <span className="text-lg font-bold text-foreground">{streak} Day{streak !== 1 ? "s" : ""}</span>
             <p className="text-xs text-muted font-medium">Learning Streak</p>
           </div>
         </div>
 
         <div>
-          <p className="text-xs text-foreground font-medium leading-relaxed">
+          <p className="text-xs text-muted leading-relaxed">
             {streak >= 3
-              ? "You're improving faster than 89% of developers in your cohort. Keep building momentum!"
-              : "Complete roadmap lessons or mock interviews daily to build your streak and unlock score multipliers!"}
+              ? "Great consistency! Keep completing daily activities to maintain your streak."
+              : "Complete roadmap lessons or practice interviews daily to build your streak."}
           </p>
         </div>
 
@@ -63,7 +57,7 @@ export const StreakCard: React.FC = () => {
               <div
                 className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border transition-colors duration-200 ${
                   activeDays[idx]
-                    ? "bg-warning/25 text-warning border-warning/35 shadow-[0_0_8px_rgba(245,158,11,0.15)]"
+                    ? "bg-warning/15 text-warning border-warning/30"
                     : "bg-accent/10 text-muted border-border"
                 }`}
               >

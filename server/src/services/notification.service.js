@@ -1,7 +1,7 @@
 const SystemNotification = require("../models/SystemNotification");
 const WebhookDeliveryLog = require("../models/WebhookDeliveryLog");
 const User = require("../models/User");
-const { mockDb } = require("../config/mockDb");
+
 
 const { parseGithubPushPayload } = require("../engines/notification/githubWebhook.engine");
 const { logCareerEvent } = require("./analytics.service");
@@ -32,18 +32,8 @@ async function getNotifications(userId) {
     const list = await SystemNotification.find({ userId }).sort({ createdAt: -1 }).limit(20);
     return list.map(toNotificationDTO).filter(Boolean);
   } catch (err) {
-    // Offline local fallback
-    return [
-      {
-        id: "mock-n-1",
-        title: "Welcome to CareerOS",
-        message: "Your career intelligence timeline is ready. Scan your resume to start.",
-        type: "success",
-        read: false,
-        source: "system",
-        createdAt: new Date()
-      }
-    ];
+    console.error("Notification Service Error in getNotifications:", err);
+    throw err;
   }
 }
 
@@ -67,16 +57,28 @@ async function handleGithubPushWebhook(deliveryId, payload) {
     const exists = await WebhookDeliveryLog.findOne({ deliveryId });
     if (exists) return { status: "Ignored (Duplicate delivery)" };
 
-    // Find active user or fallback to first database User
-    const firstUser = await User.findOne();
-    const userId = firstUser ? firstUser._id : null;
+    const senderLogin = payload?.sender?.login || payload?.repository?.owner?.login;
+    if (!senderLogin) {
+      console.warn(`[GitHub Webhook] No sender login found in payload.`);
+      return { status: "Failed (No sender info)" };
+    }
+
+    const userDoc = await User.findOne({
+      $or: [
+        { githubUsername: senderLogin },
+        { githubUrl: { $regex: senderLogin, $options: "i" } }
+      ]
+    });
+
+    const userId = userDoc ? userDoc._id : null;
     if (!userId) {
+      console.warn(`[GitHub Webhook] No user found matching GitHub username: ${senderLogin}`);
       await WebhookDeliveryLog.create({
         deliveryId,
         payload,
         status: "Failed"
       });
-      return { status: "Failed (No active user found)" };
+      return { status: "Failed (No matching user)" };
     }
 
     // Run Webhook Parser Engine

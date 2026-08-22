@@ -13,7 +13,8 @@ function analyzeLanguageDistribution(reposList) {
 
   for (const repo of list) {
     const lang = repo.primaryLanguage;
-    const category = LANGUAGE_MAPPINGS[lang] || "Backend";
+    const category = LANGUAGE_MAPPINGS[lang];
+    if (!category) continue;
     totals[category] += 1;
     totalCount += 1;
   }
@@ -23,14 +24,6 @@ function analyzeLanguageDistribution(reposList) {
     distribution[cat] = totalCount > 0 
       ? Math.round((totals[cat] / totalCount) * 100) 
       : 0;
-  }
-
-  // Ensure default fallback if list is empty
-  if (totalCount === 0) {
-    distribution.Frontend = 50;
-    distribution.Backend = 40;
-    distribution.Database = 10;
-    distribution.DevOps = 0;
   }
 
   return distribution;

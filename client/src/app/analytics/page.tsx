@@ -36,6 +36,8 @@ import {
   Target
 } from "lucide-react";
 import PoweredBy from "@/components/ui/PoweredBy";
+import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
+import PageHeader from "@/components/ui/PageHeader";
 
 export default function AnalyticsPage() {
   const profile = useCareerStore((state) => state.profile);
@@ -60,19 +62,21 @@ export default function AnalyticsPage() {
       { name: "Interview", score: analyticsData.interviewScore, status: analyticsData.interviewScore >= 80 ? "Green" : analyticsData.interviewScore >= 70 ? "Yellow" : "Red" },
       { name: "Roadmap", score: analyticsData.roadmapScore, status: analyticsData.roadmapScore >= 80 ? "Green" : analyticsData.roadmapScore >= 50 ? "Yellow" : "Red" },
       { name: "Consistency", score: analyticsData.streakDays >= 5 ? 90 : analyticsData.streakDays >= 3 ? 70 : 40, status: analyticsData.streakDays >= 5 ? "Green" : analyticsData.streakDays >= 3 ? "Yellow" : "Red" },
-      { name: "Applications", score: 85, status: "Green" }
-    ];
+      { name: "Applications", score: null, status: "Unavailable" }
+    ].filter(metric => metric.score != null);
   }, [analyticsData]);
 
   const benchmarkStatus = useMemo(() => {
-    const score = analyticsData?.careerScore || 61;
+    const score = analyticsData?.careerScore;
+    if (score == null) return { label: "Not enough evidence", diff: null, next: "Add career evidence" };
     if (score >= 90) return { label: "Top 10% Senior Developer", diff: score - 90, next: "Elite Tier" };
     if (score >= 75) return { label: "Intermediate Developer", diff: 90 - score, next: "Top 10% (90 pts)" };
     return { label: "Junior Developer", diff: 75 - score, next: "Intermediate (75 pts)" };
   }, [analyticsData]);
 
   const predictiveForecastList = useMemo(() => {
-    const current = analyticsData?.careerScore || 61;
+    const current = analyticsData?.careerScore;
+    if (current == null) return [];
     return [
       { step: "Current Level", score: current, icon: Zap, active: true },
       { step: "After Resume Adjustments", score: Math.min(99, current + 4), icon: CheckCircle, active: false },
@@ -82,12 +86,8 @@ export default function AnalyticsPage() {
     ];
   }, [analyticsData]);
 
-  const aiInsights = useMemo(() => {
-    return [
-      { text: "Your React proficiency is strong, but missing Docker container setups limits backend match rates.", type: "warning" },
-      { text: "Applying to Senior roles? Boost your technical mock interview score by 8% to match target benchmarks.", type: "info" },
-      { text: "Adding one production backend database project increases your placement probability by approximately 9%.", type: "success" }
-    ];
+  const aiInsights = useMemo<{ type: "warning" | "info" | "success"; text: string }[]>(() => {
+    return [];
   }, []);
 
   if (loading || !analyticsData) {
@@ -102,12 +102,8 @@ export default function AnalyticsPage() {
   }
 
   // Format trend line history
-  const historyData = [
-    { week: "Wk 1", score: analyticsData.careerScore - 8 },
-    { week: "Wk 2", score: analyticsData.careerScore - 5 },
-    { week: "Wk 3", score: analyticsData.careerScore - 2 },
-    { week: "Wk 4", score: analyticsData.careerScore },
-  ];
+  // Activity events are not score snapshots; never turn them into a score graph.
+  const historyData: { week: string; score: number }[] = [];
 
   // Consistency heatmap formatting
   const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -123,41 +119,19 @@ export default function AnalyticsPage() {
   }));
 
   return (
-    <div className="space-y-6 animate-fade-in-up pb-12">
-      {/* Title */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-border/60 pb-5">
-        <div className="flex items-center space-x-3">
-          <div className="p-2.5 bg-primary/10 text-primary border border-primary/20 rounded-xl">
-            <Award className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-foreground">Executive Analytics Dashboard</h2>
-            <p className="text-xs text-muted">Consolidated historical snapshots, skill radars, and AI-driven growth predictions.</p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <PoweredBy engines={[
-            {
-              type: "engine",
-              label: "Analytics Engines",
-              description: "Aggregates historical state to trace growth indexes.",
-              points: ["Calculates growth velocity & trends", "Computes activity heatmaps & streaks", "Tracks strongest/weakest skills"]
-            },
-            {
-              type: "ai",
-              label: "AI Reports",
-              description: "Generates high-level summaries and forecasts of user velocity.",
-              points: ["Explains growth insights", "Drafts weekly performance reports", "Highlights forecast areas"]
-            }
-          ]} />
-
+    <PageTransition className="space-y-6 pb-12">
+      <StaggerItem>
+        <PageHeader
+          icon={Award}
+          title="Executive Analytics Dashboard"
+          description="Consolidated historical snapshots, skill radars, and AI-driven growth predictions."
+        >
           <div className="flex items-center space-x-2 bg-warning/10 border border-warning/20 text-warning px-3 py-1.5 rounded-xl text-xs font-bold shrink-0">
             <Flame className="w-4 h-4 text-warning fill-warning" />
             <span>{analyticsData.streakDays} Day Activity Streak</span>
           </div>
-        </div>
-      </div>
+        </PageHeader>
+      </StaggerItem>
 
       {/* Goal Progress & Diagnostics Health Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -262,15 +236,16 @@ export default function AnalyticsPage() {
                 <p className="text-xl font-bold text-foreground mt-1">Growth Velocity Curve</p>
               </div>
               <div className="text-right">
-                <span className="text-2xl font-extrabold text-foreground">{analyticsData.careerScore}</span>
-                <p className="text-[10px] text-success font-bold flex items-center justify-end mt-0.5">
+                <span className="text-2xl font-extrabold text-foreground">{analyticsData.careerScore ?? "Not available"}</span>
+                {analyticsData.weeklyGrowth != null && <p className="text-[10px] text-success font-bold flex items-center justify-end mt-0.5">
                   <TrendingUp className="w-3.5 h-3.5 mr-0.5" />
                   <span>+{analyticsData.weeklyGrowth} points (7d)</span>
-                </p>
+                </p>}
               </div>
             </div>
 
             <div className="h-60 w-full">
+              {historyData.length === 0 ? <div className="h-full flex items-center justify-center border border-dashed border-border rounded-xl text-xs text-muted">No score history recorded yet.</div> :
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={historyData} margin={{ left: -25, right: 10 }}>
                   <defs>
@@ -299,7 +274,7 @@ export default function AnalyticsPage() {
                     fill="url(#colorScoreGrad)"
                   />
                 </AreaChart>
-              </ResponsiveContainer>
+              </ResponsiveContainer>}
             </div>
           </Card>
         </div>
@@ -563,6 +538,6 @@ export default function AnalyticsPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </PageTransition>
   );
 }

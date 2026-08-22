@@ -2,7 +2,7 @@ const User = require("../models/User");
 const GithubRepository = require("../models/GithubRepository");
 const GithubRepositoryAnalysis = require("../models/GithubRepositoryAnalysis");
 const DeveloperProfile = require("../models/DeveloperProfile");
-const { mockDb } = require("../config/mockDb");
+
 
 const { syncRepositories } = require("../engines/github/sync.engine");
 const { discoverRepositoryMetadata } = require("../engines/github/repositoryDiscovery.engine");
@@ -17,16 +17,10 @@ const { evaluateDeveloperHealth } = require("../engines/github/developerHealth.e
 const { toDeveloperIntelligenceDTO } = require("../dto/developer.dto");
 const { recalculateUserStats } = require("./career.service");
 
-// Mock raw repositories sync payload for sandbox fallbacks
-const MOCK_REPOS_API = [
-  { name: "careeros-client", description: "Frontend Next.js dashboard client application", fork: false, archived: false, language: "TypeScript", stargazers_count: 5, forks_count: 1, watchers_count: 5 },
-  { name: "careeros-server", description: "Express backend API server systems", fork: false, archived: false, language: "JavaScript", stargazers_count: 3, forks_count: 0, watchers_count: 3 },
-  { name: "dsa-challenges", description: "Solved algorithms and sorting puzzles", fork: false, archived: false, language: "Go", stargazers_count: 1, forks_count: 0, watchers_count: 1 }
-];
-
 // 1. Trigger full developer profile sync & analysis from public GitHub API
 async function syncDeveloperProfile(userId, githubUsername) {
-  const username = (githubUsername || "harshdeep").trim();
+  const username = githubUsername?.trim();
+  if (!username) throw new Error("GitHub username is required.");
   let reposList = [];
 
   try {
@@ -41,15 +35,16 @@ async function syncDeveloperProfile(userId, githubUsername) {
         reposList = data;
       }
     } else {
-      console.warn(`[GitHub Sync] API returned status ${res.status}, falling back to mock.`);
+      throw new Error(`GitHub API returned status ${res.status}.`);
     }
   } catch (err) {
     console.error("[GitHub Sync] Failed to retrieve repos from GitHub REST API:", err.message);
+    throw err;
   }
 
   // Fallback to offline mock configurations if API is unreachable
   if (reposList.length === 0) {
-    reposList = MOCK_REPOS_API;
+    throw new Error("GitHub synchronization failed. User has no public repos or API is offline.");
   }
 
   const savedRepos = [];
@@ -57,9 +52,10 @@ async function syncDeveloperProfile(userId, githubUsername) {
 
   for (const raw of reposList) {
     const name = raw.name;
-    const description = raw.description || "Project repository systems";
-    const url = raw.html_url || `https://github.com/${username}/${name}`;
-    const primaryLanguage = raw.language || "JavaScript";
+    const description = raw.description || "";
+    const url = raw.html_url;
+    if (!name || !url) continue;
+    const primaryLanguage = raw.language || "";
     const stars = raw.stargazers_count || 0;
     const forks = raw.forks_count || 0;
 
@@ -81,12 +77,9 @@ async function syncDeveloperProfile(userId, githubUsername) {
       console.warn(`[GitHub Sync] Contents scan failed for ${name}:`, filesErr.message);
     }
 
-    // Default mock contents if unauthenticated rate limit is exhausted
-    if (filesList.length === 0) {
-      filesList = [".gitignore", "package.json", "readme.md"];
-      if (name.includes("server")) filesList.push("dockerfile");
-      if (name.includes("client")) filesList.push(".env.example", "test.js");
-    }
+    // Repository metadata is displayable, but repository quality scores require
+    // a successful contents response from GitHub.
+    if (filesList.length === 0) continue;
 
     // Dynamic audits based on file presence
     const hasReadme = filesList.some(f => f === "readme.md" || f === "readme.txt");
@@ -158,7 +151,7 @@ async function syncDeveloperProfile(userId, githubUsername) {
 
   // Evaluate developer profile health aggregates
   const totalScore = savedAnalyses.reduce((acc, a) => acc + a.healthScore, 0);
-  const overallHealth = Math.round(totalScore / savedAnalyses.length);
+  const overallHealth = savedAnalyses.length > 0 ? Math.round(totalScore / savedAnalyses.length) : 0;
   
   let bestRepo = savedRepos[0]?.name || "";
   let weakestRepo = savedRepos[0]?.name || "";
@@ -178,14 +171,41 @@ async function syncDeveloperProfile(userId, githubUsername) {
     }
   });
 
-  const allMissingPractices = [];
-  savedAnalyses.forEach(a => {
-    if (a.missingPractices) {
-      allMissingPractices.push(...a.missingPractices);
-    }
-  });
+  const { getCareerContext } = require("./careerContext.service");
+  const userContext = await getCareerContext(userId);
 
-  const engineeringLevel = overallHealth > 85 ? "Advanced" : overallHealth > 65 ? "Intermediate" : "Beginner";
+  // 3. Holistic AI evaluation of the developer profile
+  const devPrompt = `Evaluate this developer's GitHub portfolio against their target role of "${userContext.targetRole}".
+Repositories and primary languages:
+${JSON.stringify(savedRepos.map(r => ({ name: r.name, language: r.primaryLanguage, stars: r.stars })), null, 2)}
+Overall Health Score: ${overallHealth}
+
+Provide an engineering level classification ("Beginner", "Intermediate", "Advanced") and a list of 5 specific missing practices or skills they need to adopt to become a better ${userContext.targetRole}.
+Output a JSON object conforming exactly to this structure:
+{
+  "engineeringLevel": "Intermediate",
+  "missingPractices": ["Need to adopt CI/CD pipelines", "Missing unit tests in frontend repos"]
+}`;
+
+  let engineeringLevel = savedAnalyses.length > 0
+    ? (overallHealth > 85 ? "Advanced" : overallHealth > 65 ? "Intermediate" : "Beginner")
+    : "Beginner";
+  let finalMissingPractices = [];
+  
+  const { generateAiContent } = require("../config/ai");
+  try {
+    const geminiJson = await generateAiContent(devPrompt, "You are a Senior Staff Engineer evaluating a portfolio. Output JSON only.", true);
+    if (geminiJson) {
+      const parsed = JSON.parse(geminiJson);
+      if (parsed.engineeringLevel) engineeringLevel = parsed.engineeringLevel;
+      if (parsed.missingPractices) finalMissingPractices = parsed.missingPractices;
+    }
+  } catch (e) {
+    console.error("Gemini dev profile evaluation failed:", e);
+    savedAnalyses.forEach(a => {
+      if (a.missingPractices) finalMissingPractices.push(...a.missingPractices);
+    });
+  }
 
   // 4. Save Developer Profile document
   const profile = await DeveloperProfile.findOneAndUpdate(
@@ -197,7 +217,7 @@ async function syncDeveloperProfile(userId, githubUsername) {
       bestRepository: bestRepo,
       weakestRepository: weakestRepo,
       languageDistribution: languages,
-      missingPractices: allMissingPractices.slice(0, 5),
+      missingPractices: finalMissingPractices.slice(0, 5),
       lastAnalysis: new Date(),
       careerImpact: 3,
       jobReadinessImpact: 5
@@ -230,8 +250,8 @@ async function getDeveloperProfile(userId) {
 
     return toDeveloperIntelligenceDTO(profile, repos, analyses);
   } catch (err) {
-    // Offline local fallback
-    return syncDeveloperProfile(userId, "harshdeep");
+    console.error("Developer Service Error in getDeveloperProfile:", err);
+    throw err;
   }
 }
 

@@ -18,3 +18,7 @@ yarn-error.log*
 out/
 build/
 dist/
+node_modules/
+
+.env
+.env.*

@@ -34,17 +34,19 @@ export default function RootLayout({
                 <Sidebar />
 
                 {/* Main Area */}
-                <div
-                  id="main-scroll-container"
-                  className="flex-1 flex flex-col min-w-0 overflow-y-auto custom-scrollbar"
-                >
+                <div className="flex-1 flex flex-col min-w-0">
                   {/* Navbar Header */}
                   <Navbar />
 
                   {/* Page Content */}
-                  <main className="flex-1 p-4 md:p-8 max-w-7xl w-full mx-auto relative">
-                    {children}
-                  </main>
+                  <div
+                    id="main-scroll-container"
+                    className="flex-1 overflow-y-auto custom-scrollbar"
+                  >
+                    <main className="p-4 md:p-8 max-w-7xl w-full mx-auto relative">
+                      {children}
+                    </main>
+                  </div>
                 </div>
               </div>
             </ThemeProvider>

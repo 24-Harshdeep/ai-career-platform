@@ -1,11 +1,11 @@
 function calculateGrowthDeltas(currentScore, historicSnapshots = []) {
-  if (historicSnapshots.length === 0) {
-    return { weeklyGrowth: 0, monthlyGrowth: 0 };
+  if (currentScore == null || historicSnapshots.length === 0) {
+    return { weeklyGrowth: null, monthlyGrowth: null };
   }
 
   // Sort chronologically ascending
   const sorted = [...historicSnapshots].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  const oldest = sorted[0].careerScore || 80;
+  const oldest = sorted[0].careerScore;
 
   const weeklyGrowth = currentScore - oldest;
   const monthlyGrowth = currentScore - oldest; // Fallback to oldest snapshot diff if history is short

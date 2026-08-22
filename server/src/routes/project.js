@@ -57,15 +57,15 @@ router.get("/summary", authMiddleware, async (req, res) => {
   try {
     const history = await projectService.getProjectHistory(req.user._id || req.user.id);
     const count = history.length;
-    const avgScore = count > 0 
+    const avgScore = count > 0
       ? Math.round(history.reduce((sum, h) => sum + h.overallScore, 0) / count)
-      : 84;
+      : null;
 
     const data = {
       projectCount: count,
       averageScore: avgScore,
-      latestAuditedProject: count > 0 ? history[0].title : "MERN eCommerce",
-      latestScore: count > 0 ? history[0].overallScore : 84
+      latestAuditedProject: count > 0 ? history[0].title : null,
+      latestScore: count > 0 ? history[0].overallScore : null
     };
 
     return successResponse(res, "Project summary details retrieved successfully.", data);

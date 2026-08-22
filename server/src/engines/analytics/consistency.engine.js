@@ -10,7 +10,7 @@ function compileConsistencyActivity(events = []) {
   });
 
   return {
-    streakDays: Math.min(7, events.length || 3),
+    streakDays: Math.min(7, events.length),
     heatMapDays
   };
 }

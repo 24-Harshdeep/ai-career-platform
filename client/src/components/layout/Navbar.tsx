@@ -32,7 +32,7 @@ export const Navbar: React.FC = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const displayName = storeUser?.name || user?.name || "Harshdeep";
+  const displayName = storeUser?.name || user?.name || "there";
   const unreadCount = Array.isArray(notifications) ? notifications.filter((n) => n && !n.read).length : 0;
   const pathname = usePathname();
 
@@ -106,7 +106,7 @@ export const Navbar: React.FC = () => {
       {/* Left: Greeting */}
       <div className="flex flex-col justify-center">
         <h1 className="text-base md:text-lg font-bold tracking-tight text-foreground">
-          Good Morning, {displayName || "Harshdeep"}
+          Good Morning, {displayName}
         </h1>
         <p className="text-[11px] text-muted">Your career journey is progressing.</p>
       </div>
