@@ -24,7 +24,7 @@ const errorResponse = (res, message, errors = [], status = 400) => {
 
 // 1. Post Chat Query to AI Specialist Coach
 router.post("/chat", authMiddleware, async (req, res) => {
-  const { message, activePath } = req.body;
+  const { message, activePath, sessionId } = req.body;
   if (!message) {
     return errorResponse(res, "Missing parameter: 'message' is required.");
   }
@@ -33,7 +33,8 @@ router.post("/chat", authMiddleware, async (req, res) => {
     const data = await coachService.generateCoachReply(
       req.user._id || req.user.id,
       activePath || "/dashboard",
-      message
+      message,
+      sessionId || null
     );
     return successResponse(res, "AI Coach replied successfully.", data);
   } catch (err) {
@@ -41,10 +42,21 @@ router.post("/chat", authMiddleware, async (req, res) => {
   }
 });
 
-// 2. Get Chat History Logs
+// 2. Get Chat Sessions List (Threads)
+router.get("/sessions", authMiddleware, async (req, res) => {
+  try {
+    const data = await coachService.getCoachSessions(req.user._id || req.user.id);
+    return successResponse(res, "Chat sessions retrieved successfully.", data);
+  } catch (err) {
+    return errorResponse(res, `Failed to retrieve chat sessions: ${err.message}`, [], 500);
+  }
+});
+
+// 3. Get Chat History Logs for Session
 router.get("/history", authMiddleware, async (req, res) => {
   try {
-    const data = await coachService.getCoachChatHistory(req.user._id || req.user.id);
+    const sessionId = req.query.sessionId || null;
+    const data = await coachService.getCoachChatHistory(req.user._id || req.user.id, sessionId);
     return successResponse(res, "Chat history retrieved successfully.", data);
   } catch (err) {
     return errorResponse(res, `Failed to retrieve chat history: ${err.message}`, [], 500);

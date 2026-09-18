@@ -18,6 +18,42 @@ const { recalculateUserStats } = require("./career.service");
 const { logCareerEvent } = require("./analytics.service");
 const { generateAiContent } = require("../config/ai");
 
+// Helper: Check if string is a URL or link token
+function isUrlString(str) {
+  if (!str || typeof str !== "string") return false;
+  const lower = str.toLowerCase().trim();
+  return (
+    lower.startsWith("http://") ||
+    lower.startsWith("https://") ||
+    lower.includes("drive.google.com") ||
+    lower.includes("docs.google.com") ||
+    lower.includes("github.com") ||
+    lower.includes("linkedin.com") ||
+    lower.includes("coursera.org") ||
+    lower.includes("udemy.com") ||
+    lower.match(/^(www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}\/?[^\s]*$/)
+  );
+}
+
+// Helper: Extract date range from text string
+function extractDateRange(text) {
+  if (!text) return { startDate: "", endDate: "", currentlyWorking: false, cleanText: text };
+
+  const datePattern = /((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|[0-9]{1,2}\/)?\s*[0-9]{4})\s*(?:-|to|–|—)\s*((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|[0-9]{1,2}\/)?\s*[0-9]{4}|Present|Current|Now)/i;
+  const match = text.match(datePattern);
+
+  if (match) {
+    const startDate = match[1].trim();
+    const endRaw = match[2].trim();
+    const currentlyWorking = Boolean(endRaw.match(/Present|Current|Now/i));
+    const endDate = currentlyWorking ? "Present" : endRaw;
+    const cleanText = text.replace(match[0], "").trim();
+    return { startDate, endDate, currentlyWorking, cleanText };
+  }
+
+  return { startDate: "", endDate: "", currentlyWorking: false, cleanText: text };
+}
+
 // Helper: fallback parsing to populate rich schema structures locally without fabricating details
 function fallbackParseToStructured(rawText, userDoc) {
   const localSections = parseResumeText(rawText);
@@ -38,8 +74,11 @@ function fallbackParseToStructured(rawText, userDoc) {
       phone = line.replace(/phone:/i, "").trim();
     } else if (s.startsWith("email:") || (s.includes("@") && s.includes("mail.com"))) {
       email = line.replace(/email:/i, "").trim();
-    } else if (s.startsWith("address:")) {
-      location = line.replace(/address:/i, "").trim();
+    } else if (s.startsWith("address:") || s.startsWith("location:")) {
+      const candidateLoc = line.replace(/address:|location:/i, "").trim();
+      if (!isUrlString(candidateLoc)) {
+        location = candidateLoc;
+      }
     }
   }
 
@@ -69,13 +108,13 @@ function fallbackParseToStructured(rawText, userDoc) {
     // Extract URL if present
     const urlMatch = s.match(/(https?:\/\/[^\s]+)/);
     const credentialUrl = urlMatch ? urlMatch[1] : "";
-    let name = s;
+    let certName = s;
     if (urlMatch) {
-      name = name.replace(credentialUrl, "").trim();
+      certName = certName.replace(credentialUrl, "").trim();
     }
     
     certifications.push({
-      name: name,
+      name: certName,
       issuer: "",
       issueDate: "",
       credentialId: "",
@@ -90,46 +129,68 @@ function fallbackParseToStructured(rawText, userDoc) {
   const finalEducation = [];
   for (const line of educationLines) {
     const s = line.toLowerCase();
-    
-    // If it's just a descriptive sentence, don't invent an education record
-    if (s.split(" ").length > 15 || s.includes("learning") || s.includes("building")) {
+    if (s.split(" ").length > 20 || s.includes("learning") || s.includes("building")) {
       continue; 
     }
+    const { startDate, endDate, currentlyWorking } = extractDateRange(line);
+    const parts = line.split(/[|\-:]+/).map(p => p.trim()).filter(Boolean);
     
     finalEducation.push({
-      institution: line,
-      degree: "",
-      major: "",
-      startDate: "",
-      endDate: "",
-      gpa: ""
+      institution: parts[0] || line,
+      degree: parts[1] || "",
+      fieldOfStudy: parts[2] || "",
+      major: parts[2] || "",
+      location: "",
+      startDate,
+      endDate,
+      currentlyStudying: currentlyWorking,
+      gpa: line.match(/gpa:?\s*([0-9\.\/]+)/i)?.[1] || "",
+      description: line,
+      institutionUrl: ""
     });
   }
 
   const finalWork = [];
   for (const line of experienceLines) {
-    const parts = line.split(/[|\-:]+/).map(p => p.trim()).filter(Boolean);
-    if (parts.length >= 2) {
-      finalWork.push({
-        company: parts[0],
-        position: parts[1] || "",
-        location: parts[2] || "",
-        startDate: "",
-        endDate: "",
-        description: line,
-        bulletPoints: parts.slice(2).length > 0 ? parts.slice(2) : [line]
-      });
-    } else {
-      finalWork.push({
-        company: "",
-        position: "",
-        location: "",
-        startDate: "",
-        endDate: "",
-        description: line,
-        bulletPoints: [line]
-      });
+    const { startDate, endDate, currentlyWorking, cleanText } = extractDateRange(line);
+    const parts = cleanText.split(/[|\-:]+/).map(p => p.trim()).filter(Boolean);
+
+    let company = "";
+    let position = "";
+    let parsedLoc = "";
+    let expUrl = "";
+
+    const nonUrlParts = [];
+    for (const part of parts) {
+      if (isUrlString(part)) {
+        expUrl = part;
+      } else {
+        nonUrlParts.push(part);
+      }
     }
+
+    if (nonUrlParts.length >= 2) {
+      company = nonUrlParts[0];
+      position = nonUrlParts[1];
+      if (nonUrlParts[2] && !isUrlString(nonUrlParts[2])) {
+        parsedLoc = nonUrlParts[2];
+      }
+    } else if (nonUrlParts.length === 1) {
+      company = nonUrlParts[0];
+    }
+
+    finalWork.push({
+      company,
+      position,
+      employmentType: "",
+      location: parsedLoc,
+      startDate,
+      endDate,
+      currentlyWorking,
+      description: line,
+      bulletPoints: nonUrlParts.length > 2 ? nonUrlParts.slice(2) : [line],
+      experienceUrl: expUrl
+    });
   }
 
   // Map project candidates from summary if projects are empty
@@ -150,24 +211,32 @@ function fallbackParseToStructured(rawText, userDoc) {
   }
 
   for (const line of parsedProjectsList) {
+    const { startDate, endDate } = extractDateRange(line);
     const parts = line.split(/[|\-:]+/).map(p => p.trim()).filter(Boolean);
-    if (parts.length >= 2) {
-      finalProjects.push({
-        title: parts[0],
-        technologies: parts[1] ? parts[1].split(",").map(t => t.trim()) : [],
-        description: line,
-        bulletPoints: parts.slice(2).length > 0 ? parts.slice(2) : [line],
-        link: ""
-      });
-    } else {
-      finalProjects.push({
-        title: line,
-        technologies: [],
-        description: line,
-        bulletPoints: [line],
-        link: ""
-      });
+    let title = parts[0] || line;
+    let projLink = "";
+    let githubUrl = "";
+    let liveUrl = "";
+
+    for (const part of parts) {
+      if (isUrlString(part)) {
+        projLink = part;
+        if (part.includes("github.com")) githubUrl = part;
+        else liveUrl = part;
+      }
     }
+
+    finalProjects.push({
+      title,
+      technologies: parts[1] && !isUrlString(parts[1]) ? parts[1].split(",").map(t => t.trim()) : [],
+      description: line,
+      bulletPoints: parts.slice(2).filter(p => !isUrlString(p)),
+      link: projLink,
+      githubUrl,
+      liveUrl,
+      startDate,
+      endDate
+    });
   }
 
   // Parse skills from lines
@@ -182,9 +251,9 @@ function fallbackParseToStructured(rawText, userDoc) {
 
   const skillLines = (localSections.skills || []).filter(l => !isContactLine(l));
   for (const line of skillLines) {
-    const lower = line.toLowerCase();
     const parts = line.split(/[,\/]+/).map(s => s.trim()).filter(Boolean);
     for (const part of parts) {
+      if (isUrlString(part)) continue;
       const pLower = part.toLowerCase();
       if (pLower.includes("javascript") || pLower.includes("typescript") || pLower.includes("python") || pLower.includes("java") || pLower.includes("c++") || pLower.includes("html") || pLower.includes("css")) {
         skillsList.languages.push(part);
@@ -223,11 +292,13 @@ function fallbackParseToStructured(rawText, userDoc) {
     skills: skillsList,
     education: finalEducation,
     achievements: [],
-    certifications
+    certifications,
+    leadership: [],
+    activities: [],
+    links: []
   };
 }
 
-// 1. Upload and analyze resume
 async function uploadAndAnalyzeResume(userId, filename, rawText, customStoragePath = null) {
   const hash = crypto.createHash("md5").update(rawText).digest("hex");
 
@@ -235,182 +306,64 @@ async function uploadAndAnalyzeResume(userId, filename, rawText, customStoragePa
     const userDoc = await User.findById(userId);
     const targetRole = userDoc ? userDoc.goal : "Full Stack Developer";
 
-    // 1. AI Parse text into structured sections using Gemini
-    const parsePrompt = `You are a professional ATS resume parsing system.
-Extract all details from the following resume text and format it into a single clean JSON object representing a candidate's profile.
-Do not invent or add any information that is not in the text.
+    // 1. Fast deterministic local parse baseline (<10ms)
+    let parsedContent = fallbackParseToStructured(rawText, userDoc);
 
-Resume Text:
-"${rawText}"
-
-The JSON output must conform EXACTLY to this schema:
-{
-  "personalInfo": {
-    "name": "Full Name",
-    "email": "Email Address",
-    "phone": "Phone Number",
-    "location": "City, State or Country",
-    "githubUrl": "GitHub link",
-    "linkedinUrl": "LinkedIn link",
-    "portfolioUrl": "Portfolio link"
-  },
-  "summary": "Short professional summary",
-  "workExperience": [
-    {
-      "company": "Company Name",
-      "position": "Job Title",
-      "location": "Location",
-      "startDate": "Start Date",
-      "endDate": "End Date",
-      "description": "Brief overview description",
-      "bulletPoints": [
-        "Bullet achievement 1",
-        "Bullet achievement 2"
-      ]
-    }
-  ],
-  "projects": [
-    {
-      "title": "Project Title",
-      "technologies": ["React", "Node.js"],
-      "description": "Project summary",
-      "bulletPoints": [
-        "Detail 1",
-        "Detail 2"
-      ],
-      "link": "Project link"
-    }
-  ],
-  "skills": {
-    "languages": ["JavaScript", "TypeScript"],
-    "frontend": ["React", "Next.js"],
-    "backend": ["Node.js", "Express"],
-    "database": ["MongoDB"],
-    "tools": ["Git", "Docker"],
-    "other": ["Agile"]
-  },
-  "education": [
-    {
-      "institution": "University Name",
-      "degree": "Degree (e.g. B.S.)",
-      "major": "Field of Study",
-      "startDate": "Start Year",
-      "endDate": "End Year/Expected",
-      "gpa": "GPA if listed"
-    }
-  ],
-  "achievements": [
-    "Achievement 1"
-  ],
-  "certifications": [
-    {
-      "name": "Certification Name",
-      "issuer": "Issuing Organization",
-      "issueDate": "Date",
-      "credentialId": "ID if present",
-      "credentialUrl": "URL if present (otherwise null)",
-      "evidenceText": "Original text"
-    }
-  ]
-}`;
-
-    let parsedContent = null;
-    try {
-      const geminiParseJson = await generateAiContent(parsePrompt, "You are a precise ATS parser. Output JSON only.", true);
-      if (geminiParseJson) {
-        parsedContent = JSON.parse(geminiParseJson);
-      }
-    } catch (parseErr) {
-      console.warn("[Resume Parsing] AI parsing failed, mapping with local fallback engine:", parseErr.message);
-    }
-
-    if (!parsedContent) {
-      parsedContent = fallbackParseToStructured(rawText, userDoc);
-    }
-
-    // 2. Clear old resume and insert new record
-    await Resume.deleteMany({ userId });
-    await ResumeAnalysis.deleteMany({ userId });
-    await ResumeChangeLog.deleteMany({ userId });
-
-    const resume = await Resume.create({
-      userId,
-      filename,
-      storagePath: customStoragePath || `/uploads/${userId}/${filename}`,
-      fileHash: hash,
-      parsedText: rawText,
-      activeVersionId: 1,
-      versions: [{
-        versionNumber: 1,
-        title: "Original Upload",
-        optimizationGoal: "ATS Optimization",
-        personalInfo: parsedContent.personalInfo || {},
-        summary: parsedContent.summary || "",
-        workExperience: parsedContent.workExperience || [],
-        projects: parsedContent.projects || [],
-        skills: parsedContent.skills || { languages: [], frontend: [], backend: [], database: [], tools: [], other: [] },
-        education: parsedContent.education || [],
-        achievements: parsedContent.achievements || [],
-        certifications: parsedContent.certifications || []
-      }]
-    });
-
-    // 3. Compute initial ATS scoring
+    // 2. Fetch context in parallel
     const { getCareerContext } = require("./careerContext.service");
     let userContext = { devContext: {} };
     try {
       userContext = await getCareerContext(userId);
     } catch (contextErr) {
-      // Resume scoring can still use the parsed document when optional
-      // cross-module context is unavailable.
-      console.warn("[Resume Analysis] Career context unavailable; using local resume context:", contextErr.message);
+      console.warn("[Resume Analysis] Career context unavailable:", contextErr.message);
     }
 
-    const analysisPrompt = `Analyze this candidate resume parsed content for a target role as a "${targetRole}". 
-Evaluate its keywords, projects, formatting, action verbs, and quantified impact.
-Crucially, cross-reference the resume claims against their actual verified Developer Profile and GitHub analytics provided below to evaluate TRUTHFULNESS.
-If they claim skills they haven't verified, mark them as exaggerated.
+    // Helper: Execute AI call with strict timeout so API responds fast (<4.5s)
+    const runAiWithTimeout = (promise, ms = 4500) => {
+      let timer;
+      const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("AI call timed out")), ms);
+      });
+      return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    };
 
-Verified Career Context (Source of Truth):
-${JSON.stringify(userContext.devContext || {})}
+    // 3. Run AI Parse Refinement & AI ATS Analysis concurrently
+    const parsePrompt = `You are a professional ATS resume parsing system.
+Extract all details from the resume text and format into clean JSON object:
+Personal info, summary, workExperience (array), projects (array), skills (object with languages, frontend, backend, database, tools, other arrays), education (array), certifications (array).
+Do not invent information not present.
+Resume Text: "${rawText.substring(0, 4000)}"`;
 
-Parsed Resume Content: ${JSON.stringify(parsedContent)}
+    const analysisPrompt = `Analyze candidate resume for target role as "${targetRole}".
+Resume Text: "${rawText.substring(0, 3000)}"
+Verified Career Context: ${JSON.stringify(userContext.devContext || {})}
+Output JSON with keys: atsScore (number 0-100), breakdown ({keywords, projects, skills, formatting, actionVerbs, quantifiedImpact}), truthfulnessReport ({exaggeratedSkills, missingVerifiedSkills}), missingKeywords ([{keyword, importance, reason, expectedScoreGain, expectedReadinessGain}]), suggestedImprovements ([string]).`;
 
-Output a JSON object conforming exactly to this structure:
-{
-  "atsScore": 61,
-  "breakdown": {
-    "keywords": 35,
-    "projects": 80,
-    "skills": 40,
-    "formatting": 90,
-    "actionVerbs": 60,
-    "quantifiedImpact": 50
-  },
-  "truthfulnessReport": {
-    "exaggeratedSkills": ["List of skills claimed but not verified"],
-    "missingVerifiedSkills": ["List of skills verified in Github but missing from Resume"]
-  },
-  "missingKeywords": [
-    {
-      "keyword": "Docker",
-      "importance": "High",
-      "reason": "Crucial tool for modern containerized backend deployments.",
-      "expectedScoreGain": 3,
-      "expectedReadinessGain": 5
+    const [aiParseRes, aiAnalysisRes] = await Promise.allSettled([
+      runAiWithTimeout(generateAiContent(parsePrompt, "You are a precise ATS parser. Output JSON only.", true), 4500),
+      runAiWithTimeout(generateAiContent(analysisPrompt, "You are a professional ATS resume scanner. Respond only with valid JSON.", true), 4500)
+    ]);
+
+    if (aiParseRes.status === "fulfilled" && aiParseRes.value) {
+      try {
+        const aiParsed = JSON.parse(aiParseRes.value);
+        if (aiParsed && (aiParsed.workExperience || aiParsed.skills)) {
+          parsedContent = {
+            ...parsedContent,
+            ...aiParsed,
+            personalInfo: { ...parsedContent.personalInfo, ...(aiParsed.personalInfo || {}) },
+            skills: { ...parsedContent.skills, ...(aiParsed.skills || {}) }
+          };
+        }
+      } catch (e) {
+        console.warn("[Resume Parsing] Failed to parse AI JSON result, using local baseline");
+      }
     }
-  ],
-  "suggestedImprovements": [
-    "Quantify achievements in work bullet points.",
-    "Add Next.js keywords for frontend readiness."
-  ]
-}`;
 
     let scoreData = null;
-    try {
-      const geminiJson = await generateAiContent(analysisPrompt, "You are a professional ATS resume scanner. Respond only with valid JSON.", true);
-      if (geminiJson) {
-        const parsed = JSON.parse(geminiJson);
+    if (aiAnalysisRes.status === "fulfilled" && aiAnalysisRes.value) {
+      try {
+        const parsed = JSON.parse(aiAnalysisRes.value);
         scoreData = {
           atsScore: parsed.atsScore || 65,
           breakdown: parsed.breakdown || { keywords: 60, projects: 60, skills: 60, formatting: 80, actionVerbs: 60, quantifiedImpact: 50 },
@@ -418,12 +371,12 @@ Output a JSON object conforming exactly to this structure:
           suggestedImprovements: parsed.suggestedImprovements || ["Add metrics to your experience bullets."],
           missingKeywords: parsed.missingKeywords || []
         };
+      } catch (e) {
+        console.warn("[Resume Analysis] Failed to parse AI ATS score JSON, using local score matching");
       }
-    } catch (e) {
-      console.error("Failed to parse Gemini resume scan JSON, falling back to local:", e);
     }
 
-    // Local Fallback if Gemini analysis failed
+    // Local Fallback if AI ATS analysis timed out or failed
     if (!scoreData) {
       const matchRoleKeywords = require("../engines/resume/keywordMatcher.engine").matchRoleKeywords;
       const calculateAtsScore = require("../engines/resume/atsScore.engine").calculateAtsScore;
@@ -594,7 +547,10 @@ async function getResumeAnalysis(userId) {
         skills: activeVersion.skills,
         education: activeVersion.education,
         achievements: activeVersion.achievements,
-        certifications: activeVersion.certifications || []
+        certifications: activeVersion.certifications || [],
+        leadership: activeVersion.leadership || [],
+        activities: activeVersion.activities || [],
+        links: activeVersion.links || []
       },
       atsScore: analysis.atsScore,
       aiConfidence: activeVersion.versionNumber === 1 ? 90 : 98, // Initial parse starts lower, optimizations hit higher
@@ -634,6 +590,9 @@ async function saveResumeEdits(userId, content) {
   resume.versions[activeIdx].education = content.education || [];
   resume.versions[activeIdx].achievements = content.achievements || [];
   resume.versions[activeIdx].certifications = content.certifications || [];
+  resume.versions[activeIdx].leadership = content.leadership || [];
+  resume.versions[activeIdx].activities = content.activities || [];
+  resume.versions[activeIdx].links = content.links || [];
 
   resume.markModified("versions");
   await resume.save();

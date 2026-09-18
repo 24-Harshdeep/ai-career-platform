@@ -19,13 +19,18 @@ const CoachMessageSchema = new mongoose.Schema({
     type: String, 
     default: "" 
   },
+  sessionId: {
+    type: String,
+    index: true,
+    default: null
+  },
   createdAt: { 
     type: Date, 
     default: Date.now 
   }
 });
 
-// Create index on userId and createdAt for fast context window queries
-CoachMessageSchema.index({ userId: 1, createdAt: 1 });
+// Create index on userId, sessionId and createdAt for fast queries
+CoachMessageSchema.index({ userId: 1, sessionId: 1, createdAt: 1 });
 
 module.exports = mongoose.model("CoachMessage", CoachMessageSchema);

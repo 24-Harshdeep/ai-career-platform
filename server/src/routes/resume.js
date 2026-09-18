@@ -42,6 +42,8 @@ router.get("/analysis", authMiddleware, async (req, res) => {
   }
 });
 
+const linkExtractor = require("../engines/resume/linkExtractor.engine");
+
 // 2. Upload and Scan Resume
 router.post("/upload", authMiddleware, (req, res, next) => {
   upload.single("file")(req, res, (err) => {
@@ -57,21 +59,42 @@ router.post("/upload", authMiddleware, (req, res, next) => {
   let targetFilename = "resume.pdf";
   let targetText = "";
   let cloudinaryUrl = "";
+  let extractedLinks = [];
 
   if (req.file) {
     targetFilename = req.file.originalname;
 
     try {
-      if (req.file.mimetype === "application/pdf") {
-        const pdfData = await pdfParse(req.file.buffer);
-        targetText = pdfData.text;
+      if (req.file.mimetype === "application/pdf" || targetFilename.endsWith(".pdf")) {
+        try {
+          const pdfRes = await linkExtractor.parsePdfWithLinks(req.file.buffer);
+          targetText = pdfRes.text;
+          extractedLinks = pdfRes.annotationLinks || [];
+        } catch (pdfErr) {
+          console.warn("[Resume Upload] Advanced PDF link parsing fallback to standard pdfParse:", pdfErr.message);
+          const pdfData = await pdfParse(req.file.buffer);
+          targetText = pdfData.text;
+        }
+      } else if (
+        req.file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+        targetFilename.endsWith(".docx")
+      ) {
+        try {
+          const mammoth = require("mammoth");
+          const docxResult = await mammoth.extractRawText({ buffer: req.file.buffer });
+          targetText = docxResult.value;
+          extractedLinks = await linkExtractor.extractDocxLinks(req.file.buffer);
+        } catch (docxErr) {
+          console.warn("[Resume Upload] Mammoth docx parsing failed, fallback to string:", docxErr.message);
+          targetText = req.file.buffer.toString("utf-8");
+        }
       } else {
         targetText = req.file.buffer.toString("utf-8");
       }
 
       if (process.env.CLOUDINARY_CLOUD_NAME) {
         try {
-          const uploadResult = await new Promise((resolve, reject) => {
+          const uploadPromise = new Promise((resolve, reject) => {
             const uploadStream = cloudinary.uploader.upload_stream(
               {
                 resource_type: "raw",
@@ -85,9 +108,15 @@ router.post("/upload", authMiddleware, (req, res, next) => {
             );
             uploadStream.end(req.file.buffer);
           });
+
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Cloudinary upload timeout")), 2500)
+          );
+
+          const uploadResult = await Promise.race([uploadPromise, timeoutPromise]);
           cloudinaryUrl = uploadResult.secure_url;
         } catch (cloudinaryErr) {
-          console.warn("[Resume Upload] Cloudinary upload failed:", cloudinaryErr.message);
+          console.warn("[Resume Upload] Cloudinary upload bypassed or timed out:", cloudinaryErr.message);
         }
       }
     } catch (err) {
@@ -109,7 +138,8 @@ router.post("/upload", authMiddleware, (req, res, next) => {
       req.user._id || req.user.id,
       targetFilename,
       targetText,
-      cloudinaryUrl || null
+      cloudinaryUrl || null,
+      extractedLinks
     );
     return successResponse(res, "Resume analyzed successfully.", data);
   } catch (err) {
@@ -180,14 +210,15 @@ router.post("/changelog/review", authMiddleware, async (req, res) => {
   }
 });
 
-// 9. Apply Pending Change Logs
+// 9. Apply Accepted/Edited Change Logs into Active Resume
 router.post("/changelog/apply", authMiddleware, async (req, res) => {
   try {
     const { goal } = req.body;
     const data = await resumeService.applyChangeLogs(req.user._id || req.user.id, goal);
-    return successResponse(res, "Change logs applied successfully.", data);
+    return successResponse(res, "Accepted AI changes applied to resume.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to apply change logs: ${err.message}`, [], 500);
+    return errorResponse(res, `Failed to apply changes: ${err.message}`, [], 500);
   }
 });
+
 module.exports = router;

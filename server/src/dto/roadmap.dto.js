@@ -20,7 +20,14 @@ function toRoadmapDTO(tracks, userProgress) {
           title: sub.title,
           xpReward: sub.xpReward,
           mastered,
-          completedAt: progressRecord ? progressRecord.completedAt : null
+          completedAt: progressRecord ? progressRecord.completedAt : null,
+          time: sub.time || "2 Hours",
+          scoreGain: sub.scoreGain || 3,
+          prerequisite: sub.prerequisite || "None",
+          unlocks: sub.unlocks || "Next Step",
+          explanation: sub.explanation || "",
+          tip: sub.tip || "",
+          resources: sub.resources || []
         };
       });
 
@@ -38,6 +45,7 @@ function toRoadmapDTO(tracks, userProgress) {
     return {
       id: track.id,
       title: track.title,
+      reasoning: track.reasoning || "",
       progress: progressPercentage,
       modules: formattedModules
     };

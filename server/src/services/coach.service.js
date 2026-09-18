@@ -7,16 +7,13 @@ const CoachMessage = require("../models/CoachMessage");
 const { routeCoachPrompt } = require("../engines/ai/coachRouter.engine");
 const { generateAiContent } = require("../config/ai");
 
-async function generateCoachReply(userId, activePath, userMessage) {
+async function generateCoachReply(userId, activePath, userMessage, targetSessionId = null) {
   let context = {};
 
   try {
     const { getCareerContext } = require("./careerContext.service");
     context = await getCareerContext(userId);
   } catch (err) {
-    // AI chat should remain useful even when optional profile analytics are
-    // unavailable. The user message can still be answered without inventing
-    // career data.
     console.error("[Coach Service] Failed to load context; using minimal context:", err.message);
     context = {
       targetRole: "Full Stack Developer",
@@ -33,23 +30,36 @@ async function generateCoachReply(userId, activePath, userMessage) {
     };
   }
 
+  // Resolve or create sessionId
+  let sessionId = targetSessionId;
+  if (!sessionId) {
+    // Check if user has an existing session in the last 30 minutes
+    const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000);
+    const lastMsg = await CoachMessage.findOne({ userId, createdAt: { $gte: thirtyMinsAgo } }).sort({ createdAt: -1 });
+    if (lastMsg && lastMsg.sessionId) {
+      sessionId = lastMsg.sessionId;
+    } else {
+      sessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    }
+  }
+
   // Save User's incoming message to DB first
   try {
     await CoachMessage.create({
       userId,
       sender: "user",
       text: userMessage,
-      activePath
+      activePath,
+      sessionId
     });
   } catch (e) {
     console.error("[Coach Service] Failed to save user message:", e);
   }
 
-  // Query past messages for context window
+  // Query past messages in current session for context window
   let historyLogs = [];
   try {
-    historyLogs = await CoachMessage.find({ userId }).sort({ createdAt: 1 });
-    // slice last 10 messages
+    historyLogs = await CoachMessage.find({ userId, sessionId }).sort({ createdAt: 1 });
     if (historyLogs.length > 10) {
       historyLogs = historyLogs.slice(-10);
     }
@@ -63,7 +73,6 @@ async function generateCoachReply(userId, activePath, userMessage) {
 
   // 1. Get routed prompt
   const routed = routeCoachPrompt(activePath, context);
-  const userTextLower = (userMessage || "").toLowerCase();
 
   const formatContextValue = (val) => {
     if (val === undefined || val === null || val === "" || Number.isNaN(val)) {
@@ -114,7 +123,8 @@ Dynamic Length Scaling:
       userId,
       sender: "coach",
       text: finalReply,
-      activePath
+      activePath,
+      sessionId
     });
   } catch (e) {
     console.error("[Coach Service] Failed to save coach reply:", e);
@@ -122,15 +132,90 @@ Dynamic Length Scaling:
 
   return {
     role: routed.role,
-    reply: finalReply
+    reply: finalReply,
+    sessionId
   };
 }
 
-// 4. Retrieve persistent chat history
-async function getCoachChatHistory(userId) {
+// 4. Retrieve persistent chat session list (threads)
+async function getCoachSessions(userId) {
   try {
     const messages = await CoachMessage.find({ userId }).sort({ createdAt: 1 });
-    return messages.map(m => ({
+    if (!messages || messages.length === 0) return [];
+
+    const sessionMap = new Map();
+
+    messages.forEach((msg) => {
+      // Use existing sessionId or assign a fallback for legacy messages without a sessionId
+      const sId = msg.sessionId || "sess_legacy";
+      if (!sessionMap.has(sId)) {
+        sessionMap.set(sId, {
+          sessionId: sId,
+          title: "",
+          firstPrompt: "",
+          updatedAt: msg.createdAt,
+          messageCount: 0
+        });
+      }
+
+      const session = sessionMap.get(sId);
+      session.updatedAt = msg.createdAt;
+
+      if (msg.sender === "user") {
+        session.messageCount += 1;
+        if (!session.firstPrompt) {
+          session.firstPrompt = msg.text;
+          const cleanTitle = msg.text.replace(/\s+/g, " ").trim();
+          session.title = cleanTitle.length > 45 ? `${cleanTitle.substring(0, 42)}...` : cleanTitle;
+        }
+      }
+    });
+
+    const sessions = Array.from(sessionMap.values())
+      .map((s) => ({
+        sessionId: s.sessionId,
+        title: s.title || "Career Coach Chat",
+        updatedAt: s.updatedAt,
+        formattedDate: new Date(s.updatedAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit"
+        }),
+        messageCount: s.messageCount
+      }))
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+    return sessions;
+  } catch (err) {
+    console.error("[Coach Service] Failed to get coach sessions:", err);
+    return [];
+  }
+}
+
+// 5. Retrieve persistent chat history for a specific session (or latest session)
+async function getCoachChatHistory(userId, targetSessionId = null) {
+  try {
+    let query = { userId };
+    if (targetSessionId) {
+      if (targetSessionId === "sess_legacy") {
+        query = { userId, $or: [{ sessionId: "sess_legacy" }, { sessionId: null }, { sessionId: { $exists: false } }] };
+      } else {
+        query = { userId, sessionId: targetSessionId };
+      }
+    } else {
+      // Find the latest session ID
+      const latestMsg = await CoachMessage.findOne({ userId }).sort({ createdAt: -1 });
+      if (latestMsg) {
+        const sId = latestMsg.sessionId || "sess_legacy";
+        if (sId === "sess_legacy") {
+          query = { userId, $or: [{ sessionId: "sess_legacy" }, { sessionId: null }, { sessionId: { $exists: false } }] };
+        } else {
+          query = { userId, sessionId: sId };
+        }
+      }
+    }
+
+    const messages = await CoachMessage.find(query).sort({ createdAt: 1 });
+    const formattedMessages = messages.map((m) => ({
       id: m._id.toString(),
       sender: m.sender,
       text: m.text,
@@ -139,12 +224,21 @@ async function getCoachChatHistory(userId) {
         minute: "2-digit"
       })
     }));
+
+    const activeSessionId = targetSessionId || (messages.length > 0 ? messages[0].sessionId || "sess_legacy" : null);
+
+    return {
+      sessionId: activeSessionId,
+      messages: formattedMessages
+    };
   } catch (err) {
-    return [];
+    console.error("[Coach Service] Failed to fetch chat history:", err);
+    return { sessionId: null, messages: [] };
   }
 }
 
 module.exports = { 
   generateCoachReply,
+  getCoachSessions,
   getCoachChatHistory
 };

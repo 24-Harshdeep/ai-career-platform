@@ -17,18 +17,25 @@ const ResumeVersionSchema = new mongoose.Schema({
   workExperience: [{
     company: { type: String, default: "" },
     position: { type: String, default: "" },
+    employmentType: { type: String, default: "" },
     location: { type: String, default: "" },
     startDate: { type: String, default: "" },
     endDate: { type: String, default: "" },
+    currentlyWorking: { type: Boolean, default: false },
     description: { type: String, default: "" },
-    bulletPoints: [{ type: String }]
+    bulletPoints: [{ type: String }],
+    experienceUrl: { type: String, default: "" }
   }],
   projects: [{
     title: { type: String, default: "" },
     technologies: [{ type: String }],
     description: { type: String, default: "" },
     bulletPoints: [{ type: String }],
-    link: { type: String, default: "" }
+    link: { type: String, default: "" },
+    githubUrl: { type: String, default: "" },
+    liveUrl: { type: String, default: "" },
+    startDate: { type: String, default: "" },
+    endDate: { type: String, default: "" }
   }],
   skills: {
     languages: [{ type: String }],
@@ -41,10 +48,15 @@ const ResumeVersionSchema = new mongoose.Schema({
   education: [{
     institution: { type: String, default: "" },
     degree: { type: String, default: "" },
+    fieldOfStudy: { type: String, default: "" },
     major: { type: String, default: "" },
+    location: { type: String, default: "" },
     startDate: { type: String, default: "" },
     endDate: { type: String, default: "" },
-    gpa: { type: String, default: "" }
+    currentlyStudying: { type: Boolean, default: false },
+    gpa: { type: String, default: "" },
+    description: { type: String, default: "" },
+    institutionUrl: { type: String, default: "" }
   }],
   achievements: [{ type: String }],
   certifications: [{
@@ -57,6 +69,27 @@ const ResumeVersionSchema = new mongoose.Schema({
     source: { type: String, default: "resume" },
     confidence: { type: Number, default: 100 },
     isRelevant: { type: Boolean, default: true }
+  }],
+  leadership: [{
+    title: { type: String, default: "" },
+    organization: { type: String, default: "" },
+    location: { type: String, default: "" },
+    startDate: { type: String, default: "" },
+    endDate: { type: String, default: "" },
+    description: { type: String, default: "" },
+    bulletPoints: [{ type: String }],
+    url: { type: String, default: "" }
+  }],
+  activities: [{
+    title: { type: String, default: "" },
+    description: { type: String, default: "" },
+    url: { type: String, default: "" }
+  }],
+  links: [{
+    label: { type: String, default: "" },
+    url: { type: String, default: "" },
+    type: { type: String, default: "other" },
+    source: { type: String, default: "resume" }
   }],
   createdAt: { type: Date, default: Date.now }
 });
