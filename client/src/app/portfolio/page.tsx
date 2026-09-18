@@ -13,27 +13,27 @@ import PoweredBy from "@/components/ui/PoweredBy";
 
 function extractGithubUsername(urlOrName: string): string {
   if (!urlOrName) return "";
-  const trimmed = urlOrName.trim();
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+  const trimmed = urlOrName.trim().replace(/\/$/, "");
+  const candidateUrl = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  if (candidateUrl.includes("github.com/")) {
     try {
-      const parsedUrl = new URL(trimmed);
+      const parsedUrl = new URL(candidateUrl);
+      if (parsedUrl.hostname.toLowerCase() !== "github.com" && parsedUrl.hostname.toLowerCase() !== "www.github.com") {
+        return "";
+      }
       const pathname = parsedUrl.pathname;
       const parts = pathname.split("/").filter(Boolean);
-      if (parts.length > 0) return parts[0];
+      if (parts.length === 1) return parts[0];
     } catch (e) {
       // Fallback
     }
   }
-  if (trimmed.includes("/")) {
-    const parts = trimmed.split("/");
-    const lastPart = parts[parts.length - 1];
-    if (lastPart) return lastPart;
-  }
-  return trimmed;
+  return /^[a-zA-Z0-9-]+$/.test(trimmed) ? trimmed : "";
 }
 
 export const PortfolioPage: React.FC = () => {
   const profile = useCareerStore((state) => state.profile);
+  const resumeAnalysis = useCareerStore((state) => state.resumeAnalysis);
   const developerProfile = useCareerStore((state) => state.developerProfile);
   const projectHistory = useCareerStore((state) => state.projectHistory);
   const fetchDeveloperProfile = useCareerStore((state) => state.fetchDeveloperProfile);
@@ -45,7 +45,17 @@ export const PortfolioPage: React.FC = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [auditing, setAuditing] = useState(false);
   
-  // Input fields
+  // GitHub Input State
+  const defaultGithubUrl = profile?.githubUrl || resumeAnalysis?.activeVersionContent?.personalInfo?.githubUrl || "";
+  const [githubInput, setGithubInput] = useState("");
+
+  useEffect(() => {
+    if (!githubInput && defaultGithubUrl) {
+      setGithubInput(defaultGithubUrl);
+    }
+  }, [defaultGithubUrl]);
+
+  // Input fields for project audit
   const [projectUrl, setProjectUrl] = useState("");
   const [projectTitle, setProjectTitle] = useState("");
   const [projectType, setProjectType] = useState("Portfolio Website");
@@ -57,16 +67,26 @@ export const PortfolioPage: React.FC = () => {
   }, [fetchDeveloperProfile, fetchProjectHistory]);
 
   const handleScanGithub = async () => {
-    setAnalyzing(true);
-    const githubUrl = profile?.githubUrl || "";
-    const username = extractGithubUsername(githubUrl);
+    const rawUrl = githubInput || profile?.githubUrl || resumeAnalysis?.activeVersionContent?.personalInfo?.githubUrl || "";
+    const username = extractGithubUsername(rawUrl);
     if (!username) {
-      addNotification("Add your GitHub profile URL before syncing.", "warning");
+      addNotification("Please enter your GitHub username or profile URL before syncing.", "warning");
       return;
     }
-    await syncDeveloperProfile(username);
-    addNotification(`GitHub repository synchronization complete for '${username}'.`, "success");
-    setAnalyzing(false);
+
+    setAnalyzing(true);
+    try {
+      const success = await syncDeveloperProfile(username);
+      if (success) {
+        addNotification(`GitHub repository synchronization complete for '${username}'.`, "success");
+        await fetchDeveloperProfile();
+      }
+    } catch (err: any) {
+      console.error("Sync GitHub error:", err);
+      addNotification(`Sync failed: ${err.message || "Network error"}`, "warning");
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const handleAuditProject = async (e: React.FormEvent) => {
@@ -74,11 +94,16 @@ export const PortfolioPage: React.FC = () => {
     if (!projectUrl) return;
 
     setAuditing(true);
-    await auditProject(projectUrl, projectTitle || "My Deployed Project", projectType);
-    addNotification("Project audit complete. Deployment scores updated.", "success");
-    setProjectUrl("");
-    setProjectTitle("");
-    setAuditing(false);
+    try {
+      await auditProject(projectUrl, projectTitle || "My Deployed Project", projectType);
+      addNotification("Project audit complete. Deployment scores updated.", "success");
+      setProjectUrl("");
+      setProjectTitle("");
+    } catch (err: any) {
+      addNotification(`Project audit failed: ${err.message || "Error"}`, "warning");
+    } finally {
+      setAuditing(false);
+    }
   };
 
   const gitScore = developerProfile?.overallHealth ?? null;
@@ -102,16 +127,25 @@ export const PortfolioPage: React.FC = () => {
           title="Project & Developer Intelligence" 
           description="Audits code repositories and deployed projects to index quality and verify technology evidence."
         >
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            onClick={handleScanGithub}
-            isLoading={analyzing}
-          >
-            <RefreshCw className="w-4 h-4 mr-1.5" />
-            <span>Sync GitHub</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={githubInput}
+              onChange={(e) => setGithubInput(e.target.value)}
+              placeholder="github.com/username or username"
+              className="bg-accent/15 border border-border outline-none rounded-xl px-3 py-1.5 text-xs text-foreground placeholder-muted focus:border-primary/50"
+            />
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={handleScanGithub}
+              isLoading={analyzing}
+            >
+              <RefreshCw className="w-4 h-4 mr-1.5" />
+              <span>Sync GitHub</span>
+            </Button>
+          </div>
         </PageHeader>
       </StaggerItem>
 

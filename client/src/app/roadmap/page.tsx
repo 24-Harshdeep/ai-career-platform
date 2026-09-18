@@ -25,221 +25,6 @@ import PoweredBy from "@/components/ui/PoweredBy";
 import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
 import PageHeader from "@/components/ui/PageHeader";
 
-// Mapped AI Metadata configuration for all subskill IDs in the templates
-const AI_ROADMAP_METADATA: Record<string, {
-  time: string;
-  scoreGain: number;
-  prerequisite: string;
-  unlocks: string;
-  explanation: string;
-  tip: string;
-  resources: string[];
-  marketDemand: string;
-  salaryImpact: string;
-  atsAlignment: string;
-}> = {
-  // Frontend Track
-  "fe-sub-1": {
-    time: "2.5 Hours",
-    scoreGain: 4,
-    prerequisite: "React Basics",
-    unlocks: "Actions & useActionState",
-    explanation: "React Server Components execute logic exclusively on the server, avoiding massive JavaScript package downloads for high speed.",
-    tip: "Keep stateful operations (useState, useEffect) in separate client components to maximize RSC optimization.",
-    resources: ["https://react.dev/reference/rsc/server-components", "https://nextjs.org/docs/app/building-your-application/rendering/server-components"],
-    marketDemand: "94%",
-    salaryImpact: "+$4,800/yr",
-    atsAlignment: "+7%"
-  },
-  "fe-sub-2": {
-    time: "2 Hours",
-    scoreGain: 3,
-    prerequisite: "React Server Components",
-    unlocks: "Optimistic UI updates",
-    explanation: "React 19 forms actions handle asynchronous mutations and native error states natively, reducing client boilerplate code.",
-    tip: "Use the new useActionState hook to manage validation states directly from form actions.",
-    resources: ["https://react.dev/reference/react/useActionState", "https://nextjs.org/docs/app/building-your-application/data-fetching/server-actions-and-mutations"],
-    marketDemand: "91%",
-    salaryImpact: "+$3,500/yr",
-    atsAlignment: "+5%"
-  },
-  "fe-sub-3": {
-    time: "1.5 Hours",
-    scoreGain: 3,
-    prerequisite: "Actions & useActionState",
-    unlocks: "Frontend Track Completion",
-    explanation: "Optimistic UI state updates simulate successful responses instantly before network promises settle, yielding zero user latency.",
-    tip: "Use the useOptimistic hook to instantly render changes during network requests.",
-    resources: ["https://react.dev/reference/react/useOptimistic"],
-    marketDemand: "88%",
-    salaryImpact: "+$2,800/yr",
-    atsAlignment: "+4%"
-  },
-  "fe-sub-4": {
-    time: "2 Hours",
-    scoreGain: 3,
-    prerequisite: "Basic CSS layout grid",
-    unlocks: "View Transitions API",
-    explanation: "Container queries apply styles based on the size of a parent element container rather than the global viewport width.",
-    tip: "Use container queries with inline-size parameters to build highly reusable standalone layout components.",
-    resources: ["https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_container_queries"],
-    marketDemand: "92%",
-    salaryImpact: "+$4,000/yr",
-    atsAlignment: "+6%"
-  },
-  "fe-sub-5": {
-    time: "3 Hours",
-    scoreGain: 4,
-    prerequisite: "CSS Container Queries",
-    unlocks: "UI animation benchmarks",
-    explanation: "View Transitions API automates animations between DOM mutations, transforming standard transitions into fluid app wipes.",
-    tip: "Always check document.startViewTransition compatibility and supply fallback transitions for older engines.",
-    resources: ["https://developer.mozilla.org/en-US/docs/Web/API/View_Transitions_API"],
-    marketDemand: "87%",
-    salaryImpact: "+$3,100/yr",
-    atsAlignment: "+4%"
-  },
-
-  // Backend Track
-  "be-sub-1": {
-    time: "2 Hours",
-    scoreGain: 3,
-    prerequisite: "Node.js Basics",
-    unlocks: "Zod validation schema rules",
-    explanation: "Structured routers map request endpoints clean of controller logic, enforcing solid microservice architectures.",
-    tip: "Group endpoint paths under separate sub-routers with logical REST method names.",
-    resources: ["https://expressjs.com/en/guide/routing.html"],
-    marketDemand: "95%",
-    salaryImpact: "+$5,200/yr",
-    atsAlignment: "+8%"
-  },
-  "be-sub-2": {
-    time: "1.5 Hours",
-    scoreGain: 3,
-    prerequisite: "Express REST Router",
-    unlocks: "Bcrypt secure password hashing",
-    explanation: "Zod runtime object parsing filters unexpected request body properties before controllers execute business logic.",
-    tip: "Create reusable middleware to validate headers, queries, and bodies against target schemas.",
-    resources: ["https://zod.dev/"],
-    marketDemand: "89%",
-    salaryImpact: "+$3,800/yr",
-    atsAlignment: "+5%"
-  },
-  "be-sub-3": {
-    time: "1 Hour",
-    scoreGain: 4,
-    prerequisite: "Zod request schema validation",
-    unlocks: "JWT token verification middleware",
-    explanation: "Bcrypt cryptographically salts and hashes plain-text credentials to ensure safe authentication storage.",
-    tip: "Use a salt factor of 10-12 to strike the optimal balance between security limits and request latency.",
-    resources: ["https://github.com/kelektiv/node.bcrypt.js"],
-    marketDemand: "93%",
-    salaryImpact: "+$4,500/yr",
-    atsAlignment: "+6%"
-  },
-  "be-sub-4": {
-    time: "2 Hours",
-    scoreGain: 4,
-    prerequisite: "Bcrypt secure hashing",
-    unlocks: "Rate limiting and Helmet security",
-    explanation: "JSON Web Tokens verify secure user identity assertions stateless, eliminating complex session tables in databases.",
-    tip: "Store tokens in HTTP-only, secure, SameSite cookies to protect transactions against XSS and CSRF vector strikes.",
-    resources: ["https://jwt.io/introduction/"],
-    marketDemand: "96%",
-    salaryImpact: "+$6,000/yr",
-    atsAlignment: "+9%"
-  },
-  "be-sub-5": {
-    time: "2 Hours",
-    scoreGain: 3,
-    prerequisite: "JWT token verification",
-    unlocks: "Backend Track Completion",
-    explanation: "Rate limiting prevents brute force vector floods. Helmet sets HTTP headers to block security vulnerability leaks.",
-    tip: "Configure distinct rate limit limits on login routes compared to public assets.",
-    resources: ["https://github.com/helmetjs/helmet", "https://github.com/express-rate-limit/express-rate-limit"],
-    marketDemand: "90%",
-    salaryImpact: "+$3,400/yr",
-    atsAlignment: "+5%"
-  },
-
-  // System Design Track
-  "sd-sub-1": {
-    time: "2 Hours",
-    scoreGain: 4,
-    prerequisite: "Database basics",
-    unlocks: "Database indexing execution plans",
-    explanation: "Redis in-memory caching intercepts intensive database read traffic, serving cached records in sub-millisecond rates.",
-    tip: "Select cache eviction strategies like LRU (Least Recently Used) and enforce strict key TTL expirations.",
-    resources: ["https://redis.io/docs/manual/eviction/"],
-    marketDemand: "92%",
-    salaryImpact: "+$6,200/yr",
-    atsAlignment: "+8%"
-  },
-  "sd-sub-2": {
-    time: "2.5 Hours",
-    scoreGain: 4,
-    prerequisite: "Redis memory cache",
-    unlocks: "Docker multi-stage builds",
-    explanation: "Query execution plans show index scans vs. table scans, pinpointing database query execution bottlenecks.",
-    tip: "Always run EXPLAIN ANALYZE on slow query statements to trace the underlying scans and index coverage.",
-    resources: ["https://www.postgresql.org/docs/current/using-explain.html"],
-    marketDemand: "94%",
-    salaryImpact: "+$7,000/yr",
-    atsAlignment: "+9%"
-  },
-  "sd-sub-3": {
-    time: "3 Hours",
-    scoreGain: 4,
-    prerequisite: "Database indexing",
-    unlocks: "GitHub Actions automated pipelines",
-    explanation: "Docker multi-stage compilation builds compile source code in builder containers, keeping target images tiny and fast.",
-    tip: "Utilize distinct cache layers for dependencies to avoid slow container rebuild cycles.",
-    resources: ["https://docs.docker.com/build/building/multi-stage/"],
-    marketDemand: "95%",
-    salaryImpact: "+$6,800/yr",
-    atsAlignment: "+8%"
-  },
-  "sd-sub-4": {
-    time: "2 Hours",
-    scoreGain: 4,
-    prerequisite: "Docker multi-stage builds",
-    unlocks: "System Design Track Completion",
-    explanation: "CI/CD pipelines automate testing, building, and deployment procedures on commit, ensuring continuous delivery.",
-    tip: "Use matrices in GitHub Actions jobs to run automated test suites in parallel.",
-    resources: ["https://docs.github.com/en/actions"],
-    marketDemand: "93%",
-    salaryImpact: "+$5,800/yr",
-    atsAlignment: "+7%"
-  }
-};
-
-// Mapped AI track-level metadata configurations
-const AI_TRACK_METADATA: Record<string, {
-  demand: string;
-  salaryImpact: string;
-  atsAlignment: string;
-  reasoning: string;
-}> = {
-  "frontend-v1": {
-    demand: "93% High",
-    salaryImpact: "+$6,500/yr",
-    atsAlignment: "+8% Match",
-    reasoning: "Target companies like Stripe and Vercel heavily prioritize Next.js App Router performance optimizations and strict React 19 execution schemas."
-  },
-  "backend-v1": {
-    demand: "89% High",
-    salaryImpact: "+$5,500/yr",
-    atsAlignment: "+6% Match",
-    reasoning: "Express router validation and security controls are critical to prevent injection vulnerabilities and secure SaaS backend APIs."
-  },
-  "system-design-v1": {
-    demand: "91% High",
-    salaryImpact: "+$8,000/yr",
-    atsAlignment: "+10% Match",
-    reasoning: "Docker containerization and caching systems ensure your applications scale cost-effectively under load, which is a major factor in senior engineering evaluations."
-  }
-};
-
 export default function RoadmapPage() {
   const storeRoadmap = useCareerStore((state) => state.roadmap);
   const toggleSubSkillMastery = useCareerStore((state) => state.toggleSubSkillMastery);
@@ -247,10 +32,13 @@ export default function RoadmapPage() {
   const fetchRoadmap = useCareerStore((state) => state.fetchRoadmap);
   const addNotification = useCareerStore((state) => state.addNotification);
   const stats = useCareerStore((state) => state.stats);
+  const storeUser = useCareerStore((state) => state.user);
+  const profile = useCareerStore((state) => state.profile);
+  const resumeAnalysis = useCareerStore((state) => state.resumeAnalysis);
 
   const [expandedSubSkill, setExpandedSubSkill] = useState<string | null>(null);
 
-  // Sync dashboard values and full roadmap details sequentially on initial render
+  // Sync dashboard values and full roadmap details on initial render
   useEffect(() => {
     const loadRoadmapData = async () => {
       await fetchDashboardData();
@@ -269,7 +57,9 @@ export default function RoadmapPage() {
     }
   };
 
-  // 1. Dynamic Progress Calculations
+  const targetRole = profile?.targetRole || storeUser?.goal || "Full Stack Developer";
+
+  // Dynamic Progress Calculations derived 100% from backend data & store
   const roadmapStats = useMemo(() => {
     let completedCount = 0;
     let totalCount = 0;
@@ -277,7 +67,7 @@ export default function RoadmapPage() {
 
     storeRoadmap.forEach((track) => {
       (track.modules || []).forEach((mod) => {
-        (mod.subSkills || []).forEach((sub) => {
+        (mod.subSkills || []).forEach((sub: any) => {
           totalCount++;
           if (sub.mastered) {
             completedCount++;
@@ -292,10 +82,9 @@ export default function RoadmapPage() {
     const nextBestSteps = storeRoadmap.map(track => {
       let found: any = null;
       (track.modules || []).forEach((mod) => {
-        (mod.subSkills || []).forEach((sub) => {
+        (mod.subSkills || []).forEach((sub: any) => {
           if (!sub.mastered && !found) {
-            const meta = AI_ROADMAP_METADATA[sub.id];
-            found = { ...sub, moduleTitle: mod.title, meta };
+            found = { ...sub, moduleTitle: mod.title };
           }
         });
       });
@@ -303,39 +92,38 @@ export default function RoadmapPage() {
     }).filter(Boolean);
 
     nextBestSteps.forEach((step: any) => {
-      nextBestScoreImpactSum += step.meta?.scoreGain || 3;
+      nextBestScoreImpactSum += step.scoreGain || (step.xpReward ? Math.ceil(step.xpReward / 15) : 3);
     });
 
-    const currentScore = stats.score || 82;
-    const targetScore = Math.min(100, currentScore + Math.max(1, nextBestSteps.length * 2));
+    const currentScore = stats?.score ?? storeUser?.score ?? 0;
+    const projectedScore = Math.min(100, currentScore + Math.max(1, nextBestScoreImpactSum));
     const remainingTasks = totalCount - completedCount;
-    // Assume 1 week per remaining task on average
-    const estimatedWeeks = Math.max(1, remainingTasks);
+    const estimatedWeeks = Math.max(1, Math.ceil(remainingTasks / 2));
+    const jobReadiness = stats?.readiness?.jobReadiness ?? 0;
 
     return {
       progressPercent,
-      jobReadiness: stats.readiness?.jobReadiness || 61,
+      jobReadiness,
       currentScore,
-      targetScore,
+      projectedScore,
+      scoreGainSum: nextBestScoreImpactSum,
       estimatedWeeks,
       nextBestSteps
     };
-  }, [storeRoadmap, stats]);
+  }, [storeRoadmap, stats, storeUser]);
 
-  // 2. Track Next Best Step lookup helper
+  // Track Next Best Step lookup helper
   const getTrackNextBestStep = (trackId: string) => {
     let nextStep: any = null;
     const track = storeRoadmap.find(t => t.id === trackId);
     if (!track) return null;
 
     (track.modules || []).forEach((mod) => {
-      (mod.subSkills || []).forEach((sub) => {
+      (mod.subSkills || []).forEach((sub: any) => {
         if (!sub.mastered && !nextStep) {
-          const meta = AI_ROADMAP_METADATA[sub.id];
           nextStep = {
             ...sub,
-            moduleTitle: mod.title,
-            meta
+            moduleTitle: mod.title
           };
         }
       });
@@ -353,7 +141,7 @@ export default function RoadmapPage() {
         >
           <span className="inline-flex items-center text-xs font-medium text-muted bg-accent px-2.5 py-1 rounded-full border border-border">
             <span className="w-1.5 h-1.5 mr-2 bg-success rounded-full animate-ping" />
-            AI Routing Engine: Active
+            Synced with CareerContext
           </span>
         </PageHeader>
       </StaggerItem>
@@ -365,7 +153,7 @@ export default function RoadmapPage() {
             <Sparkles className="w-4 h-4 text-primary" />
             <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">CareerOS Core Projections</h3>
           </div>
-          <Badge variant="ai">AI Confidence: 91%</Badge>
+          <Badge variant="ai">Synced with CareerContext</Badge>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -396,10 +184,15 @@ export default function RoadmapPage() {
           <div className="bg-accent/10 border border-border/50 rounded-2xl p-4 flex flex-col justify-between">
             <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Career Score</span>
             <div className="flex items-end justify-between mt-3">
-              <span className="text-2xl font-black text-foreground flex items-center gap-1.5">
-                {roadmapStats.currentScore} <ArrowRight className="w-4 h-4 text-primary shrink-0" /> {roadmapStats.targetScore}
+              <div>
+                <span className="text-[9px] text-muted font-bold block uppercase">Current Score: {roadmapStats.currentScore}</span>
+                <span className="text-xl font-black text-foreground flex items-center gap-1 mt-0.5">
+                  {roadmapStats.currentScore} <ArrowRight className="w-3.5 h-3.5 text-primary shrink-0" /> {roadmapStats.projectedScore}
+                </span>
+              </div>
+              <span className="text-[10px] text-primary font-bold mb-1">
+                +{roadmapStats.scoreGainSum} pts projected
               </span>
-              <span className="text-[10px] text-primary font-bold mb-1">Projected</span>
             </div>
           </div>
 
@@ -418,13 +211,6 @@ export default function RoadmapPage() {
       <div className="space-y-6">
         {storeRoadmap && storeRoadmap.length > 0 ? (
           storeRoadmap.map((track) => {
-            const trackMeta = AI_TRACK_METADATA[track.id] || {
-              demand: "High",
-              salaryImpact: "+$5,000/yr",
-              atsAlignment: "+5%",
-              reasoning: "Aligned with industry core standards."
-            };
-
             const nextBestStep = getTrackNextBestStep(track.id);
 
             return (
@@ -479,23 +265,23 @@ export default function RoadmapPage() {
                         <div className="grid grid-cols-3 gap-2 text-center text-[10px] font-bold mt-2">
                           <div className="bg-accent/10 border border-border/30 rounded-lg p-1.5">
                             <span className="text-muted block text-[9px] uppercase">Est. Time</span>
-                            <span className="text-foreground">{nextBestStep.meta?.time || "2 Hours"}</span>
+                            <span className="text-foreground">{nextBestStep.time || "2 Hours"}</span>
                           </div>
                           <div className="bg-accent/10 border border-border/30 rounded-lg p-1.5">
                             <span className="text-muted block text-[9px] uppercase">Score Gain</span>
-                            <span className="text-primary">+{nextBestStep.meta?.scoreGain || 3} Score</span>
+                            <span className="text-primary">+{nextBestStep.scoreGain || (nextBestStep.xpReward ? Math.ceil(nextBestStep.xpReward / 15) : 3)} Score</span>
                           </div>
                           <div className="bg-accent/10 border border-border/30 rounded-lg p-1.5">
                             <span className="text-muted block text-[9px] uppercase">Prereq</span>
-                            <span className="text-foreground truncate max-w-full block" title={nextBestStep.meta?.prerequisite}>
-                              {nextBestStep.meta?.prerequisite || "None"}
+                            <span className="text-foreground truncate max-w-full block" title={nextBestStep.prerequisite}>
+                              {nextBestStep.prerequisite || "None"}
                             </span>
                           </div>
                         </div>
 
                         <div className="text-[10px] text-muted pt-2 border-t border-primary/10 flex items-center gap-1.5">
                           <Unlock className="w-3.5 h-3.5 text-secondary" />
-                          <span>Unlocks: <span className="font-semibold text-foreground">{nextBestStep.meta?.unlocks || "Next Module"}</span></span>
+                          <span>Unlocks: <span className="font-semibold text-foreground">{nextBestStep.unlocks || "Next Module"}</span></span>
                         </div>
                       </div>
                     ) : (
@@ -510,44 +296,46 @@ export default function RoadmapPage() {
                     <div className="bg-accent/10 border border-border/50 rounded-2xl p-4 space-y-2">
                       <span className="text-[10px] font-bold text-muted uppercase block">AI Reasoning</span>
                       <p className="text-xs text-foreground/80 leading-relaxed font-medium">
-                        {trackMeta.reasoning}
+                        {(track as any).reasoning || `Target role is set to ${targetRole}. Completing checkpoints in this module directly closes detected skill gaps and increases your overall engineering readiness.`}
                       </p>
                     </div>
                   </div>
 
-                  {/* Right Block: Track Market Insights */}
+                  {/* Right Block: Track Market Intelligence */}
                   <div className="lg:col-span-6 flex flex-col justify-between">
                     <div className="bg-accent/5 border border-border/50 rounded-2xl p-4 space-y-4 h-full flex flex-col justify-center">
                       <span className="text-[10px] font-bold text-muted uppercase tracking-wider block border-b border-border/40 pb-2">Track Market Intelligence</span>
                       
                       <div className="grid grid-cols-3 gap-3">
                         <div className="space-y-1">
-                          <span className="text-[9px] text-muted font-semibold uppercase block">Market Demand</span>
+                          <span className="text-[9px] text-muted font-semibold uppercase block">Role Alignment</span>
                           <span className="text-sm font-bold text-foreground flex items-center gap-1">
                             <TrendingUp className="w-4 h-4 text-success" />
-                            {trackMeta.demand}
+                            High Priority
                           </span>
                         </div>
 
                         <div className="space-y-1">
-                          <span className="text-[9px] text-muted font-semibold uppercase block">Est. Salary Impact</span>
-                          <span className="text-sm font-bold text-foreground flex items-center gap-1">
-                            <DollarSign className="w-4 h-4 text-success" />
-                            {trackMeta.salaryImpact}
+                          <span className="text-[9px] text-muted font-semibold uppercase block">Target Role</span>
+                          <span className="text-xs font-bold text-foreground flex items-center gap-1 truncate" title={targetRole}>
+                            <Briefcase className="w-3.5 h-3.5 text-primary shrink-0" />
+                            <span className="truncate">{targetRole}</span>
                           </span>
                         </div>
 
                         <div className="space-y-1">
                           <span className="text-[9px] text-muted font-semibold uppercase block">ATS Alignment</span>
-                          <span className="text-sm font-bold text-foreground flex items-center gap-1">
-                            <Briefcase className="w-4 h-4 text-primary" />
-                            {trackMeta.atsAlignment}
+                          <span className="text-xs font-bold text-foreground flex items-center gap-1 truncate" title={resumeAnalysis?.atsScore ? `${resumeAnalysis.atsScore}% ATS Match` : "Evaluated"}>
+                            <FileText className="w-3.5 h-3.5 text-secondary shrink-0" />
+                            <span>{resumeAnalysis?.atsScore ? `${resumeAnalysis.atsScore}% Match` : "Evaluated"}</span>
                           </span>
                         </div>
                       </div>
 
                       <p className="text-[10px] text-muted leading-relaxed pt-2 border-t border-border/40">
-                        Completing this track builds credential weight verifying your practical execution capability during recruiters' portfolio audits.
+                        {resumeAnalysis?.missingKeywords && resumeAnalysis.missingKeywords.length > 0
+                          ? `Identified resume keyword gaps: ${resumeAnalysis.missingKeywords.slice(0, 3).map((k: any) => typeof k === 'string' ? k : k.keyword).join(", ")}. Completing this track aligns your evidence.`
+                          : "Completing this track builds verified credential weight for your target role in recruiters' audits."}
                       </p>
                     </div>
                   </div>
@@ -559,22 +347,17 @@ export default function RoadmapPage() {
                   <span className="text-[10px] font-bold text-muted uppercase tracking-wider block">Technical Checkpoints Checklist</span>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {(track.modules || []).flatMap((mod) =>
-                      (mod.subSkills || []).map((sub) => ({ ...sub, moduleTitle: mod.title }))
-                    ).map((sub) => {
-                      const meta = AI_ROADMAP_METADATA[sub.id] || {
-                        time: "2 Hours",
-                        scoreGain: 3,
-                        prerequisite: "None",
-                        unlocks: "Next step",
-                        explanation: "Core engineering concept.",
-                        tip: "Practice implementation locally.",
-                        resources: [],
-                        marketDemand: "85%",
-                        salaryImpact: "+$2,000/yr",
-                        atsAlignment: "+3%"
-                      };
-
+                      (mod.subSkills || []).map((sub: any) => ({ ...sub, moduleTitle: mod.title }))
+                    ).map((sub: any) => {
                       const isNextBest = nextBestStep?.id === sub.id;
+
+                      const subTime = sub.time || "2 Hours";
+                      const subScoreGain = sub.scoreGain || (sub.xpReward ? Math.ceil(sub.xpReward / 15) : 3);
+                      const subPrereq = sub.prerequisite || "None";
+                      const subUnlocks = sub.unlocks || "Next Step";
+                      const subExplanation = sub.explanation || "Core engineering concept required for target role capability.";
+                      const subTip = sub.tip || "Practice implementing this concept locally or within a project.";
+                      const subResources: string[] = sub.resources || [];
 
                       return (
                         <div
@@ -615,7 +398,7 @@ export default function RoadmapPage() {
                                   )}
                                 </div>
                                 <p className="text-[9px] text-muted truncate">
-                                  {sub.moduleTitle} • {sub.mastered ? "Milestone verified" : `+${sub.xpReward} XP`}
+                                  {sub.moduleTitle} • {sub.mastered ? "Milestone verified" : `+${sub.xpReward || 50} XP`}
                                 </p>
                               </div>
                             </button>
@@ -623,7 +406,7 @@ export default function RoadmapPage() {
                             {/* Actions Right */}
                             <div className="flex items-center space-x-2 shrink-0">
                               <Badge variant={sub.mastered ? "success" : isNextBest ? "primary" : "muted"} className="text-[8px] px-1 py-0.5">
-                                {meta.time}
+                                {subTime}
                               </Badge>
                               <button
                                 type="button"
@@ -645,26 +428,26 @@ export default function RoadmapPage() {
                             <div className="border-t border-border/40 p-3.5 bg-accent/5 text-[11px] text-muted space-y-3 animate-fade-in-up">
                               <div className="space-y-1">
                                 <span className="text-[9px] font-bold text-foreground uppercase block">AI Skill Explanation</span>
-                                <p className="leading-relaxed">{meta.explanation}</p>
+                                <p className="leading-relaxed">{subExplanation}</p>
                               </div>
 
                               <div className="bg-primary/5 border border-primary/10 rounded-xl p-2.5 space-y-1">
                                 <span className="text-[9px] font-bold text-primary block">AI Study Tip</span>
-                                <p className="leading-relaxed">{meta.tip}</p>
+                                <p className="leading-relaxed">{subTip}</p>
                               </div>
 
                               <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold border-t border-border/30 pt-2.5">
-                                <div>Market Demand: <span className="text-foreground">{meta.marketDemand}</span></div>
-                                <div>ATS Alignment: <span className="text-foreground">{meta.atsAlignment}</span></div>
-                                <div>Est. Salary Impact: <span className="text-foreground text-success font-bold">{meta.salaryImpact}</span></div>
-                                <div>Unlocked Prereq: <span className="text-foreground">{meta.prerequisite}</span></div>
+                                <div>Est. Time: <span className="text-foreground">{subTime}</span></div>
+                                <div>Score Gain: <span className="text-primary font-bold">+{subScoreGain} Score</span></div>
+                                <div>Prerequisite: <span className="text-foreground">{subPrereq}</span></div>
+                                <div>Unlocks: <span className="text-foreground">{subUnlocks}</span></div>
                               </div>
 
-                              {meta.resources && meta.resources.length > 0 && (
+                              {subResources && subResources.length > 0 && (
                                 <div className="space-y-1 pt-1">
                                   <span className="text-[9px] font-bold text-foreground uppercase block">Suggested Resources</span>
                                   <div className="flex flex-col gap-1">
-                                    {meta.resources.map((link, idx) => (
+                                    {subResources.map((link: string, idx: number) => (
                                       <a
                                         key={idx}
                                         href={link}

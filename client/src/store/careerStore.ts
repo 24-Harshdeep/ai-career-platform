@@ -9,6 +9,14 @@ import {
   CareerProfile,
   SkillSet,
 } from "@/types";
+
+export interface CoachSession {
+  sessionId: string;
+  title: string;
+  updatedAt: string;
+  formattedDate: string;
+  messageCount: number;
+}
 import { API_BASE_URL, apiFetch } from "@/lib/api";
 
 export interface CareerStats {
@@ -66,11 +74,14 @@ export interface ResumeVersionContent {
   workExperience: {
     company: string;
     position: string;
+    employmentType?: string;
     location: string;
     startDate: string;
     endDate: string;
+    currentlyWorking?: boolean;
     description: string;
     bulletPoints: string[];
+    experienceUrl?: string;
   }[];
   projects: {
     title: string;
@@ -78,6 +89,10 @@ export interface ResumeVersionContent {
     description: string;
     bulletPoints: string[];
     link: string;
+    githubUrl?: string;
+    liveUrl?: string;
+    startDate?: string;
+    endDate?: string;
   }[];
   skills: {
     languages: string[];
@@ -90,10 +105,15 @@ export interface ResumeVersionContent {
   education: {
     institution: string;
     degree: string;
+    fieldOfStudy?: string;
     major: string;
+    location?: string;
     startDate: string;
     endDate: string;
+    currentlyStudying?: boolean;
     gpa: string;
+    description?: string;
+    institutionUrl?: string;
   }[];
   achievements: string[];
   certifications: {
@@ -106,6 +126,27 @@ export interface ResumeVersionContent {
     source: string;
     confidence: number;
     isRelevant: boolean;
+  }[];
+  leadership?: {
+    title: string;
+    organization: string;
+    location?: string;
+    startDate?: string;
+    endDate?: string;
+    description?: string;
+    bulletPoints?: string[];
+    url?: string;
+  }[];
+  activities?: {
+    title: string;
+    description?: string;
+    url?: string;
+  }[];
+  links?: {
+    label: string;
+    url: string;
+    type?: string;
+    source?: string;
   }[];
 }
 
@@ -126,6 +167,7 @@ export interface ResumeAnalysisData {
   versionsList: ResumeVersionInfo[];
   activeVersionContent: ResumeVersionContent;
   atsScore: number;
+  jobMatchScore?: number;
   aiConfidence: number;
   breakdown: {
     keywords: number;
@@ -134,10 +176,13 @@ export interface ResumeAnalysisData {
     formatting: number;
     actionVerbs: number;
     quantifiedImpact: number;
+    completeness?: number;
+    evidence?: number;
   };
   missingKeywords: {
     keyword: string;
     importance: "High" | "Medium" | "Low";
+    category?: "supported_but_missing" | "potential_skill_gap";
     reason: string;
     expectedScoreGain: number;
     expectedReadinessGain: number;
@@ -370,6 +415,8 @@ interface CareerState {
   applications: JobApplication[];
   notifications: Notification[];
   chatHistory: ChatMessage[];
+  activeSessionId: string | null;
+  chatSessions: CoachSession[];
   stats: CareerStats;
   resumeAnalysis: ResumeAnalysisData | null;
   developerProfile: DeveloperProfileData | null;
@@ -410,11 +457,13 @@ interface CareerState {
   reviewChangeLog: (logId: string, status: string, editedText?: string) => Promise<boolean>;
   applyChangeLogs: (goal: string) => Promise<boolean>;
   fetchDeveloperProfile: () => Promise<void>;
-  syncDeveloperProfile: (githubUsername: string) => Promise<void>;
+  syncDeveloperProfile: (githubUsername: string) => Promise<boolean>;
   fetchProjectHistory: () => Promise<void>;
   auditProject: (url: string, title?: string, type?: string) => Promise<void>;
   sendCoachMessage: (text: string, activePath: string) => Promise<void>;
-  fetchCoachHistory: () => Promise<void>;
+  fetchCoachSessions: () => Promise<void>;
+  fetchCoachHistory: (sessionId?: string) => Promise<void>;
+  startNewChatSession: () => void;
   fetchJobPipeline: () => Promise<void>;
   matchJobDescription: (jdText: string, title?: string, company?: string) => Promise<JobOpportunityData | null>;
   updateJobOpportunityStatus: (id: string, status: JobOpportunityData["status"]) => Promise<void>;
@@ -472,6 +521,8 @@ export const useCareerStore = create<CareerState>((set, get) => ({
   applications: [],
   notifications: [],
   chatHistory: [],
+  activeSessionId: null,
+  chatSessions: [],
   stats: initialStats,
   resumeAnalysis: null,
   developerProfile: null,
@@ -1020,7 +1071,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/developer/profile`, {
+      const res = await apiFetch(`${API_BASE_URL}/developer/profile`, {
         method: "GET",
         headers
       });
@@ -1028,6 +1079,9 @@ export const useCareerStore = create<CareerState>((set, get) => ({
       if (res.ok) {
         const envelope = await res.json();
         set({ developerProfile: envelope.data });
+      } else {
+        const envelope = await res.json().catch(() => null);
+        throw new Error(envelope?.message || `Unable to load GitHub profile (${res.status}).`);
       }
     } catch (err) {
       console.warn("Failed to fetch developer profile data:", err);
@@ -1042,7 +1096,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/developer/github/sync`, {
+      const res = await apiFetch(`${API_BASE_URL}/developer/github/sync`, {
         method: "POST",
         headers,
         body: JSON.stringify({ username: githubUsername })
@@ -1052,9 +1106,15 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         const envelope = await res.json();
         set({ developerProfile: envelope.data });
         await get().fetchDashboardData();
+        return true;
       }
+
+      const envelope = await res.json().catch(() => null);
+      console.warn("GitHub sync API returned non-OK response:", envelope);
+      return false;
     } catch (err) {
       console.warn("Failed to sync developer repositories:", err);
+      return false;
     }
   },
 
@@ -1080,7 +1140,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
   },
 
-  auditProject: async (url, title, type) => {
+  auditProject: async (url: string, title?: string, type?: string) => {
     const token = localStorage.getItem("careeros_token");
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) {
@@ -1118,10 +1178,11 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     get().addChatMessage("user", text);
 
     try {
+      const currentSessionId = get().activeSessionId;
       const res = await fetch(`${API_BASE_URL}/coach/chat`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ message: text, activePath })
+        body: JSON.stringify({ message: text, activePath, sessionId: currentSessionId })
       });
 
       if (!res.ok) {
@@ -1142,9 +1203,14 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         return;
       }
 
-
       const envelope = await res.json();
       const coachReply = envelope?.data?.reply;
+      const respSessionId = envelope?.data?.sessionId;
+
+      if (respSessionId) {
+        set({ activeSessionId: respSessionId });
+      }
+
       if (coachReply) {
         // 2. Append Coach's reply locally
         get().addChatMessage("coach", coachReply);
@@ -1155,13 +1221,19 @@ export const useCareerStore = create<CareerState>((set, get) => ({
           "I'm sorry, the AI coach did not return a response. Please try again."
         );
       }
+
+      await get().fetchCoachSessions();
     } catch (err) {
       console.warn("AI Coach failed to reply:", err);
       get().addChatMessage("coach", "I'm sorry, I encountered a connection error. Please try again.");
     }
   },
 
-  fetchCoachHistory: async () => {
+  startNewChatSession: () => {
+    set({ activeSessionId: null, chatHistory: [] });
+  },
+
+  fetchCoachSessions: async () => {
     const token = localStorage.getItem("careeros_token");
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) {
@@ -1169,14 +1241,45 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/coach/history`, {
+      const res = await apiFetch(`${API_BASE_URL}/coach/sessions`, {
         method: "GET",
         headers
       });
 
       if (res.ok) {
         const envelope = await res.json();
-        set({ chatHistory: envelope.data || [] });
+        set({ chatSessions: envelope.data || [] });
+      }
+    } catch (err) {
+      console.warn("Failed to fetch coach chat sessions:", err);
+    }
+  },
+
+  fetchCoachHistory: async (targetSessionId?: string) => {
+    const token = localStorage.getItem("careeros_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    try {
+      const query = targetSessionId ? `?sessionId=${encodeURIComponent(targetSessionId)}` : "";
+      const res = await fetch(`${API_BASE_URL}/coach/history${query}`, {
+        method: "GET",
+        headers
+      });
+
+      if (res.ok) {
+        const envelope = await res.json();
+        const payload = envelope.data;
+        if (payload && Array.isArray(payload.messages)) {
+          set({
+            chatHistory: payload.messages,
+            activeSessionId: payload.sessionId || targetSessionId || null
+          });
+        } else if (Array.isArray(payload)) {
+          set({ chatHistory: payload });
+        }
       }
     } catch (err) {
       console.warn("Failed to fetch coach chat history:", err);

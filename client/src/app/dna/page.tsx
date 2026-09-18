@@ -84,7 +84,7 @@ function CareerDnaContent() {
   // Search, filter, and sorting states for skills inventory
   const [searchQuery, setSearchQuery] = useState("");
   const [newSkillInput, setNewSkillInput] = useState("");
-  const [activeTab, setActiveTab] = useState<"All" | "Verified" | "Claimed">("All");
+  const [activeTab, setActiveTab] = useState<"All" | "Verified">("All");
   const [sortOrder, setSortOrder] = useState<"name" | "category">("name");
 
   const handleAddCustomSkill = async (e: React.FormEvent) => {
@@ -234,8 +234,6 @@ function CareerDnaContent() {
 
     if (activeTab === "Verified") {
       list = list.filter(s => s.isVerified);
-    } else if (activeTab === "Claimed") {
-      list = list.filter(s => s.isPossessed && !s.isVerified);
     }
 
     list.sort((a, b) => {
@@ -249,22 +247,44 @@ function CareerDnaContent() {
   }, [allSkillsList, possessedSkills, verifiedSkillsSet, searchQuery, activeTab, sortOrder]);
 
   const overallScore = stats?.score ?? analyticsData?.careerScore ?? storeUser?.score ?? 0;
-  const nextAction = stats?.nextAction;
   const readiness = stats?.readiness || analyticsData;
+
+  // Fallback default next action if stats.nextAction is null or incomplete
+  const defaultNextAction = {
+    actionId: "action-resume-upload",
+    title: "Upload & Audit Resume",
+    description: "Scan your resume to obtain your ATS score and unlock personalized recommendations.",
+    reason: "Missing primary resume evidence to calculate market readiness.",
+    type: "resume",
+    targetUrl: "/resume",
+  };
+
+  const rawNextAction = stats?.nextAction;
+  const activeNextAction = (rawNextAction && (rawNextAction.title || rawNextAction.actionId || rawNextAction.type))
+    ? {
+        ...rawNextAction,
+        title: rawNextAction.title || "Execute Recommended Action",
+        reason: rawNextAction.reason || rawNextAction.description || "High-priority career optimization item based on your active context.",
+      }
+    : defaultNextAction;
 
   // Resolve target URL for Next Best Action
   const getNextActionUrl = (action: any) => {
-    if (!action) return "/dna";
-    if (action.targetUrl) return action.targetUrl;
+    if (!action) return "/resume";
+    if (action.targetUrl && action.targetUrl !== "/dna") return action.targetUrl;
+
     const type = (action.type || "").toLowerCase();
     const title = (action.title || "").toLowerCase();
+    const actionId = (action.actionId || "").toLowerCase();
+    const reason = (action.reason || "").toLowerCase();
 
-    if (type === "resume" || title.includes("resume")) return "/resume";
-    if (type === "github" || type === "project" || type === "portfolio" || title.includes("github") || title.includes("portfolio") || title.includes("project")) return "/portfolio";
-    if (type === "interview" || title.includes("interview")) return "/interview";
-    if (type === "roadmap" || title.includes("roadmap")) return "/roadmap";
-    if (type === "application" || type === "applications" || title.includes("application") || title.includes("job")) return "/applications";
-    return "/dna";
+    if (type === "resume" || title.includes("resume") || actionId.includes("resume") || reason.includes("resume")) return "/resume";
+    if (type === "github" || type === "project" || type === "portfolio" || title.includes("github") || title.includes("portfolio") || title.includes("project") || actionId.includes("github") || actionId.includes("portfolio") || actionId.includes("project")) return "/portfolio";
+    if (type === "interview" || title.includes("interview") || actionId.includes("interview") || reason.includes("interview")) return "/interview";
+    if (type === "roadmap" || type === "learning" || title.includes("roadmap") || title.includes("module") || title.includes("skill") || actionId.includes("roadmap") || actionId.includes("learning")) return "/roadmap";
+    if (type === "application" || type === "applications" || title.includes("application") || title.includes("job") || actionId.includes("application") || actionId.includes("job")) return "/applications";
+
+    return "/resume";
   };
 
   // Real strengths derived from profile + GitHub developer profile + resume
@@ -306,16 +326,15 @@ function CareerDnaContent() {
 
   // Executive Analytics Calculations
   const healthMetrics = useMemo(() => {
-    if (!analyticsData) return [];
     return [
-      { name: "Resume ATS", score: analyticsData.resumeScore, status: (analyticsData.resumeScore ?? 0) >= 80 ? "Green" : (analyticsData.resumeScore ?? 0) >= 70 ? "Yellow" : "Red" },
-      { name: "Portfolio Health", score: analyticsData.developerScore, status: (analyticsData.developerScore ?? 0) >= 80 ? "Green" : (analyticsData.developerScore ?? 0) >= 70 ? "Yellow" : "Red" },
-      { name: "Live Projects", score: analyticsData.projectScore, status: (analyticsData.projectScore ?? 0) >= 80 ? "Green" : (analyticsData.projectScore ?? 0) >= 70 ? "Yellow" : "Red" },
-      { name: "Mock Interview", score: analyticsData.interviewScore, status: (analyticsData.interviewScore ?? 0) >= 80 ? "Green" : (analyticsData.interviewScore ?? 0) >= 70 ? "Yellow" : "Red" },
-      { name: "Roadmap Mastery", score: analyticsData.roadmapScore, status: (analyticsData.roadmapScore ?? 0) >= 80 ? "Green" : (analyticsData.roadmapScore ?? 0) >= 50 ? "Yellow" : "Red" },
-      { name: "Consistency Streak", score: (analyticsData.streakDays ?? 0) >= 5 ? 90 : (analyticsData.streakDays ?? 0) >= 3 ? 70 : 40, status: (analyticsData.streakDays ?? 0) >= 5 ? "Green" : (analyticsData.streakDays ?? 0) >= 3 ? "Yellow" : "Red" },
-    ].filter(metric => metric.score != null);
-  }, [analyticsData]);
+      { name: "Resume ATS", score: analyticsData?.resumeScore ?? stats?.breakdown?.resume ?? 0, status: (analyticsData?.resumeScore ?? stats?.breakdown?.resume ?? 0) >= 80 ? "Green" : (analyticsData?.resumeScore ?? stats?.breakdown?.resume ?? 0) >= 70 ? "Yellow" : "Red" },
+      { name: "GitHub Health", score: analyticsData?.developerScore ?? stats?.breakdown?.github ?? 0, status: (analyticsData?.developerScore ?? stats?.breakdown?.github ?? 0) >= 80 ? "Green" : (analyticsData?.developerScore ?? stats?.breakdown?.github ?? 0) >= 70 ? "Yellow" : "Red" },
+      { name: "Live Projects", score: analyticsData?.projectScore ?? stats?.breakdown?.projects ?? 0, status: (analyticsData?.projectScore ?? stats?.breakdown?.projects ?? 0) >= 80 ? "Green" : (analyticsData?.projectScore ?? stats?.breakdown?.projects ?? 0) >= 70 ? "Yellow" : "Red" },
+      { name: "Interview Readiness", score: analyticsData?.interviewScore ?? stats?.breakdown?.interview ?? 0, status: (analyticsData?.interviewScore ?? stats?.breakdown?.interview ?? 0) >= 80 ? "Green" : (analyticsData?.interviewScore ?? stats?.breakdown?.interview ?? 0) >= 70 ? "Yellow" : "Red" },
+      { name: "Roadmap Mastery", score: analyticsData?.roadmapScore ?? stats?.breakdown?.learning ?? 0, status: (analyticsData?.roadmapScore ?? stats?.breakdown?.learning ?? 0) >= 80 ? "Green" : (analyticsData?.roadmapScore ?? stats?.breakdown?.learning ?? 0) >= 50 ? "Yellow" : "Red" },
+      { name: "Consistency Streak", score: (analyticsData?.streakDays ?? 0) >= 5 ? 90 : (analyticsData?.streakDays ?? 0) >= 3 ? 70 : 40, status: (analyticsData?.streakDays ?? 0) >= 5 ? "Green" : (analyticsData?.streakDays ?? 0) >= 3 ? "Yellow" : "Red" },
+    ];
+  }, [analyticsData, stats]);
 
   const benchmarkStatus = useMemo(() => {
     const score = overallScore;
@@ -343,16 +362,24 @@ function CareerDnaContent() {
     checkins: val
   }));
 
-  const radarData = (analyticsData?.skillsDistribution || [
-    { category: "Frontend", rating: 75 },
-    { category: "Backend", rating: 80 },
-    { category: "Database", rating: 70 },
-    { category: "DevOps", rating: 65 },
-    { category: "Testing", rating: 60 }
-  ]).map(s => ({
-    skill: s.category,
-    val: s.rating
-  }));
+  const radarData = useMemo(() => {
+    if (analyticsData?.skillsDistribution && analyticsData.skillsDistribution.length > 0) {
+      return analyticsData.skillsDistribution.map(s => ({ skill: s.category, val: s.rating }));
+    }
+    if (possessedSkills.length > 0) {
+      const catCount: Record<string, number> = {};
+      possessedSkills.forEach(s => {
+        catCount[s.category] = (catCount[s.category] || 0) + 1;
+      });
+      return Object.entries(catCount).map(([category, count]) => ({
+        skill: category.toUpperCase(),
+        val: Math.min(100, count * 25)
+      }));
+    }
+    return [];
+  }, [analyticsData, possessedSkills]);
+
+  const hasRadarData = radarData.length > 0 && radarData.some(s => s.val > 0);
 
   return (
     <PageTransition className="space-y-6 pb-12">
@@ -392,7 +419,7 @@ function CareerDnaContent() {
               }`}
             >
               <Activity className="w-3.5 h-3.5" />
-              <span>Analytics & Telemetry</span>
+              <span>Career Analytics</span>
             </button>
           </div>
         </div>
@@ -425,7 +452,7 @@ function CareerDnaContent() {
                   </div>
                 </div>
 
-                {/* Benchmark positioning bar */}
+                {/* Benchmark Indicator Cards */}
                 <div className="space-y-2.5 pt-2.5 border-t border-border/40 text-xs">
                   <span className="text-[10px] text-muted font-bold uppercase tracking-wider block">Market Positioning Benchmarks</span>
                   
@@ -448,9 +475,24 @@ function CareerDnaContent() {
                     </div>
                   </div>
 
-                  <p className="text-[10px] text-muted leading-relaxed bg-accent/5 p-2.5 rounded-xl border border-border/40">
-                    Your Current Score (<strong className="text-foreground">{overallScore}</strong>) positions you in the <strong className="text-primary font-bold">{benchmarkStatus.label}</strong> tier. You need <strong className="text-foreground">{benchmarkStatus.diff} points</strong> to reach: <span className="font-semibold text-foreground">{benchmarkStatus.next}</span>.
-                  </p>
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                    <div className="bg-card border border-border p-2.5 rounded-xl space-y-0.5">
+                      <span className="text-[9px] text-muted font-bold uppercase block">Current Score</span>
+                      <span className="text-sm font-extrabold text-foreground">{overallScore} / 100</span>
+                    </div>
+                    <div className="bg-card border border-border p-2.5 rounded-xl space-y-0.5">
+                      <span className="text-[9px] text-muted font-bold uppercase block">Current Tier</span>
+                      <span className="text-sm font-extrabold text-primary">{benchmarkStatus.label}</span>
+                    </div>
+                    <div className="bg-card border border-border p-2.5 rounded-xl space-y-0.5">
+                      <span className="text-[9px] text-muted font-bold uppercase block">Next Benchmark</span>
+                      <span className="text-sm font-extrabold text-foreground">{benchmarkStatus.next}</span>
+                    </div>
+                    <div className="bg-card border border-border p-2.5 rounded-xl space-y-0.5">
+                      <span className="text-[9px] text-muted font-bold uppercase block">Points Needed</span>
+                      <span className="text-sm font-extrabold text-warning">{benchmarkStatus.diff ? `${benchmarkStatus.diff} pts remaining` : "Achieved"}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </Card>
@@ -558,37 +600,49 @@ function CareerDnaContent() {
                   <p className="text-sm font-bold text-foreground mt-1">Strengths Balance Radar</p>
                 </div>
 
-                <div className="h-60 w-full flex items-center justify-center relative">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                      <PolarGrid stroke="var(--border)" />
-                      <PolarAngleAxis dataKey="skill" stroke="var(--muted)" fontSize={10} />
-                      <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} stroke="var(--border)" />
-                      <Radar
-                        name="Skills Rating"
-                        dataKey="val"
-                        stroke="var(--secondary)"
-                        fill="var(--secondary)"
-                        fillOpacity={0.25}
-                      />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Proficiency Progress Bars */}
-                <div className="space-y-2 mt-2 pt-2 border-t border-border/40">
-                  {radarData.slice(0, 4).map((s) => (
-                    <div key={s.skill} className="space-y-1">
-                      <div className="flex justify-between text-[11px]">
-                        <span className="font-semibold text-foreground">{s.skill}</span>
-                        <span className="text-muted font-bold">{s.val}%</span>
-                      </div>
-                      <div className="h-1.5 w-full bg-accent/20 rounded-full overflow-hidden">
-                        <div className="h-full bg-secondary transition-all duration-300" style={{ width: `${s.val}%` }} />
-                      </div>
+                {hasRadarData ? (
+                  <>
+                    <div className="h-60 w-full flex items-center justify-center relative">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                          <PolarGrid stroke="var(--border)" />
+                          <PolarAngleAxis dataKey="skill" stroke="var(--muted)" fontSize={10} />
+                          <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} stroke="var(--border)" />
+                          <Radar
+                            name="Skills Rating"
+                            dataKey="val"
+                            stroke="var(--secondary)"
+                            fill="var(--secondary)"
+                            fillOpacity={0.25}
+                          />
+                        </RadarChart>
+                      </ResponsiveContainer>
                     </div>
-                  ))}
-                </div>
+
+                    {/* Proficiency Progress Bars */}
+                    <div className="space-y-2 mt-2 pt-2 border-t border-border/40">
+                      {radarData.slice(0, 4).map((s) => (
+                        <div key={s.skill} className="space-y-1">
+                          <div className="flex justify-between text-[11px]">
+                            <span className="font-semibold text-foreground">{s.skill}</span>
+                            <span className="text-muted font-bold">{s.val}%</span>
+                          </div>
+                          <div className="h-1.5 w-full bg-accent/20 rounded-full overflow-hidden">
+                            <div className="h-full bg-secondary transition-all duration-300" style={{ width: `${s.val}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="h-60 w-full flex flex-col items-center justify-center border border-dashed border-border rounded-2xl p-6 text-center space-y-2 bg-accent/5 my-auto">
+                    <BarChart3 className="w-8 h-8 text-muted opacity-50" />
+                    <h4 className="text-xs font-bold text-foreground">Not enough skill evidence yet</h4>
+                    <p className="text-[11px] text-muted max-w-xs">
+                      Add skills in your Skills Inventory, upload a resume, or connect GitHub to generate your strengths balance radar.
+                    </p>
+                  </div>
+                )}
               </Card>
             </div>
           </div>
@@ -775,25 +829,19 @@ function CareerDnaContent() {
                   </div>
 
                   {/* Next Best Action Highlight */}
-                  {nextAction ? (
-                    <div className="p-3.5 bg-card border border-primary/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="space-y-0.5 min-w-0 flex-1">
-                        <span className="text-[9px] font-bold text-primary uppercase tracking-wider block">Recommended Next Best Action</span>
-                        <h4 className="text-xs font-bold text-foreground truncate">{nextAction.title}</h4>
-                        <p className="text-[10px] text-muted line-clamp-1">{nextAction.reason || nextAction.description}</p>
-                      </div>
-                      <Link href={getNextActionUrl(nextAction)}>
-                        <Button variant="ai" size="sm" className="shrink-0 text-xs font-bold cursor-pointer">
-                          <span>Execute Action</span>
-                          <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                        </Button>
-                      </Link>
+                  <div className="p-3.5 bg-card border border-primary/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5 min-w-0 flex-1">
+                      <span className="text-[9px] font-bold text-primary uppercase tracking-wider block">Recommended Next Best Action</span>
+                      <h4 className="text-xs font-bold text-foreground truncate">{activeNextAction.title}</h4>
+                      <p className="text-[10px] text-muted line-clamp-1">{activeNextAction.reason || activeNextAction.description}</p>
                     </div>
-                  ) : (
-                    <div className="p-3 bg-card border border-border rounded-xl text-xs text-muted flex items-center justify-between">
-                      <span>Add career evidence (resume or GitHub) to unlock next best action recommendations.</span>
-                    </div>
-                  )}
+                    <Link href={getNextActionUrl(activeNextAction)}>
+                      <Button variant="ai" size="sm" className="shrink-0 text-xs font-bold cursor-pointer">
+                        <span>Execute Action</span>
+                        <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                      </Button>
+                    </Link>
+                  </div>
                 </Card>
               </StaggerItem>
             </div>
@@ -839,7 +887,7 @@ function CareerDnaContent() {
                   </div>
                 </div>
                 <div className="flex bg-accent rounded-xl p-1">
-                  {(["All", "Verified", "Claimed"] as const).map(tab => (
+                  {(["All", "Verified"] as const).map(tab => (
                     <button
                       key={tab}
                       onClick={() => setActiveTab(tab)}
@@ -916,11 +964,6 @@ function CareerDnaContent() {
                           {skill.isVerified && (
                             <span className="px-1.5 py-0.2 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[8px] font-bold uppercase" title="Evidence-supported from resume/GitHub">
                               Verified
-                            </span>
-                          )}
-                          {!skill.isVerified && skill.isPossessed && (
-                            <span className="px-1.5 py-0.2 rounded-md bg-accent text-muted border border-border text-[8px] font-bold uppercase" title="Claimed in skill inventory">
-                              Claimed
                             </span>
                           )}
                         </div>

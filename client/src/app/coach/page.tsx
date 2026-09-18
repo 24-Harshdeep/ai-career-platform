@@ -7,7 +7,8 @@ import MessageBubble from "@/components/coach/MessageBubble";
 import PromptSuggestions from "@/components/coach/PromptSuggestions";
 import Card from "@/components/ui/Card/Card";
 import Button from "@/components/ui/Button/Button";
-import { Send, Brain } from "lucide-react";
+import { Send, Brain, Plus } from "lucide-react";
+import { clsx } from "clsx";
 import PoweredBy from "@/components/ui/PoweredBy";
 import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
 import PageHeader from "@/components/ui/PageHeader";
@@ -17,12 +18,17 @@ function CoachChatContent() {
   const fromPath = searchParams.get("from") || "/dashboard";
 
   const chatHistory = useCareerStore((state) => state.chatHistory);
+  const activeSessionId = useCareerStore((state) => state.activeSessionId);
+  const chatSessions = useCareerStore((state) => state.chatSessions);
   const sendCoachMessage = useCareerStore((state) => state.sendCoachMessage);
+  const fetchCoachSessions = useCareerStore((state) => state.fetchCoachSessions);
   const fetchCoachHistory = useCareerStore((state) => state.fetchCoachHistory);
+  const startNewChatSession = useCareerStore((state) => state.startNewChatSession);
 
   useEffect(() => {
+    fetchCoachSessions();
     fetchCoachHistory();
-  }, [fetchCoachHistory]);
+  }, [fetchCoachSessions, fetchCoachHistory]);
 
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -168,24 +174,46 @@ function CoachChatContent() {
 
           {/* Past Conversations Card */}
           <Card className="p-4 bg-card border-border/80 shadow-sm flex-1 flex flex-col space-y-3 min-h-0">
-            <div className="border-b border-border pb-2">
+            <div className="border-b border-border pb-2 flex items-center justify-between">
               <span className="text-[11px] font-bold text-foreground uppercase tracking-wider block">Conversation History</span>
+              <button
+                type="button"
+                onClick={() => startNewChatSession()}
+                className="flex items-center gap-1 text-[10px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                title="Start a new chat thread"
+              >
+                <Plus className="w-3 h-3" />
+                <span>New Chat</span>
+              </button>
             </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 text-xs pr-1">
-              {chatHistory && chatHistory.length > 1 ? (
-                chatHistory.filter(m => m.sender === "user").map((msg) => (
-                  <div 
-                    key={msg.id} 
-                    onClick={() => handleSendMessage(msg.text)}
-                    className="p-2 bg-accent/10 border border-border/40 rounded-lg hover:border-primary/30 cursor-pointer hover:bg-accent/20 transition-all"
-                  >
-                    <p className="font-semibold text-foreground truncate">{msg.text}</p>
-                    <p className="text-[10px] text-muted-foreground">{msg.timestamp}</p>
-                  </div>
-                ))
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 text-xs pr-1">
+              {chatSessions && chatSessions.length > 0 ? (
+                chatSessions.map((session) => {
+                  const isActive = session.sessionId === activeSessionId;
+                  return (
+                    <div
+                      key={session.sessionId}
+                      onClick={() => fetchCoachHistory(session.sessionId)}
+                      className={clsx(
+                        "p-2.5 rounded-lg cursor-pointer transition-all border text-xs flex flex-col space-y-1",
+                        isActive
+                          ? "bg-primary/15 border-primary/40 text-foreground font-medium shadow-sm"
+                          : "bg-accent/10 border-border/40 text-muted-foreground hover:bg-accent/20 hover:border-primary/20 hover:text-foreground"
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="font-semibold text-foreground truncate">{session.title}</span>
+                        <span className="text-[10px] text-muted-foreground shrink-0">{session.formattedDate}</span>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {session.messageCount} {session.messageCount === 1 ? "prompt" : "prompts"}
+                      </div>
+                    </div>
+                  );
+                })
               ) : (
-                <div className="text-[11px] text-muted py-4 text-center">
-                  No past chats yet. Ask a question to start.
+                <div className="text-[11px] text-muted-foreground py-6 text-center">
+                  No past chats yet. Click "+ New Chat" to start.
                 </div>
               )}
             </div>

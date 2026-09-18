@@ -15,109 +15,97 @@ import {
   Zap,
   Layout,
   Gauge,
-  ZoomIn,
-  ZoomOut,
   Printer,
   Download,
-  RefreshCw,
   Plus,
   Trash2,
-  BookOpen,
-  GitBranch,
-  Settings,
-  ChevronDown,
-  ChevronUp,
-  Cpu,
   ShieldCheck,
   Check,
-  Copy,
   ArrowRight,
-  ListFilter
+  ArrowLeft,
+  ExternalLink,
+  Briefcase,
+  GraduationCap,
+  FolderGit2,
+  Award,
+  Layers,
+  Search,
+  CheckSquare,
+  X,
+  Edit3,
+  Link as LinkIcon,
+  Globe,
+  MapPin,
+  Calendar,
+  UserCheck
 } from "lucide-react";
-import { API_BASE_URL } from "@/lib/api";
-import PoweredBy from "@/components/ui/PoweredBy";
 import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
 import PageHeader from "@/components/ui/PageHeader";
 
-type WizardStep = "upload" | "review" | "analysis" | "generating" | "editor";
+type WizardStep = "scan" | "ats" | "review" | "job_match" | "suggestions" | "builder";
 
 export default function ResumePage() {
   const resumeAnalysis = useCareerStore((state) => state.resumeAnalysis);
   const fetchResumeAnalysis = useCareerStore((state) => state.fetchResumeAnalysis);
   const uploadResume = useCareerStore((state) => state.uploadResume);
   const saveResumeEdits = useCareerStore((state) => state.saveResumeEdits);
-  const forkResumeVersion = useCareerStore((state) => state.forkResumeVersion);
-  const restoreResumeVersion = useCareerStore((state) => state.restoreResumeVersion);
-  const getCrossSyncSuggestions = useCareerStore((state) => state.getCrossSyncSuggestions);
   const optimizeResume = useCareerStore((state) => state.optimizeResume);
-  const addNotification = useCareerStore((state) => state.addNotification);
   const reviewChangeLog = useCareerStore((state) => state.reviewChangeLog);
   const applyChangeLogs = useCareerStore((state) => state.applyChangeLogs);
+  const addNotification = useCareerStore((state) => state.addNotification);
 
-  // Wizard state machine
-  const [wizardStep, setWizardStep] = useState<WizardStep>("upload");
-  
-  // File pick references
+  // Guided wizard step state machine
+  const [wizardStep, setWizardStep] = useState<WizardStep>("scan");
+
+  // File upload & scanning state
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [scanProgress, setScanProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatusText, setUploadStatusText] = useState("");
 
-  // Form editable states
+  // Verified Resume Data State
   const [formState, setFormState] = useState<ResumeVersionContent | null>(null);
-  const [editorTab, setEditorTab] = useState<"summary" | "work" | "projects" | "skills" | "education" | "achievements" | "certifications" | "cover">("summary");
 
-  // Advanced customization toggle (collapsible advanced panel)
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  // Change log editing inline state
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [editingLogText, setEditingLogText] = useState("");
 
-  // Optimization targets
+  // Optional Job Description Matching
   const [targetGoal, setTargetGoal] = useState("ATS Optimization");
   const [targetDescription, setTargetDescription] = useState("");
-  const [forkTitle, setForkTitle] = useState("");
-  const [showForkModal, setShowForkModal] = useState(false);
+  const [isAnalyzingJd, setIsAnalyzingJd] = useState(false);
+  const [jdOptimizationResult, setJdOptimizationResult] = useState<any>(null);
 
-  // Canvas Styles (Canva customizations)
-  const [canvasZoom, setCanvasZoom] = useState(100);
-  const [canvasFont, setCanvasFont] = useState("sans"); // sans, serif, mono
-  const [canvasSpacing, setCanvasSpacing] = useState("normal"); // tight, normal, loose
-  const [canvasMargin, setCanvasMargin] = useState("normal"); // tight, normal, wide
-  const [canvasColor, setCanvasColor] = useState("indigo"); // indigo, emerald, amber, slate
-  const [canvasSize, setCanvasSize] = useState("a4"); // a4, letter
+  // Resume Builder Canvas Settings
+  const [selectedTemplate, setSelectedTemplate] = useState<"minimal" | "executive">("minimal");
+  const [fontFamily, setFontFamily] = useState<"sans" | "serif" | "mono">("sans");
 
-  // Cross sync and fact check states
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [factCheckList, setFactCheckList] = useState<any[]>([]);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  // A4 Page Model & Pagination Indicator
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [pageCount, setPageCount] = useState<number>(1);
 
-  // Wizard generating steps simulation list
-  const [genPhase, setGenPhase] = useState(0);
+  useEffect(() => {
+    if (wizardStep === "builder" && previewRef.current) {
+      const contentH = previewRef.current.scrollHeight;
+      // Standard A4 height at 96 DPI is ~1122.5px
+      const pages = Math.max(1, Math.ceil((contentH - 5) / 1122));
+      setPageCount(pages);
+    }
+  }, [formState, selectedTemplate, wizardStep, fontFamily]);
 
   // Load initial analysis from database on mount
   useEffect(() => {
     fetchResumeAnalysis();
   }, [fetchResumeAnalysis]);
 
-  // Handle routing step based on resume analysis load state
+  // Sync state when resumeAnalysis updates
   useEffect(() => {
-    if (resumeAnalysis) {
-      // If we already have a customized/optimized version, jump straight to editor
-      if (resumeAnalysis.activeVersionId > 1) {
-        setWizardStep("editor");
-      } else {
-        // If it's a raw parse and user hasn't confirmed it yet, show the review step
+    if (resumeAnalysis && resumeAnalysis.activeVersionContent) {
+      setFormState(JSON.parse(JSON.stringify(resumeAnalysis.activeVersionContent)));
+      if (wizardStep === "scan" && resumeAnalysis.atsScore) {
         setWizardStep("review");
       }
-      setFormState(JSON.parse(JSON.stringify(resumeAnalysis.activeVersionContent)));
-      loadCrossSync();
-    } else {
-      setWizardStep("upload");
     }
   }, [resumeAnalysis]);
-
-  const loadCrossSync = async () => {
-    setLoadingSuggestions(true);
-    const data = await getCrossSyncSuggestions();
-    setSuggestions(data || []);
-    setLoadingSuggestions(false);
-  };
 
   const handleBoxClick = () => {
     fileInputRef.current?.click();
@@ -127,252 +115,328 @@ export default function ResumePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setWizardStep("upload");
-    setScanProgress(15);
-
-    const interval = setInterval(() => {
-      setScanProgress((prev) => (prev < 90 ? prev + 15 : prev));
-    }, 150);
+    setIsUploading(true);
+    setUploadStatusText("Uploading document...");
 
     try {
+      setUploadStatusText("Extracting text buffer, PDF annotations & hyperlinks...");
       const success = await uploadResume(file);
-      clearInterval(interval);
 
       if (success) {
-        setScanProgress(100);
-        addNotification("Resume uploaded and parsed successfully!", "success");
-
-        const latestAnalysis = useCareerStore.getState().resumeAnalysis;
-        if (latestAnalysis) {
-          setFormState(JSON.parse(JSON.stringify(latestAnalysis.activeVersionContent)));
-          if (latestAnalysis.activeVersionId > 1) {
-            setWizardStep("editor");
-          } else {
-            setWizardStep("review");
-          }
-        } else {
-          setWizardStep("review");
-        }
+        addNotification("Resume uploaded and parsed successfully! Links & credentials extracted.", "success");
+        setWizardStep("ats");
       } else {
-        setWizardStep("upload");
-        setScanProgress(0);
-        addNotification("Failed to analyze resume. Make sure it is a valid PDF or TXT document.", "warning");
+        addNotification("Failed to parse resume file. Supported formats: PDF, DOCX, TXT.", "warning");
       }
-    } catch (err) {
-      clearInterval(interval);
-      console.error("Resume upload failed:", err);
-      setWizardStep("upload");
-      setScanProgress(0);
-      addNotification("Upload failed.", "warning");
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      addNotification(`Upload failed: ${err.message || "Unknown error"}`, "warning");
     } finally {
+      setIsUploading(false);
+      setUploadStatusText("");
       if (e.target) {
         e.target.value = "";
       }
     }
   };
 
-  const proceedToAnalysisStep = async () => {
-    if (formState) {
-      await saveResumeEdits(formState);
-      setWizardStep("analysis");
-      addNotification("Parsed structure verified!", "success");
-    }
-  };
-
-  const triggerWizardOptimization = async () => {
-    setWizardStep("generating");
-    setGenPhase(0);
-
-    // Simulate progress check logs for magical look
-    const phaseInt = setInterval(() => {
-      setGenPhase(prev => Math.min(prev + 1, 5));
-    }, 900);
-
-    const result = await optimizeResume(targetGoal, targetDescription);
-    clearInterval(phaseInt);
-
-    if (result) {
-      addNotification(`AI Optimization Complete! Please review pending changes.`, "success");
-      if (result.unquantifiedStatements && result.unquantifiedStatements.length > 0) {
-        setFactCheckList(result.unquantifiedStatements);
-      }
-      setWizardStep("editor");
-    } else {
-      setWizardStep("analysis");
-      addNotification("AI Optimization call failed. Please check credentials.", "warning");
-    }
-  };
-
-  const handleApplyLogs = async () => {
-    const success = await applyChangeLogs(targetGoal);
-    if (success) {
-      addNotification("Changes applied and new version created!", "success");
-      if (resumeAnalysis?.activeVersionContent) {
-        setFormState(JSON.parse(JSON.stringify(resumeAnalysis.activeVersionContent)));
-      }
-    } else {
-      addNotification("Failed to apply changes.", "warning");
-    }
-  };
-
-  // Form value change handlers
+  // Handlers for Personal Info & Summary
   const handlePersonalInfoChange = (field: string, val: string) => {
     if (!formState) return;
-    const updated = { ...formState };
-    updated.personalInfo = { ...updated.personalInfo, [field]: val };
-    setFormState(updated);
-    saveResumeEdits(updated);
+    setFormState({
+      ...formState,
+      personalInfo: { ...formState.personalInfo, [field]: val }
+    });
   };
 
   const handleSummaryChange = (val: string) => {
     if (!formState) return;
-    const updated = { ...formState, summary: val };
-    setFormState(updated);
-    saveResumeEdits(updated);
+    setFormState({ ...formState, summary: val });
   };
 
+  // Work Experience Handlers
   const handleWorkChange = (index: number, field: string, val: any) => {
     if (!formState) return;
-    const updated = { ...formState };
-    updated.workExperience[index] = { ...updated.workExperience[index], [field]: val };
-    setFormState(updated);
-    saveResumeEdits(updated);
-  };
-
-  const handleProjectChange = (index: number, field: string, val: any) => {
-    if (!formState) return;
-    const updated = { ...formState };
-    updated.projects[index] = { ...updated.projects[index], [field]: val };
-    setFormState(updated);
-    saveResumeEdits(updated);
-  };
-
-  const handleSkillsChange = (category: string, listStr: string) => {
-    if (!formState) return;
-    const updated = { ...formState };
-    const arr = listStr.split(",").map(s => s.trim()).filter(Boolean);
-    updated.skills = { ...updated.skills, [category]: arr };
-    setFormState(updated);
-    saveResumeEdits(updated);
-  };
-
-  const handleEducationChange = (index: number, field: string, val: string) => {
-    if (!formState) return;
-    const updated = { ...formState };
-    updated.education[index] = { ...updated.education[index], [field]: val };
-    setFormState(updated);
-    saveResumeEdits(updated);
+    const updatedWork = [...formState.workExperience];
+    updatedWork[index] = { ...updatedWork[index], [field]: val };
+    setFormState({ ...formState, workExperience: updatedWork });
   };
 
   const addWorkEntry = () => {
     if (!formState) return;
-    const updated = { ...formState };
-    updated.workExperience.push({
-      company: "New Company",
-      position: "Role Title",
-      location: "Remote",
-      startDate: "",
-      endDate: "",
-      description: "",
-      bulletPoints: ["Accomplished target milestone."]
+    setFormState({
+      ...formState,
+      workExperience: [
+        ...formState.workExperience,
+        {
+          company: "Company Name",
+          position: "Job Title",
+          location: "",
+          startDate: "",
+          endDate: "",
+          currentlyWorking: false,
+          description: "",
+          bulletPoints: ["Engineered scalable solution using modern technologies."],
+          experienceUrl: ""
+        }
+      ]
     });
-    setFormState(updated);
-    saveResumeEdits(updated);
   };
 
   const deleteWorkEntry = (idx: number) => {
     if (!formState) return;
-    const updated = { ...formState };
-    updated.workExperience.splice(idx, 1);
-    setFormState(updated);
-    saveResumeEdits(updated);
+    setFormState({
+      ...formState,
+      workExperience: formState.workExperience.filter((_, i) => i !== idx)
+    });
+  };
+
+  // Education Handlers
+  const handleEducationChange = (index: number, field: string, val: any) => {
+    if (!formState) return;
+    const updatedEdu = [...(formState.education || [])];
+    updatedEdu[index] = { ...updatedEdu[index], [field]: val };
+    setFormState({ ...formState, education: updatedEdu });
+  };
+
+  const addEducationEntry = () => {
+    if (!formState) return;
+    setFormState({
+      ...formState,
+      education: [
+        ...(formState.education || []),
+        {
+          institution: "University / Institute Name",
+          degree: "Bachelor of Technology",
+          fieldOfStudy: "Computer Science & Engineering",
+          major: "Computer Science",
+          location: "",
+          startDate: "",
+          endDate: "",
+          currentlyStudying: false,
+          gpa: "",
+          description: "",
+          institutionUrl: ""
+        }
+      ]
+    });
+  };
+
+  const deleteEducationEntry = (idx: number) => {
+    if (!formState) return;
+    setFormState({
+      ...formState,
+      education: (formState.education || []).filter((_, i) => i !== idx)
+    });
+  };
+
+  // Project Handlers
+  const handleProjectChange = (index: number, field: string, val: any) => {
+    if (!formState) return;
+    const updatedProjects = [...formState.projects];
+    updatedProjects[index] = { ...updatedProjects[index], [field]: val };
+    setFormState({ ...formState, projects: updatedProjects });
   };
 
   const addProjectEntry = () => {
     if (!formState) return;
-    const updated = { ...formState };
-    updated.projects.push({
-      title: "New Project",
-      technologies: [],
-      description: "",
-      bulletPoints: ["Implemented core features."],
-      link: ""
+    setFormState({
+      ...formState,
+      projects: [
+        ...formState.projects,
+        {
+          title: "New Project",
+          technologies: [],
+          description: "",
+          bulletPoints: ["Architected full stack web service."],
+          link: "",
+          githubUrl: "",
+          liveUrl: "",
+          startDate: "",
+          endDate: ""
+        }
+      ]
     });
-    setFormState(updated);
-    saveResumeEdits(updated);
   };
 
   const deleteProjectEntry = (idx: number) => {
     if (!formState) return;
-    const updated = { ...formState };
-    updated.projects.splice(idx, 1);
-    setFormState(updated);
-    saveResumeEdits(updated);
+    setFormState({
+      ...formState,
+      projects: formState.projects.filter((_, i) => i !== idx)
+    });
   };
 
-  const triggerRewriteBullet = async (sectionType: "work" | "project", index: number, bulletIdx: number) => {
+  // Skills Handlers
+  const handleSkillsChange = (category: string, listStr: string) => {
+    if (!formState || !formState.skills) return;
+    const arr = listStr.split(",").map(s => s.trim()).filter(Boolean);
+    setFormState({
+      ...formState,
+      skills: { ...formState.skills, [category]: arr }
+    });
+  };
+
+  // Certification Handlers
+  const handleCertificationChange = (index: number, field: string, val: string) => {
     if (!formState) return;
-    const textToRewrite = sectionType === "work" 
-      ? formState.workExperience[index].bulletPoints[bulletIdx]
-      : formState.projects[index].bulletPoints[bulletIdx];
-      
-    addNotification("AI is rewriting bullet point...", "info");
-    
-    const prompt = `Rewrite this single resume bullet point for a developer targeting ${targetGoal}. Use a strong action verb, emphasize tech, keep it 100% factual.
-Bullet: "${textToRewrite}"
-Respond with only the rewritten text, no commentary.`;
-    
+    const updatedCerts = [...(formState.certifications || [])];
+    updatedCerts[index] = { ...updatedCerts[index], [field]: val } as any;
+    setFormState({ ...formState, certifications: updatedCerts });
+  };
+
+  const addCertificationEntry = () => {
+    if (!formState) return;
+    setFormState({
+      ...formState,
+      certifications: [
+        ...(formState.certifications || []),
+        { name: "New Certification", issuer: "", issueDate: "", credentialId: "", credentialUrl: "", evidenceText: "", source: "user", confidence: 100, isRelevant: true }
+      ]
+    });
+  };
+
+  const deleteCertificationEntry = (idx: number) => {
+    if (!formState) return;
+    setFormState({
+      ...formState,
+      certifications: (formState.certifications || []).filter((_, i) => i !== idx)
+    });
+  };
+
+  // Achievements Handlers
+  const handleAchievementChange = (idx: number, val: string) => {
+    if (!formState) return;
+    const updated = [...(formState.achievements || [])];
+    updated[idx] = val;
+    setFormState({ ...formState, achievements: updated });
+  };
+
+  const addAchievementEntry = () => {
+    if (!formState) return;
+    setFormState({
+      ...formState,
+      achievements: [...(formState.achievements || []), "Awarded top performer in regional engineering hackathon."]
+    });
+  };
+
+  const deleteAchievementEntry = (idx: number) => {
+    if (!formState) return;
+    setFormState({
+      ...formState,
+      achievements: (formState.achievements || []).filter((_, i) => i !== idx)
+    });
+  };
+
+  // Leadership Handlers
+  const handleLeadershipChange = (idx: number, field: string, val: any) => {
+    if (!formState) return;
+    const updated = [...(formState.leadership || [])];
+    updated[idx] = { ...updated[idx], [field]: val } as any;
+    setFormState({ ...formState, leadership: updated });
+  };
+
+  const addLeadershipEntry = () => {
+    if (!formState) return;
+    setFormState({
+      ...formState,
+      leadership: [
+        ...(formState.leadership || []),
+        { title: "Technical Coordinator", organization: "Computer Society Chapter", location: "", startDate: "", endDate: "", description: "", bulletPoints: ["Coordinated tech symposium for 500+ participants."], url: "" }
+      ]
+    });
+  };
+
+  const deleteLeadershipEntry = (idx: number) => {
+    if (!formState) return;
+    setFormState({
+      ...formState,
+      leadership: (formState.leadership || []).filter((_, i) => i !== idx)
+    });
+  };
+
+  // Links Handlers
+  const handleLinkChange = (idx: number, field: string, val: string) => {
+    if (!formState) return;
+    const updated = [...(formState.links || [])];
+    updated[idx] = { ...updated[idx], [field]: val } as any;
+    setFormState({ ...formState, links: updated });
+  };
+
+  const addLinkEntry = () => {
+    if (!formState) return;
+    setFormState({
+      ...formState,
+      links: [
+        ...(formState.links || []),
+        { label: "Project Demo Link", url: "https://", type: "project", source: "user" }
+      ]
+    });
+  };
+
+  const deleteLinkEntry = (idx: number) => {
+    if (!formState) return;
+    setFormState({
+      ...formState,
+      links: (formState.links || []).filter((_, i) => i !== idx)
+    });
+  };
+
+  const handleSaveVerifiedEdits = async (nextStep: WizardStep = "job_match") => {
+    if (!formState) return;
+    const success = await saveResumeEdits(formState);
+    if (success) {
+      addNotification("Verified resume data saved to MongoDB & synced to CareerContext!", "success");
+      setWizardStep(nextStep);
+    } else {
+      addNotification("Failed to save resume edits.", "warning");
+    }
+  };
+
+  const handleAnalyzeJobDescription = async () => {
+    if (!targetDescription.trim()) {
+      addNotification("Please paste a job description first or click Skip.", "info");
+      return;
+    }
+
+    setIsAnalyzingJd(true);
+    addNotification("Analyzing resume match against target Job Description...", "info");
+
     try {
-      const token = localStorage.getItem("careeros_token");
-      const res = await fetch(`${API_BASE_URL}/coach/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ message: prompt, activePath: "/resume" })
-      });
-      if (res.ok) {
-        const payload = await res.json();
-        const rewrittenText = payload.data?.reply || payload.data?.response || payload.data;
-        
-        const updated = { ...formState };
-        if (sectionType === "work") {
-          updated.workExperience[index].bulletPoints[bulletIdx] = typeof rewrittenText === "string" ? rewrittenText : textToRewrite;
-        } else {
-          updated.projects[index].bulletPoints[bulletIdx] = typeof rewrittenText === "string" ? rewrittenText : textToRewrite;
-        }
-        setFormState(updated);
-        saveResumeEdits(updated);
-        addNotification("Bullet point optimized!", "success");
+      const result = await optimizeResume(targetGoal, targetDescription);
+      if (result) {
+        setJdOptimizationResult(result);
+        addNotification("Job Description Analysis Complete! AI Improvements generated.", "success");
+        setWizardStep("suggestions");
+      } else {
+        addNotification("Could not complete JD analysis.", "warning");
       }
-    } catch (e) {
-      addNotification("Could not contact rewrite agent.", "warning");
+    } catch (err) {
+      console.error("JD Analysis error:", err);
+      addNotification("JD analysis failed.", "warning");
+    } finally {
+      setIsAnalyzingJd(false);
     }
   };
 
-  const applyCrossSyncItem = (item: any) => {
-    if (!formState) return;
-    const updated = { ...formState };
-
-    if (item.action === "add_skill") {
-      const category = item.data.category as keyof typeof formState.skills;
-      const skillName = item.data.skill;
-      if (!updated.skills[category].includes(skillName)) {
-        updated.skills[category].push(skillName);
-        addNotification(`Added verified skill "${skillName}" to ${category}!`, "success");
-      }
-    } else if (item.action === "add_project") {
-      updated.projects.push({
-        title: item.data.title,
-        technologies: item.data.technologies,
-        description: item.data.description,
-        bulletPoints: ["Configured live repository structure and deployment pipelines."],
-        link: item.data.link
-      });
-      addNotification(`Added project "${item.data.title}" to resume!`, "success");
+  const handleLogAction = async (logId: string, status: "accepted" | "rejected" | "edited", editedText: string = "") => {
+    const ok = await reviewChangeLog(logId, status, editedText);
+    if (ok) {
+      addNotification(`Change suggestion marked as ${status}.`, "success");
+      setEditingLogId(null);
+    } else {
+      addNotification("Failed to update change log status.", "warning");
     }
+  };
 
-    setFormState(updated);
-    saveResumeEdits(updated);
-    setSuggestions(suggestions.filter(s => s.title !== item.title));
+  const handleApplyAllChanges = async () => {
+    const ok = await applyChangeLogs(targetGoal);
+    if (ok) {
+      addNotification("Accepted AI improvements applied to active resume!", "success");
+      setWizardStep("builder");
+    } else {
+      addNotification("Failed to apply change logs.", "warning");
+    }
   };
 
   const handlePrint = () => {
@@ -390,71 +454,60 @@ Respond with only the rewritten text, no commentary.`;
 
     setTimeout(() => {
       window.print();
-      
       if (sibling) {
         parent?.insertBefore(previewEl, sibling);
       } else {
         parent?.appendChild(previewEl);
       }
-      
       document.body.classList.remove("print-mode-active");
     }, 50);
   };
 
   const downloadMarkdown = () => {
     if (!formState) return;
-    const md = `# ${formState.personalInfo.name}
-${formState.personalInfo.email} | ${formState.personalInfo.phone} | ${formState.personalInfo.location}
-GitHub: ${formState.personalInfo.githubUrl} | LinkedIn: ${formState.personalInfo.linkedinUrl}
+    const md = `# ${formState.personalInfo.name || "Candidate Name"}
+${formState.personalInfo.email || ""} | ${formState.personalInfo.phone || ""} | ${formState.personalInfo.location || ""}
+GitHub: ${formState.personalInfo.githubUrl || "N/A"} | LinkedIn: ${formState.personalInfo.linkedinUrl || "N/A"} | Portfolio: ${formState.personalInfo.portfolioUrl || "N/A"}
 
-## Summary
-${formState.summary}
+## Professional Summary
+${formState.summary || ""}
 
 ## Work Experience
 ${formState.workExperience.map(w => `### ${w.position} - ${w.company}
-*${w.startDate} - ${w.endDate}*
-${w.bulletPoints.map(b => `- ${b}`).join("\n")}`).join("\n\n")}
+*${w.startDate || ""} - ${w.endDate || (w.currentlyWorking ? "Present" : "")}* | ${w.location || ""}
+${w.experienceUrl ? `Link: ${w.experienceUrl}` : ""}
+${(w.bulletPoints || []).map(b => `- ${b}`).join("\n")}`).join("\n\n")}
+
+## Education
+${(formState.education || []).map(e => `### ${e.degree} - ${e.institution}
+*${e.startDate || ""} - ${e.endDate || ""}* | GPA: ${e.gpa || "N/A"}`).join("\n\n")}
 
 ## Projects
-${formState.projects.map(p => `### ${p.title} (${p.technologies.join(", ")})
-${p.bulletPoints.map(b => `- ${b}`).join("\n")}`).join("\n\n")}
+${formState.projects.map(p => `### ${p.title} ${p.link ? `(${p.link})` : ""}
+Tech: ${(p.technologies || []).join(", ")}
+${(p.bulletPoints || []).map(b => `- ${b}`).join("\n")}`).join("\n\n")}
 
 ## Skills
-- **Languages**: ${formState.skills.languages.join(", ")}
-- **Frontend**: ${formState.skills.frontend.join(", ")}
-- **Backend**: ${formState.skills.backend.join(", ")}
-- **Database**: ${formState.skills.database.join(", ")}
-- **Tools**: ${formState.skills.tools.join(", ")}
+- **Languages**: ${(formState.skills.languages || []).join(", ")}
+- **Frontend**: ${(formState.skills.frontend || []).join(", ")}
+- **Backend**: ${(formState.skills.backend || []).join(", ")}
+- **Database**: ${(formState.skills.database || []).join(", ")}
+- **Tools**: ${(formState.skills.tools || []).join(", ")}
 
-${formState.certifications?.length > 0 ? `## Certifications\n${formState.certifications.map(c => `- ${c.name} ${c.issuer ? `(${c.issuer})` : ""}`).join("\n")}` : ""}`;
+${(formState.certifications || []).length > 0 ? `## Certifications\n${formState.certifications.map(c => `- ${c.name} (${c.issuer || "N/A"}) ${c.credentialUrl ? `[Credential](${c.credentialUrl})` : ""}`).join("\n")}` : ""}`;
 
     const blob = new Blob([md], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${formState.personalInfo.name.replace(/\s+/g, "_")}_Resume.md`;
+    a.download = `${(formState.personalInfo.name || "Resume").replace(/\s+/g, "_")}_Resume.md`;
     a.click();
   };
 
-  const handleVersionChange = async (vNum: number) => {
-    addNotification(`Restoring Version ${vNum}...`, "info");
-    await restoreResumeVersion(vNum);
-    addNotification(`Version ${vNum} restored!`, "success");
-  };
+  const fontClass = fontFamily === "serif" ? "font-serif" : (fontFamily === "mono" ? "font-mono" : "font-sans");
 
-  const handleFork = async () => {
-    if (!forkTitle) return;
-    await forkResumeVersion(forkTitle, targetGoal);
-    setShowForkModal(false);
-    setForkTitle("");
-    addNotification("New resume version snapshot created!", "success");
-  };
-
-  // Layout Styles mappings
-  const fontClass = canvasFont === "serif" ? "font-serif" : (canvasFont === "mono" ? "font-mono" : "font-sans");
-  const spacingClass = canvasSpacing === "tight" ? "leading-tight space-y-2" : (canvasSpacing === "loose" ? "leading-relaxed space-y-4" : "leading-normal space-y-3");
-  const marginClass = canvasMargin === "tight" ? "p-8" : (canvasMargin === "wide" ? "p-16" : "p-12");
-  const colorHex = canvasColor === "emerald" ? "text-emerald-600 border-emerald-600" : (canvasColor === "amber" ? "text-amber-600 border-amber-600" : (canvasColor === "slate" ? "text-slate-700 border-slate-700" : "text-primary border-primary"));
+  const changeLogsList = resumeAnalysis?.changeLogs || [];
+  const pendingLogs = changeLogsList.filter((l: any) => l.status === "pending" || l.status === "edited");
 
   return (
     <PageTransition className="space-y-6 pb-12 print:p-0 print:m-0">
@@ -463,1591 +516,1225 @@ ${formState.certifications?.length > 0 ? `## Certifications\n${formState.certifi
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}
-        accept=".pdf,.txt"
+        accept=".pdf,.docx,.txt"
         className="hidden"
       />
 
-      {/* CSS Stylesheet to override margins and hide headers during browser print downloads */}
-      <style jsx global>{`
+      {/* Universal A4 Print Engine CSS */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @page {
+          size: A4 portrait;
+          margin: 0 !important;
+        }
         @media print {
-          @page {
-            size: letter;
-            margin: 0 !important;
-          }
-
-          /* Hide all other direct children of body during print mode */
-          body.print-mode-active > * {
-            display: none !important;
-          }
-
-          /* Force body scroll parameters */
-          body.print-mode-active {
-            height: auto !important;
-            overflow: visible !important;
-            background: white !important;
-            color: black !important;
+          html, body {
             margin: 0 !important;
             padding: 0 !important;
-            display: block !important;
-          }
-
-          /* Render the active preview element in isolation */
-          body.print-mode-active > #resume-paper-preview {
-            display: block !important;
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 8.5in !important; /* Standard US Letter width */
-            height: 11in !important; /* Standard US Letter height */
-            padding: 0.75in !important; /* Premium document margins */
-            box-sizing: border-box !important;
             background: white !important;
             color: black !important;
-            margin: 0 !important;
+            width: 210mm !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+          body.print-mode-active > *:not(#resume-paper-preview) {
+            display: none !important;
+          }
+          body.print-mode-active #resume-paper-preview {
+            display: block !important;
+            position: relative !important;
+            width: 210mm !important;
+            min-height: 297mm !important;
+            margin: 0 auto !important;
+            padding: 12mm 14mm !important;
+            box-sizing: border-box !important;
+            background: white !important;
+            color: #0f172a !important;
             border: none !important;
             box-shadow: none !important;
-            transform: none !important;
+            overflow: visible !important;
+            float: none !important;
           }
         }
-      `}</style>
+      ` }} />
 
-      {/* Header and Sync Control bar (Hidden during print) */}
-      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 border-b border-border/60 pb-5 print-hidden">
+      {/* Header Bar */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border/60 pb-5 print:hidden">
         <StaggerItem className="w-full">
           <PageHeader
             icon={FileText}
-            title="CareerOS Resume Intelligence"
-            description="Linear optimization wizard, factual AI bullet auditing, and Canvas page rendering."
+            title="Resume Intelligence & Builder"
+            description="Guided resume scanning, canonical ATS scoring, URL disambiguation, complete section verification, and ATS-safe PDF export."
           />
         </StaggerItem>
 
-        {wizardStep !== "upload" && wizardStep !== "generating" && (
-          <div className="flex items-center gap-3 print-hidden">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={handleBoxClick}
-            >
-              <UploadCloud className="w-3.5 h-3.5 mr-1" />
-              <span>Upload New PDF</span>
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-3 shrink-0">
+          <Button type="button" variant="secondary" size="sm" onClick={handleBoxClick} disabled={isUploading}>
+            <UploadCloud className="w-4 h-4 mr-1.5" />
+            <span>Upload New Resume</span>
+          </Button>
+        </div>
       </div>
 
-      {/* STEP 1: UPLOAD RESUME */}
-      {wizardStep === "upload" && (
-        <Card className="p-8 max-w-lg mx-auto flex flex-col items-center justify-center text-center space-y-6 mt-12">
-          <div className="p-4 bg-primary/10 text-primary rounded-full">
-            <UploadCloud className="w-12 h-12 animate-bounce" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-foreground">Upload your Resume</h3>
-            <p className="text-xs text-muted mt-2 max-w-sm">
-              Upload your raw resume document (PDF / TXT) to evaluate your current ATS Score and prepare for single-click AI optimization.
-            </p>
-          </div>
+      {/* 6-STEP GUIDED WIZARD PROGRESS BAR */}
+      <div className="bg-card border border-border rounded-2xl p-4 print:hidden">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-center text-xs">
+          <button
+            type="button"
+            onClick={() => setWizardStep("scan")}
+            className={`p-2.5 rounded-xl border transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
+              wizardStep === "scan"
+                ? "bg-primary/10 border-primary text-primary font-bold shadow-sm"
+                : "border-border/60 text-muted hover:text-foreground"
+            }`}
+          >
+            <span className="text-[9px] font-mono uppercase tracking-wider">Step 1</span>
+            <span className="flex items-center gap-1 font-semibold text-[11px]">
+              <UploadCloud className="w-3.5 h-3.5" /> Resume Scan
+            </span>
+          </button>
 
-          {scanProgress === 0 ? (
-            <Button variant="primary" size="md" onClick={handleBoxClick}>
-              Select PDF File
-            </Button>
-          ) : (
-            <div className="w-full space-y-2 max-w-xs">
-              <div className="flex justify-between text-[10px] font-bold text-muted">
-                <span>Scanning document structure...</span>
-                <span>{scanProgress}%</span>
-              </div>
-              <div className="h-2 w-full bg-accent/20 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-primary to-secondary rounded-full transition-all duration-300"
-                  style={{ width: `${scanProgress}%` }}
-                />
-              </div>
+          <button
+            type="button"
+            onClick={() => setWizardStep("ats")}
+            disabled={!resumeAnalysis}
+            className={`p-2.5 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${
+              wizardStep === "ats"
+                ? "bg-primary/10 border-primary text-primary font-bold shadow-sm cursor-pointer"
+                : resumeAnalysis
+                ? "border-border/60 text-muted hover:text-foreground cursor-pointer"
+                : "border-border/40 text-muted/40 cursor-not-allowed"
+            }`}
+          >
+            <span className="text-[9px] font-mono uppercase tracking-wider">Step 2</span>
+            <span className="flex items-center gap-1 font-semibold text-[11px]">
+              <Gauge className="w-3.5 h-3.5" /> ATS Analysis
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setWizardStep("review")}
+            disabled={!formState}
+            className={`p-2.5 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${
+              wizardStep === "review"
+                ? "bg-primary/10 border-primary text-primary font-bold shadow-sm cursor-pointer"
+                : formState
+                ? "border-border/60 text-muted hover:text-foreground cursor-pointer"
+                : "border-border/40 text-muted/40 cursor-not-allowed"
+            }`}
+          >
+            <span className="text-[9px] font-mono uppercase tracking-wider">Step 3</span>
+            <span className="flex items-center gap-1 font-semibold text-[11px]">
+              <ShieldCheck className="w-3.5 h-3.5" /> Review & Verify
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setWizardStep("job_match")}
+            disabled={!formState}
+            className={`p-2.5 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${
+              wizardStep === "job_match"
+                ? "bg-primary/10 border-primary text-primary font-bold shadow-sm cursor-pointer"
+                : formState
+                ? "border-border/60 text-muted hover:text-foreground cursor-pointer"
+                : "border-border/40 text-muted/40 cursor-not-allowed"
+            }`}
+          >
+            <span className="text-[9px] font-mono uppercase tracking-wider">Step 4</span>
+            <span className="flex items-center gap-1 font-semibold text-[11px]">
+              <FileSearch className="w-3.5 h-3.5" /> Target Job Match
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setWizardStep("suggestions")}
+            disabled={!formState}
+            className={`p-2.5 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${
+              wizardStep === "suggestions"
+                ? "bg-primary/10 border-primary text-primary font-bold shadow-sm cursor-pointer"
+                : formState
+                ? "border-border/60 text-muted hover:text-foreground cursor-pointer"
+                : "border-border/40 text-muted/40 cursor-not-allowed"
+            }`}
+          >
+            <span className="text-[9px] font-mono uppercase tracking-wider">Step 5</span>
+            <span className="flex items-center gap-1 font-semibold text-[11px]">
+              <Sparkles className="w-3.5 h-3.5" /> AI ChangeLog
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setWizardStep("builder")}
+            disabled={!formState}
+            className={`p-2.5 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${
+              wizardStep === "builder"
+                ? "bg-primary/10 border-primary text-primary font-bold shadow-sm cursor-pointer"
+                : formState
+                ? "border-border/60 text-muted hover:text-foreground cursor-pointer"
+                : "border-border/40 text-muted/40 cursor-not-allowed"
+            }`}
+          >
+            <span className="text-[9px] font-mono uppercase tracking-wider">Step 6</span>
+            <span className="flex items-center gap-1 font-semibold text-[11px]">
+              <Printer className="w-3.5 h-3.5" /> ATS Builder
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* STEP 1: RESUME SCAN */}
+      {wizardStep === "scan" && (
+        <div className="max-w-2xl mx-auto space-y-6">
+          <Card className="p-8 text-center space-y-6">
+            <div className="w-16 h-16 bg-primary/10 border border-primary/20 text-primary rounded-2xl flex items-center justify-center mx-auto">
+              <UploadCloud className="w-8 h-8" />
             </div>
-          )}
-        </Card>
-      )}
 
-      {/* STEP 2: REVIEW & CONFIRM PARSED STRUCTURE */}
-      {wizardStep === "review" && formState && (
-        <div className="max-w-3xl mx-auto space-y-6 text-left">
-          <Card className="p-6 space-y-6">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div className="flex items-center space-x-2">
-                <ShieldCheck className="w-5 h-5 text-emerald-500" />
-                <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Review & Verify Parsed Resume</h3>
-              </div>
-              <Badge variant="success">Raw Extract Check</Badge>
-            </div>
-            
-            <p className="text-xs text-muted leading-relaxed">
-              We parsed your resume. To keep the AI honest and prevent hallucinations, please look over the sections below. Check dates, delete any parsing garbage (e.g. contact details read as companies), and click confirm.
-              {" "}Wrong file? <button type="button" onClick={handleBoxClick} className="text-primary hover:underline font-bold cursor-pointer">Click here to upload a different PDF/TXT file</button>
-            </p>
-
-            {/* Personal Info Header Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-accent/5 p-4 border border-border rounded-2xl text-xs">
-              <div className="col-span-1 md:col-span-2 font-bold text-foreground mb-1">Contact Headers</div>
-              <div className="space-y-1">
-                <label className="text-[10px] text-muted uppercase font-bold block">Name</label>
-                <input
-                  type="text"
-                  value={formState.personalInfo.name || ""}
-                  onChange={(e) => handlePersonalInfoChange("name", e.target.value)}
-                  className="w-full bg-card border border-border rounded-xl p-2.5 outline-none text-foreground text-xs"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] text-muted uppercase font-bold block">Email</label>
-                <input
-                  type="text"
-                  value={formState.personalInfo.email || ""}
-                  onChange={(e) => handlePersonalInfoChange("email", e.target.value)}
-                  className="w-full bg-card border border-border rounded-xl p-2.5 outline-none text-foreground text-xs"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] text-muted uppercase font-bold block">Phone</label>
-                <input
-                  type="text"
-                  value={formState.personalInfo.phone || ""}
-                  onChange={(e) => handlePersonalInfoChange("phone", e.target.value)}
-                  className="w-full bg-card border border-border rounded-xl p-2.5 outline-none text-foreground text-xs"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] text-muted uppercase font-bold block">Location</label>
-                <input
-                  type="text"
-                  value={formState.personalInfo.location || ""}
-                  onChange={(e) => handlePersonalInfoChange("location", e.target.value)}
-                  className="w-full bg-card border border-border rounded-xl p-2.5 outline-none text-foreground text-xs"
-                />
-              </div>
+            <div className="space-y-2 max-w-md mx-auto">
+              <h3 className="text-xl font-extrabold text-foreground">Upload Your Resume</h3>
+              <p className="text-xs text-muted leading-relaxed">
+                Supports PDF, DOCX, and TXT files up to 5MB. CareerOS extracts contact info, work experiences, skills, projects, certifications, and embedded hyperlinks.
+              </p>
             </div>
 
-            {/* Parsed Work Experience List */}
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-[11px] font-bold text-muted uppercase">Parsed Work Experience ({formState.workExperience.length})</span>
-                <Button variant="secondary" size="sm" onClick={addWorkEntry}>
-                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Position
-                </Button>
-              </div>
-
-              {formState.workExperience.length === 0 ? (
-                <div className="text-center py-4 bg-accent/5 rounded-2xl text-xs text-muted">No experience entries found.</div>
-              ) : (
+            <div
+              onClick={handleBoxClick}
+              className="border-2 border-dashed border-border/80 hover:border-primary/50 rounded-2xl p-8 cursor-pointer transition-all duration-200 bg-accent/5 hover:bg-accent/10"
+            >
+              {isUploading ? (
                 <div className="space-y-3">
-                  {formState.workExperience.map((w, idx) => (
-                    <div key={idx} className="bg-card border border-border p-4 rounded-2xl flex items-start gap-4">
-                      <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                        <div className="space-y-1 col-span-2">
-                          <label className="text-[9px] text-muted uppercase font-bold block">Company</label>
-                          <input
-                            type="text"
-                            value={w.company || ""}
-                            onChange={(e) => handleWorkChange(idx, "company", e.target.value)}
-                            className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
-                          />
-                        </div>
-                        <div className="space-y-1 col-span-2">
-                          <label className="text-[9px] text-muted uppercase font-bold block">Role / Position</label>
-                          <input
-                            type="text"
-                            value={w.position || ""}
-                            onChange={(e) => handleWorkChange(idx, "position", e.target.value)}
-                            className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] text-muted uppercase font-bold block">Start Date</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. 2024"
-                            value={w.startDate || ""}
-                            onChange={(e) => handleWorkChange(idx, "startDate", e.target.value)}
-                            className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] text-muted uppercase font-bold block">End Date</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Present"
-                            value={w.endDate || ""}
-                            onChange={(e) => handleWorkChange(idx, "endDate", e.target.value)}
-                            className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
-                          />
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => deleteWorkEntry(idx)}
-                        className="p-2 text-red-400 hover:text-red-500 bg-red-400/10 rounded-xl cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
+                  <Sparkles className="w-8 h-8 text-primary mx-auto animate-spin" />
+                  <p className="text-xs font-bold text-foreground">{uploadStatusText || "Analyzing document..."}</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-foreground">Click to browse or drag and drop resume file</p>
+                  <p className="text-[10px] text-muted">PDF • DOCX • TXT (Max 5MB)</p>
                 </div>
               )}
             </div>
 
-            {/* Parsed Projects List */}
-            <div className="space-y-3">
+            {resumeAnalysis && (
+              <div className="pt-4 border-t border-border flex items-center justify-between">
+                <div className="text-left">
+                  <span className="text-xs font-bold text-foreground block">Existing Active Upload: {resumeAnalysis.filename || "resume.pdf"}</span>
+                  <span className="text-[10px] text-muted">ATS Score: {resumeAnalysis.atsScore}%</span>
+                </div>
+                <Button variant="secondary" size="sm" onClick={() => setWizardStep("review")}>
+                  <span>Continue with Existing Data →</span>
+                </Button>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* STEP 2: CANONICAL ATS SCORECARD */}
+      {wizardStep === "ats" && resumeAnalysis && (
+        <div className="space-y-6">
+          <Card className="p-6 space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6">
+              <div className="space-y-1">
+                <Badge variant="primary">Canonical ATS Engine</Badge>
+                <h3 className="text-xl font-black text-foreground">General ATS Scorecard</h3>
+                <p className="text-xs text-muted">Evaluated against target role screening standards without requiring a specific job description.</p>
+              </div>
+
+              <div className="flex items-center gap-6 bg-accent/10 border border-border p-4 rounded-2xl">
+                <div className="text-center">
+                  <span className="text-3xl font-black text-primary">{resumeAnalysis.atsScore}</span>
+                  <span className="text-[9px] font-bold text-muted uppercase block">ATS Score</span>
+                </div>
+                {resumeAnalysis.jobMatchScore && (
+                  <div className="text-center border-l border-border pl-6">
+                    <span className="text-3xl font-black text-emerald-500">{resumeAnalysis.jobMatchScore}%</span>
+                    <span className="text-[9px] font-bold text-muted uppercase block">JD Match Score</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Metric Breakdown Bars */}
+            {resumeAnalysis.breakdown && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="bg-accent/5 border border-border p-4 rounded-xl space-y-2">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-muted uppercase text-[10px]">Keyword Match</span>
+                    <span className="text-foreground">{resumeAnalysis.breakdown.keywords || 70}%</span>
+                  </div>
+                  <div className="h-1.5 bg-accent/20 rounded-full overflow-hidden">
+                    <div className="h-full bg-primary transition-all duration-500" style={{ width: `${resumeAnalysis.breakdown.keywords || 70}%` }} />
+                  </div>
+                </div>
+
+                <div className="bg-accent/5 border border-border p-4 rounded-xl space-y-2">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-muted uppercase text-[10px]">Section Completeness</span>
+                    <span className="text-foreground">{resumeAnalysis.breakdown.completeness || 85}%</span>
+                  </div>
+                  <div className="h-1.5 bg-accent/20 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${resumeAnalysis.breakdown.completeness || 85}%` }} />
+                  </div>
+                </div>
+
+                <div className="bg-accent/5 border border-border p-4 rounded-xl space-y-2">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-muted uppercase text-[10px]">Project & Evidence Quality</span>
+                    <span className="text-foreground">{resumeAnalysis.breakdown.evidence || 75}%</span>
+                  </div>
+                  <div className="h-1.5 bg-accent/20 rounded-full overflow-hidden">
+                    <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${resumeAnalysis.breakdown.evidence || 75}%` }} />
+                  </div>
+                </div>
+
+                <div className="bg-accent/5 border border-border p-4 rounded-xl space-y-2">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-muted uppercase text-[10px]">Action Verbs</span>
+                    <span className="text-foreground">{resumeAnalysis.breakdown.actionVerbs || 70}%</span>
+                  </div>
+                  <div className="h-1.5 bg-accent/20 rounded-full overflow-hidden">
+                    <div className="h-full bg-amber-500 transition-all duration-500" style={{ width: `${resumeAnalysis.breakdown.actionVerbs || 70}%` }} />
+                  </div>
+                </div>
+
+                <div className="bg-accent/5 border border-border p-4 rounded-xl space-y-2">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-muted uppercase text-[10px]">Quantified Impact</span>
+                    <span className="text-foreground">{resumeAnalysis.breakdown.quantifiedImpact || 60}%</span>
+                  </div>
+                  <div className="h-1.5 bg-accent/20 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${resumeAnalysis.breakdown.quantifiedImpact || 60}%` }} />
+                  </div>
+                </div>
+
+                <div className="bg-accent/5 border border-border p-4 rounded-xl space-y-2">
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-muted uppercase text-[10px]">Formatting / Parseability</span>
+                    <span className="text-foreground">{resumeAnalysis.breakdown.formatting || 90}%</span>
+                  </div>
+                  <div className="h-1.5 bg-accent/20 rounded-full overflow-hidden">
+                    <div className="h-full bg-purple-500 transition-all duration-500" style={{ width: `${resumeAnalysis.breakdown.formatting || 90}%` }} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Keyword Evidence Classification Table */}
+            {resumeAnalysis.missingKeywords && resumeAnalysis.missingKeywords.length > 0 && (
+              <div className="space-y-3 pt-4 border-t border-border">
+                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">Missing & Underrepresented Keywords</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {resumeAnalysis.missingKeywords.map((kw: any, idx: number) => (
+                    <div key={idx} className="p-3.5 bg-accent/5 border border-border rounded-xl space-y-1.5 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-foreground">{kw.keyword || kw}</span>
+                        <Badge variant={kw.category === "supported_but_missing" ? "success" : "warning"} className="text-[9px]">
+                          {kw.category === "supported_but_missing" ? "Supported in Text" : "Potential Skill Gap"}
+                        </Badge>
+                      </div>
+                      <p className="text-[10px] text-muted leading-relaxed">{kw.reason || "Recommended for target role."}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center pt-4 border-t border-border">
+              <Button variant="secondary" size="md" onClick={() => setWizardStep("scan")}>
+                <ArrowLeft className="w-4 h-4 mr-1.5" /> Re-scan Document
+              </Button>
+
+              <Button variant="primary" size="md" onClick={() => setWizardStep("review")}>
+                <span>Proceed to Review & Verify →</span>
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* STEP 3: REVIEW & VERIFY VERIFIED DATA (COMPREHENSIVE ALL-SECTION EDITOR) */}
+      {wizardStep === "review" && formState && (
+        <div className="space-y-6">
+          <Card className="p-6 space-y-8">
+            <div className="flex items-center justify-between border-b border-border pb-4">
+              <div>
+                <h3 className="text-lg font-bold text-foreground">Review & Verify Extracted Resume</h3>
+                <p className="text-xs text-muted">Verify all extracted resume sections, contact details, dates, URLs, and skills before proceeding.</p>
+              </div>
+              <Badge variant="success">All Sections Extracted</Badge>
+            </div>
+
+            {/* 1. Personal Info & Links */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <LinkIcon className="w-4 h-4 text-primary" /> 1. Personal Information & Contact Links
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-muted font-bold block uppercase">Full Name</label>
+                  <input
+                    type="text"
+                    value={formState.personalInfo?.name || ""}
+                    onChange={(e) => handlePersonalInfoChange("name", e.target.value)}
+                    className="w-full bg-accent/5 border border-border rounded-xl p-2.5 outline-none text-foreground focus:border-primary/50"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-muted font-bold block uppercase">Email Address</label>
+                  <input
+                    type="email"
+                    value={formState.personalInfo?.email || ""}
+                    onChange={(e) => handlePersonalInfoChange("email", e.target.value)}
+                    className="w-full bg-accent/5 border border-border rounded-xl p-2.5 outline-none text-foreground focus:border-primary/50"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-muted font-bold block uppercase">Phone Number</label>
+                  <input
+                    type="text"
+                    value={formState.personalInfo?.phone || ""}
+                    onChange={(e) => handlePersonalInfoChange("phone", e.target.value)}
+                    className="w-full bg-accent/5 border border-border rounded-xl p-2.5 outline-none text-foreground focus:border-primary/50"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-muted font-bold block uppercase">Location (City, State / Country)</label>
+                  <input
+                    type="text"
+                    value={formState.personalInfo?.location || ""}
+                    onChange={(e) => handlePersonalInfoChange("location", e.target.value)}
+                    className="w-full bg-accent/5 border border-border rounded-xl p-2.5 outline-none text-foreground focus:border-primary/50"
+                    placeholder="e.g. San Francisco, CA"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-muted font-bold block uppercase">GitHub Profile URL</label>
+                  <input
+                    type="text"
+                    value={formState.personalInfo?.githubUrl || ""}
+                    onChange={(e) => handlePersonalInfoChange("githubUrl", e.target.value)}
+                    className="w-full bg-accent/5 border border-border rounded-xl p-2.5 outline-none text-foreground focus:border-primary/50"
+                    placeholder="https://github.com/..."
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-muted font-bold block uppercase">LinkedIn URL</label>
+                  <input
+                    type="text"
+                    value={formState.personalInfo?.linkedinUrl || ""}
+                    onChange={(e) => handlePersonalInfoChange("linkedinUrl", e.target.value)}
+                    className="w-full bg-accent/5 border border-border rounded-xl p-2.5 outline-none text-foreground focus:border-primary/50"
+                    placeholder="https://linkedin.com/in/..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Professional Summary */}
+            <div className="space-y-2 pt-2 border-t border-border/60">
+              <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <FileText className="w-4 h-4 text-primary" /> 2. Professional Summary
+              </h4>
+              <textarea
+                rows={3}
+                value={formState.summary || ""}
+                onChange={(e) => handleSummaryChange(e.target.value)}
+                className="w-full bg-accent/5 border border-border rounded-xl p-3 text-xs text-foreground outline-none resize-y focus:border-primary/50"
+                placeholder="Brief high-impact career overview..."
+              />
+            </div>
+
+            {/* 3. Work Experience */}
+            <div className="space-y-3 pt-2 border-t border-border/60">
               <div className="flex justify-between items-center">
-                <span className="text-[11px] font-bold text-muted uppercase">Parsed Projects ({formState.projects.length})</span>
+                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Briefcase className="w-4 h-4 text-primary" /> 3. Work Experience
+                </h4>
+                <Button variant="secondary" size="sm" onClick={addWorkEntry}>
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Experience
+                </Button>
+              </div>
+
+              {formState.workExperience.map((w, idx) => (
+                <div key={idx} className="bg-card border border-border p-4 rounded-2xl space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Position / Job Title</label>
+                      <input
+                        type="text"
+                        value={w.position || ""}
+                        onChange={(e) => handleWorkChange(idx, "position", e.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Company Name</label>
+                      <input
+                        type="text"
+                        value={w.company || ""}
+                        onChange={(e) => handleWorkChange(idx, "company", e.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Location</label>
+                      <input
+                        type="text"
+                        value={w.location || ""}
+                        onChange={(e) => handleWorkChange(idx, "location", e.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                        placeholder="e.g. San Francisco, CA or Remote"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Start Date</label>
+                      <input
+                        type="text"
+                        value={w.startDate || ""}
+                        onChange={(e) => handleWorkChange(idx, "startDate", e.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                        placeholder="e.g. Jan 2024"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">End Date</label>
+                      <input
+                        type="text"
+                        value={w.endDate || ""}
+                        onChange={(e) => handleWorkChange(idx, "endDate", e.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                        placeholder="e.g. Present or Dec 2025"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Experience Link URL</label>
+                      <input
+                        type="text"
+                        value={w.experienceUrl || ""}
+                        onChange={(e) => handleWorkChange(idx, "experienceUrl", e.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                        placeholder="https://company.com..."
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <label className="text-[9px] text-muted font-bold block uppercase">Bullet Points (comma separated)</label>
+                    <textarea
+                      rows={2}
+                      value={(w.bulletPoints || []).join("\n")}
+                      onChange={(e) => handleWorkChange(idx, "bulletPoints", e.target.value.split("\n").filter(Boolean))}
+                      className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground resize-y"
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <button onClick={() => deleteWorkEntry(idx)} className="text-xs text-red-400 hover:text-red-500 cursor-pointer flex items-center gap-1">
+                      <Trash2 className="w-3.5 h-3.5" /> Remove Experience
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 4. Education History */}
+            <div className="space-y-3 pt-2 border-t border-border/60">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <GraduationCap className="w-4 h-4 text-primary" /> 4. Education
+                </h4>
+                <Button variant="secondary" size="sm" onClick={addEducationEntry}>
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Education
+                </Button>
+              </div>
+
+              {(formState.education || []).map((e, idx) => (
+                <div key={idx} className="bg-card border border-border p-4 rounded-2xl space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Institution / University</label>
+                      <input
+                        type="text"
+                        value={e.institution || ""}
+                        onChange={(val) => handleEducationChange(idx, "institution", val.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Degree</label>
+                      <input
+                        type="text"
+                        value={e.degree || ""}
+                        onChange={(val) => handleEducationChange(idx, "degree", val.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                        placeholder="e.g. Bachelor of Science"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Field of Study / Major</label>
+                      <input
+                        type="text"
+                        value={e.fieldOfStudy || e.major || ""}
+                        onChange={(val) => handleEducationChange(idx, "fieldOfStudy", val.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                        placeholder="e.g. Computer Science"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Start Date</label>
+                      <input
+                        type="text"
+                        value={e.startDate || ""}
+                        onChange={(val) => handleEducationChange(idx, "startDate", val.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">End Date</label>
+                      <input
+                        type="text"
+                        value={e.endDate || ""}
+                        onChange={(val) => handleEducationChange(idx, "endDate", val.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">GPA / Grade</label>
+                      <input
+                        type="text"
+                        value={e.gpa || ""}
+                        onChange={(val) => handleEducationChange(idx, "gpa", val.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                        placeholder="e.g. 3.8 / 4.0"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button onClick={() => deleteEducationEntry(idx)} className="text-xs text-red-400 hover:text-red-500 cursor-pointer flex items-center gap-1">
+                      <Trash2 className="w-3.5 h-3.5" /> Remove Education
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 5. Key Projects */}
+            <div className="space-y-3 pt-2 border-t border-border/60">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <FolderGit2 className="w-4 h-4 text-primary" /> 5. Key Projects
+                </h4>
                 <Button variant="secondary" size="sm" onClick={addProjectEntry}>
                   <Plus className="w-3.5 h-3.5 mr-1" /> Add Project
                 </Button>
               </div>
 
-              {formState.projects.length === 0 ? (
-                <div className="text-center py-4 bg-accent/5 rounded-2xl text-xs text-muted">No projects found.</div>
-              ) : (
-                <div className="space-y-3">
-                  {formState.projects.map((p, idx) => (
-                    <div key={idx} className="bg-card border border-border p-4 rounded-2xl flex items-start gap-4">
-                      <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                        <div className="space-y-1 col-span-2">
-                          <label className="text-[9px] text-muted uppercase font-bold block">Project Title</label>
-                          <input
-                            type="text"
-                            value={p.title || ""}
-                            onChange={(e) => handleProjectChange(idx, "title", e.target.value)}
-                            className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
-                          />
-                        </div>
-                        <div className="space-y-1 col-span-2">
-                          <label className="text-[9px] text-muted uppercase font-bold block">Technologies (comma separated)</label>
-                          <input
-                            type="text"
-                            value={p.technologies?.join(", ") || ""}
-                            onChange={(e) => {
-                              const arr = e.target.value.split(",").map(t => t.trim()).filter(Boolean);
-                              handleProjectChange(idx, "technologies", arr);
-                            }}
-                            className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
-                          />
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => deleteProjectEntry(idx)}
-                        className="p-2 text-red-400 hover:text-red-500 bg-red-400/10 rounded-xl cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+              {formState.projects.map((p, idx) => (
+                <div key={idx} className="bg-card border border-border p-4 rounded-2xl space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Project Name</label>
+                      <input
+                        type="text"
+                        value={p.title || ""}
+                        onChange={(e) => handleProjectChange(idx, "title", e.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                      />
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Certifications and Courses */}
-            <div className="space-y-3">
-              <span className="text-[11px] font-bold text-muted uppercase tracking-wider block">Parsed Certifications</span>
-              <div className="bg-accent/5 p-4 border border-border rounded-2xl space-y-2">
-                {formState.certifications?.map((c, idx) => (
-                  <div key={idx} className="flex gap-2 items-center bg-card p-2 border border-border rounded-xl">
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">GitHub URL</label>
+                      <input
+                        type="text"
+                        value={p.githubUrl || (p.link && p.link.includes("github.com") ? p.link : "") || ""}
+                        onChange={(e) => handleProjectChange(idx, "githubUrl", e.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                        placeholder="https://github.com/..."
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Live Demo URL</label>
+                      <input
+                        type="text"
+                        value={p.liveUrl || (p.link && !p.link.includes("github.com") ? p.link : "") || ""}
+                        onChange={(e) => handleProjectChange(idx, "liveUrl", e.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                        placeholder="https://myproject.com..."
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <label className="text-[9px] text-muted font-bold block uppercase">Technologies (comma separated)</label>
                     <input
                       type="text"
-                      value={c?.name || ""}
-                      onChange={(e) => {
-                        const updated = { ...formState };
-                        updated.certifications[idx].name = e.target.value;
-                        setFormState(updated);
-                      }}
-                      className="flex-1 bg-transparent border-none text-xs text-foreground outline-none"
-                      placeholder="Certification Name"
+                      value={(p.technologies || []).join(", ")}
+                      onChange={(e) => handleProjectChange(idx, "technologies", e.target.value.split(",").map(t => t.trim()).filter(Boolean))}
+                      className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
                     />
-                    <input
-                      type="text"
-                      value={c?.issuer || ""}
-                      onChange={(e) => {
-                        const updated = { ...formState };
-                        updated.certifications[idx].issuer = e.target.value;
-                        setFormState(updated);
-                      }}
-                      className="flex-1 bg-transparent border-none text-xs text-foreground outline-none border-l border-border pl-2"
-                      placeholder="Issuer (e.g. AWS)"
-                    />
-                    <button
-                      onClick={() => {
-                        const updated = { ...formState };
-                        updated.certifications.splice(idx, 1);
-                        setFormState(updated);
-                      }}
-                      className="text-red-400 hover:text-red-500 cursor-pointer pl-2"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex justify-end">
+                    <button onClick={() => deleteProjectEntry(idx)} className="text-xs text-red-400 hover:text-red-500 cursor-pointer flex items-center gap-1">
+                      <Trash2 className="w-3.5 h-3.5" /> Remove Project
                     </button>
                   </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 6. Technical Skills Inventory */}
+            <div className="space-y-3 pt-2 border-t border-border/60">
+              <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-primary" /> 6. Technical Skills Inventory
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                {["languages", "frontend", "backend", "database", "tools", "other"].map((cat) => (
+                  <div key={cat} className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold block uppercase">{cat}</label>
+                    <input
+                      type="text"
+                      value={((formState.skills as any)?.[cat] || []).join(", ")}
+                      onChange={(e) => handleSkillsChange(cat, e.target.value)}
+                      className="w-full bg-accent/5 border border-border rounded-xl p-2.5 outline-none text-foreground"
+                      placeholder="Comma separated skills..."
+                    />
+                  </div>
                 ))}
-                <button
-                  onClick={() => {
-                    const updated = { ...formState };
-                    if (!updated.certifications) updated.certifications = [];
-                    updated.certifications.push({
-                      name: "New Certificate",
-                      issuer: "",
-                      issueDate: "",
-                      credentialId: "",
-                      credentialUrl: "",
-                      evidenceText: "",
-                      source: "manual",
-                      confidence: 100,
-                      isRelevant: true
-                    });
-                    setFormState(updated);
-                  }}
-                  className="text-primary hover:underline text-xs font-bold flex items-center gap-1 cursor-pointer pt-1"
-                >
-                  <Plus className="w-4 h-4" /> Add Certification
-                </button>
               </div>
             </div>
 
-            <Button
-              variant="primary"
-              size="md"
-              className="w-full font-bold text-xs"
-              onClick={proceedToAnalysisStep}
-            >
-              <span>Confirm & Proceed to ATS Analysis</span>
-              <ArrowRight className="w-4 h-4 ml-1.5" />
-            </Button>
+            {/* 7. Certifications & Credentials */}
+            <div className="space-y-3 pt-2 border-t border-border/60">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Award className="w-4 h-4 text-primary" /> 7. Certifications & Credentials
+                </h4>
+                <Button variant="secondary" size="sm" onClick={addCertificationEntry}>
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Certification
+                </Button>
+              </div>
+
+              {(formState.certifications || []).map((c, idx) => (
+                <div key={idx} className="bg-card border border-border p-4 rounded-2xl space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Certification Name</label>
+                      <input
+                        type="text"
+                        value={c.name || ""}
+                        onChange={(e) => handleCertificationChange(idx, "name", e.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Issuer</label>
+                      <input
+                        type="text"
+                        value={c.issuer || ""}
+                        onChange={(e) => handleCertificationChange(idx, "issuer", e.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                        placeholder="e.g. AWS, Coursera"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Credential URL</label>
+                      <input
+                        type="text"
+                        value={c.credentialUrl || ""}
+                        onChange={(e) => handleCertificationChange(idx, "credentialUrl", e.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                        placeholder="https://..."
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button onClick={() => deleteCertificationEntry(idx)} className="text-xs text-red-400 hover:text-red-500 cursor-pointer flex items-center gap-1">
+                      <Trash2 className="w-3.5 h-3.5" /> Remove Certification
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 8. Achievements & Awards */}
+            <div className="space-y-3 pt-2 border-t border-border/60">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckSquare className="w-4 h-4 text-primary" /> 8. Achievements & Honors
+                </h4>
+                <Button variant="secondary" size="sm" onClick={addAchievementEntry}>
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Achievement
+                </Button>
+              </div>
+
+              {(formState.achievements || []).map((ach, idx) => (
+                <div key={idx} className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    value={ach || ""}
+                    onChange={(e) => handleAchievementChange(idx, e.target.value)}
+                    className="flex-1 bg-accent/5 border border-border rounded-xl p-2.5 text-xs text-foreground outline-none"
+                  />
+                  <button onClick={() => deleteAchievementEntry(idx)} className="text-red-400 hover:text-red-500 p-2 cursor-pointer">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* 9. Leadership & Positions of Responsibility */}
+            <div className="space-y-3 pt-2 border-t border-border/60">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <UserCheck className="w-4 h-4 text-primary" /> 9. Leadership & Campus Positions
+                </h4>
+                <Button variant="secondary" size="sm" onClick={addLeadershipEntry}>
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Leadership Role
+                </Button>
+              </div>
+
+              {(formState.leadership || []).map((lead, idx) => (
+                <div key={idx} className="bg-card border border-border p-4 rounded-2xl space-y-3 text-xs">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Role Title</label>
+                      <input
+                        type="text"
+                        value={lead.title || ""}
+                        onChange={(e) => handleLeadershipChange(idx, "title", e.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-muted font-bold block uppercase">Organization</label>
+                      <input
+                        type="text"
+                        value={lead.organization || ""}
+                        onChange={(e) => handleLeadershipChange(idx, "organization", e.target.value)}
+                        className="w-full bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button onClick={() => deleteLeadershipEntry(idx)} className="text-xs text-red-400 hover:text-red-500 cursor-pointer flex items-center gap-1">
+                      <Trash2 className="w-3.5 h-3.5" /> Remove Leadership Role
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 10. Detected Links Verification Table */}
+            <div className="space-y-3 pt-2 border-t border-border/60">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Globe className="w-4 h-4 text-primary" /> 10. Detected Professional Links Verification
+                </h4>
+                <Button variant="secondary" size="sm" onClick={addLinkEntry}>
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Add Link
+                </Button>
+              </div>
+
+              {(formState.links || []).map((l, idx) => (
+                <div key={idx} className="bg-card border border-border p-3 rounded-xl flex items-center gap-3 text-xs">
+                  <input
+                    type="text"
+                    value={l.label || ""}
+                    onChange={(e) => handleLinkChange(idx, "label", e.target.value)}
+                    placeholder="Label (e.g. GitHub)"
+                    className="w-1/3 bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                  />
+                  <input
+                    type="text"
+                    value={l.url || ""}
+                    onChange={(e) => handleLinkChange(idx, "url", e.target.value)}
+                    placeholder="URL (https://...)"
+                    className="flex-1 bg-accent/5 border border-border rounded-lg p-2 outline-none text-foreground"
+                  />
+                  <button onClick={() => deleteLinkEntry(idx)} className="text-red-400 hover:text-red-500 p-1 cursor-pointer">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Save & Continue */}
+            <div className="flex justify-between items-center pt-6 border-t border-border">
+              <Button variant="secondary" size="md" onClick={() => setWizardStep("ats")}>
+                <ArrowLeft className="w-4 h-4 mr-1.5" /> Back to ATS Scorecard
+              </Button>
+              <Button variant="primary" size="md" onClick={() => handleSaveVerifiedEdits("job_match")}>
+                <Check className="w-4 h-4 mr-1.5" /> Save Verified Data & Next →
+              </Button>
+            </div>
           </Card>
         </div>
       )}
 
-      {/* STEP 3: ATS ANALYSIS (ORIGINAL) */}
-      {wizardStep === "analysis" && resumeAnalysis && (
-        <div className="max-w-2xl mx-auto space-y-6">
-          <Card className="p-6 text-center space-y-6">
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Your Verified ATS Rating</h3>
-
-            {/* ATS Score Ring */}
-            <div className="relative w-36 h-36 mx-auto flex items-center justify-center">
-              <svg className="w-full h-full transform -rotate-90">
-                <circle
-                  cx="72"
-                  cy="72"
-                  r="56"
-                  className="stroke-border fill-transparent"
-                  strokeWidth="8"
-                />
-                <circle
-                  cx="72"
-                  cy="72"
-                  r="56"
-                  className="stroke-red-500 fill-transparent transition-all duration-1000 ease-out"
-                  strokeWidth="8"
-                  strokeDasharray={2 * Math.PI * 56}
-                  strokeDashoffset={2 * Math.PI * 56 - (resumeAnalysis.atsScore / 100) * (2 * Math.PI * 56)}
-                  strokeLinecap="round"
-                />
-              </svg>
-              <div className="absolute flex flex-col items-center">
-                <span className="text-4xl font-extrabold text-foreground">{resumeAnalysis.atsScore}%</span>
-                <span className="text-[10px] text-red-400 font-bold mt-0.5">Needs Work</span>
+      {/* STEP 4: TARGET JOB MATCHING (OPTIONAL) */}
+      {wizardStep === "job_match" && formState && (
+        <div className="max-w-3xl mx-auto space-y-6">
+          <Card className="p-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-border pb-4">
+              <div>
+                <span className="text-[10px] font-bold text-primary uppercase tracking-widest block">Optional Step</span>
+                <h3 className="text-lg font-bold text-foreground mt-1">Target Job Description Matching</h3>
+                <p className="text-xs text-muted">Paste a specific Job Description to calculate a role-specific match score and generate targeted AI wording improvements.</p>
               </div>
+              <Badge variant="info">Optional</Badge>
             </div>
 
-            {/* Checklist of what is missing */}
-            <div className="text-left bg-accent/5 border border-border p-4 rounded-2xl space-y-3">
-              <h4 className="text-xs font-bold text-foreground">Scanning Gaps Checklist:</h4>
-              <ul className="space-y-2 text-xs">
-                <li className="flex items-center space-x-2 text-red-400">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>Missing core target keywords in skills directory.</span>
-                </li>
-                <li className="flex items-center space-x-2 text-red-400">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>Unquantified experience achievements (missing metric stats).</span>
-                </li>
-                <li className="flex items-center space-x-2 text-red-400">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>Weak verbs usage in project descriptions.</span>
-                </li>
-              </ul>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-foreground block">Target Job Description</label>
+              <textarea
+                rows={6}
+                value={targetDescription || ""}
+                onChange={(e) => setTargetDescription(e.target.value)}
+                placeholder="Paste target job specification details here..."
+                className="w-full bg-accent/5 border border-border rounded-2xl p-4 text-xs text-foreground outline-none resize-y"
+              />
             </div>
 
-            {/* Target inputs and Optimization trigger */}
-            <div className="border-t border-border pt-6 space-y-4 text-left">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] text-muted font-bold uppercase block">Target Strategy</label>
-                  <select
-                    value={targetGoal}
-                    onChange={(e) => setTargetGoal(e.target.value)}
-                    className="w-full bg-card border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
-                  >
-                    <option value="ATS Optimization">ATS Optimization</option>
-                    <option value="FAANG Optimization">FAANG Optimization</option>
-                    <option value="Startup Optimization">Startup Optimization</option>
-                    <option value="Remote Jobs">Remote Jobs</option>
-                    <option value="Senior Roles">Senior / Lead Roles</option>
-                  </select>
-                </div>
-                <div className="space-y-1 md:col-span-2">
-                  <label className="text-[10px] text-muted font-bold uppercase block">Target Job Description (for custom tailoring & matching)</label>
-                  <textarea
-                    value={targetDescription}
-                    onChange={(e) => setTargetDescription(e.target.value)}
-                    placeholder="Paste the full job requirements text or target role details here to tailor your resume & generate matching cover letters..."
-                    rows={4}
-                    className="w-full bg-card border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50 custom-scrollbar resize-none"
-                  />
-                </div>
-              </div>
-
+            <div className="flex items-center gap-3">
               <Button
                 variant="primary"
                 size="md"
-                className="w-full font-bold text-xs"
-                onClick={triggerWizardOptimization}
+                onClick={handleAnalyzeJobDescription}
+                disabled={isAnalyzingJd || !targetDescription.trim()}
               >
-                <Sparkles className="w-4 h-4 mr-1.5" />
-                <span>Optimize Resume Content</span>
+                <Sparkles className="w-4 h-4 mr-1.5 animate-spin" />
+                <span>{isAnalyzingJd ? "Analyzing Match..." : "Analyze Job Match & Generate ChangeLogs"}</span>
+              </Button>
+
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => setWizardStep("suggestions")}
+              >
+                <span>Skip for Now → Proceed to AI ChangeLog</span>
               </Button>
             </div>
           </Card>
         </div>
       )}
 
-      {/* STEP 4: AI OPTIMIZING PROGRESS (LOADING STATE) */}
-      {wizardStep === "generating" && (
-        <Card className="p-8 max-w-lg mx-auto text-center space-y-6 mt-12">
-          <div className="flex justify-center">
-            <Cpu className="w-12 h-12 text-primary animate-spin" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-foreground">Generating Optimized Resume...</h3>
-            <p className="text-xs text-muted mt-2">
-              CareerOS is restructuring your experiences and resolving ATS grading loops.
-            </p>
-          </div>
-
-          <div className="text-left space-y-2 bg-accent/5 p-4 border border-border rounded-2xl max-w-sm mx-auto text-xs">
-            <div className="flex items-center space-x-2 text-success font-semibold">
-              <Check className="w-4 h-4" />
-              <span>Checking synced GitHub language matrices</span>
-            </div>
-            <div className="flex items-center space-x-2 text-success font-semibold">
-              <Check className="w-4 h-4" />
-              <span>Analyzing portfolio audits and active links</span>
-            </div>
-            <div className="flex items-center space-x-2 text-success font-semibold">
-              <Check className="w-4 h-4" />
-              <span>Rewriting summary targeting {targetGoal}</span>
-            </div>
-            <div className="flex items-center space-x-2 text-foreground font-semibold">
-              {genPhase >= 3 ? <Check className="w-4 h-4 text-success" /> : <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0" />}
-              <span>Structuring bullet points and action verbs</span>
-            </div>
-            <div className="flex items-center space-x-2 text-muted">
-              {genPhase >= 4 ? <Check className="w-4 h-4 text-success" /> : (genPhase === 3 ? <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0" /> : <div className="w-4 h-4 border-2 border-border rounded-full shrink-0" />)}
-              <span>Validating factual metrics checks</span>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* STEP 5: EDITABLE WORKSPACE AND PREVIEW CANVAS */}
-      {wizardStep === "editor" && resumeAnalysis && (
-        <div className="space-y-6">
-          
-          {/* Collapsible Advanced Customization Section */}
-          <div className="print-hidden">
-            <button
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="w-full flex items-center justify-between bg-accent/15 border border-border rounded-2xl p-4 text-xs font-bold text-foreground cursor-pointer hover:bg-accent/25 transition-colors duration-150"
-            >
-              <div className="flex items-center space-x-2">
-                <Settings className="w-4 h-4 text-primary" />
-                <span>⚙ Customize Page Layout & Snapshots (Advanced Settings)</span>
+      {/* STEP 5: AI IMPROVEMENTS / CHANGELOG REVIEW */}
+      {wizardStep === "suggestions" && (
+        <div className="space-y-6 max-w-4xl mx-auto">
+          <Card className="p-6 space-y-6">
+            <div className="flex items-center justify-between border-b border-border pb-4">
+              <div>
+                <h3 className="text-lg font-bold text-foreground">AI ChangeLog & Wording Improvements</h3>
+                <p className="text-xs text-muted">Review, Accept, Edit, or Reject proposed AI resume enhancements. Accepted changes will modify your active resume and recalculate your ATS score.</p>
               </div>
-              {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-
-            {showAdvanced && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 bg-card border border-border p-5 rounded-2xl text-xs space-y-2 animate-fade-in-up">
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <span className="text-muted text-[10px] uppercase font-bold">Font Family</span>
-                      <select
-                        value={canvasFont}
-                        onChange={(e) => setCanvasFont(e.target.value)}
-                        className="w-full bg-accent/15 border border-border rounded-xl p-2.5 text-xs text-foreground outline-none"
-                      >
-                        <option value="sans">Inter (Sans)</option>
-                        <option value="serif">Playfair (Serif)</option>
-                        <option value="mono">JetBrains (Mono)</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-muted text-[10px] uppercase font-bold">Line Spacing</span>
-                      <select
-                        value={canvasSpacing}
-                        onChange={(e) => setCanvasSpacing(e.target.value)}
-                        className="w-full bg-accent/15 border border-border rounded-xl p-2.5 text-xs text-foreground outline-none"
-                      >
-                        <option value="tight">Compact</option>
-                        <option value="normal">Normal</option>
-                        <option value="loose">Relaxed</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <span className="text-muted text-[10px] uppercase font-bold">Document Margins</span>
-                      <select
-                        value={canvasMargin}
-                        onChange={(e) => setCanvasMargin(e.target.value)}
-                        className="w-full bg-accent/15 border border-border rounded-xl p-2.5 text-xs text-foreground outline-none"
-                      >
-                        <option value="tight">Compact</option>
-                        <option value="normal">Normal</option>
-                        <option value="wide">Wide</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-muted text-[10px] uppercase font-bold">Theme Style</span>
-                      <div className="flex space-x-1 pt-2">
-                        {["indigo", "emerald", "amber", "slate"].map((c) => (
-                          <button
-                            key={c}
-                            onClick={() => setCanvasColor(c)}
-                            className={`w-6 h-6 rounded-full border border-border cursor-pointer ${
-                              c === "indigo" ? "bg-indigo-500" : (c === "emerald" ? "bg-emerald-500" : (c === "amber" ? "bg-amber-500" : "bg-slate-400"))
-                            } ${canvasColor === c ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4 border-t md:border-t-0 md:border-l border-border/60 pt-4 md:pt-0 md:pl-5">
-                  <div className="space-y-1">
-                    <span className="text-muted text-[10px] uppercase font-bold">Active Snapshot</span>
-                    <select
-                      value={resumeAnalysis.activeVersionId}
-                      onChange={(e) => handleVersionChange(Number(e.target.value))}
-                      className="w-full bg-accent/15 border border-border rounded-xl p-2.5 text-xs text-foreground outline-none"
-                    >
-                      {resumeAnalysis.versionsList?.map(v => (
-                        <option key={v.versionNumber} value={v.versionNumber}>
-                          v{v.versionNumber} - {v.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <Button variant="secondary" size="sm" className="w-full" onClick={() => setShowForkModal(true)}>
-                      <GitBranch className="w-3.5 h-3.5 mr-1" />
-                      <span>Fork Snapshot</span>
-                    </Button>
-                    <Button variant="secondary" size="sm" className="w-full" onClick={loadCrossSync}>
-                      <RefreshCw className="w-3.5 h-3.5 mr-1" />
-                      <span>Sync Modules</span>
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Cross Sync Suggestion Badges */}
-                {suggestions.length > 0 && (
-                  <div className="col-span-1 md:col-span-2 border-t border-border/50 pt-4 space-y-2">
-                    <div className="text-muted text-[10px] uppercase font-bold">Verified Cross-Sync Recommendations ({suggestions.length})</div>
-                    <div className="flex flex-wrap gap-2">
-                      {suggestions.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="bg-primary/5 border border-primary/20 hover:border-primary/45 rounded-xl p-2.5 flex items-center justify-between gap-3 text-xs max-w-sm"
-                        >
-                          <div>
-                            <span className="text-[9px] font-bold bg-primary/10 text-primary px-1.5 py-0.2 rounded block w-fit mb-1">{item.module}</span>
-                            <p className="font-bold text-foreground">{item.title}</p>
-                            <p className="text-[10px] text-muted leading-tight mt-1">{item.description}</p>
-                          </div>
-                          <button
-                            onClick={() => applyCrossSyncItem(item)}
-                            className="p-1 bg-primary text-white rounded-lg hover:bg-primary-dark cursor-pointer shrink-0"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Core editor grid splits */}
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-            
-            {/* Left Side: Editor (Hidden during print) */}
-            <div className="xl:col-span-5 space-y-6 print-hidden">
-              <Card className="p-5 space-y-4">
-                <div className="flex items-center space-x-2 border-b border-border pb-3">
-                  <Layout className="w-4 h-4 text-primary" />
-                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">AI Optimized Resume Editor</h3>
-                </div>
-
-                {/* Editor Tabs list */}
-                <div className="flex flex-wrap gap-1 bg-accent/10 p-1 rounded-xl">
-                  {(["summary", "skills", "projects", "work", "education", "certifications", "cover"] as const).map(tab => (
-                    <button
-                      key={tab}
-                      onClick={() => setEditorTab(tab)}
-                      className={`flex-1 text-[10px] font-bold uppercase rounded-lg py-1.5 px-2 cursor-pointer transition-all duration-150 ${
-                        editorTab === tab ? "bg-card text-foreground shadow-sm" : "text-muted hover:text-foreground"
-                      }`}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Always-editable Contact Header cards */}
-                <div className="grid grid-cols-2 gap-3 bg-accent/5 border border-border/60 p-3 rounded-2xl text-xs space-y-1">
-                  <div className="col-span-2 font-bold text-foreground mb-1">Contact Headers</div>
-                  <div className="space-y-1">
-                    <span className="text-[9px] text-muted font-bold uppercase">Name</span>
-                    <input
-                      type="text"
-                      value={formState?.personalInfo?.name || ""}
-                      onChange={(e) => handlePersonalInfoChange("name", e.target.value)}
-                      className="w-full bg-card border border-border rounded-xl p-2 text-xs text-foreground focus:border-primary/50 outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[9px] text-muted font-bold uppercase">Email</span>
-                    <input
-                      type="text"
-                      value={formState?.personalInfo?.email || ""}
-                      onChange={(e) => handlePersonalInfoChange("email", e.target.value)}
-                      className="w-full bg-card border border-border rounded-xl p-2 text-xs text-foreground focus:border-primary/50 outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[9px] text-muted font-bold uppercase">Phone</span>
-                    <input
-                      type="text"
-                      value={formState?.personalInfo?.phone || ""}
-                      onChange={(e) => handlePersonalInfoChange("phone", e.target.value)}
-                      className="w-full bg-card border border-border rounded-xl p-2 text-xs text-foreground focus:border-primary/50 outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[9px] text-muted font-bold uppercase">Location</span>
-                    <input
-                      type="text"
-                      value={formState?.personalInfo?.location || ""}
-                      onChange={(e) => handlePersonalInfoChange("location", e.target.value)}
-                      className="w-full bg-card border border-border rounded-xl p-2 text-xs text-foreground focus:border-primary/50 outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1 col-span-2">
-                    <span className="text-[9px] text-muted font-bold uppercase">GitHub Profile URL</span>
-                    <input
-                      type="text"
-                      value={formState?.personalInfo?.githubUrl || ""}
-                      onChange={(e) => handlePersonalInfoChange("githubUrl", e.target.value)}
-                      className="w-full bg-card border border-border rounded-xl p-2 text-xs text-foreground focus:border-primary/50 outline-none"
-                    />
-                  </div>
-                </div>
-
-                {/* Form Tabs content */}
-                <div className="space-y-4 pt-2">
-                  {editorTab === "summary" && (
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] text-muted font-bold uppercase">Summary text</span>
-                      <textarea
-                        value={formState?.summary || ""}
-                        onChange={(e) => handleSummaryChange(e.target.value)}
-                        rows={4}
-                        className="w-full bg-card border border-border rounded-xl p-3 text-xs text-foreground focus:border-primary/50 outline-none resize-none leading-relaxed"
-                      />
-                    </div>
-                  )}
-
-                  {editorTab === "work" && (
-                    <div className="space-y-4">
-                      {formState?.workExperience?.map((w, idx) => (
-                        <div key={idx} className="border border-border/80 p-3.5 rounded-2xl space-y-3 bg-accent/5">
-                          <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                            <span className="text-xs font-bold text-foreground">Position #{idx + 1}</span>
-                            <button
-                              onClick={() => deleteWorkEntry(idx)}
-                              className="text-red-400 hover:text-red-500 cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="space-y-1 col-span-2">
-                              <span className="text-[9px] text-muted uppercase font-bold">Company</span>
-                              <input
-                                type="text"
-                                value={w.company}
-                                onChange={(e) => handleWorkChange(idx, "company", e.target.value)}
-                                className="w-full bg-card border border-border rounded-lg p-2 text-xs text-foreground outline-none"
-                              />
-                            </div>
-                            <div className="space-y-1 col-span-2">
-                              <span className="text-[9px] text-muted uppercase font-bold">Position</span>
-                              <input
-                                type="text"
-                                value={w.position}
-                                onChange={(e) => handleWorkChange(idx, "position", e.target.value)}
-                                className="w-full bg-card border border-border rounded-lg p-2 text-xs text-foreground outline-none"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <span className="text-[9px] text-muted uppercase font-bold">Start Date</span>
-                              <input
-                                type="text"
-                                value={w.startDate || ""}
-                                onChange={(e) => handleWorkChange(idx, "startDate", e.target.value)}
-                                className="w-full bg-card border border-border rounded-lg p-2 text-xs text-foreground outline-none"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <span className="text-[9px] text-muted uppercase font-bold">End Date</span>
-                              <input
-                                type="text"
-                                value={w.endDate || ""}
-                                onChange={(e) => handleWorkChange(idx, "endDate", e.target.value)}
-                                className="w-full bg-card border border-border rounded-lg p-2 text-xs text-foreground outline-none"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="text-[9px] text-muted font-bold uppercase">Bullet Highlights</span>
-                              <button
-                                onClick={() => {
-                                  const bPoints = [...w.bulletPoints, "Accomplished target milestone."];
-                                  handleWorkChange(idx, "bulletPoints", bPoints);
-                                }}
-                                className="text-primary hover:underline text-[10px] font-bold flex items-center gap-0.5 cursor-pointer"
-                              >
-                                <Plus className="w-3.5 h-3.5" /> Add Bullet
-                              </button>
-                            </div>
-                            {w.bulletPoints.map((bp, bIdx) => (
-                              <div key={bIdx} className="space-y-1 bg-card p-2 border border-border rounded-xl">
-                                <textarea
-                                  value={bp}
-                                  onChange={(e) => {
-                                    const bPoints = [...w.bulletPoints];
-                                    bPoints[bIdx] = e.target.value;
-                                    handleWorkChange(idx, "bulletPoints", bPoints);
-                                  }}
-                                  className="w-full bg-transparent border-none text-xs text-foreground outline-none resize-none"
-                                  rows={2}
-                                />
-                                <div className="flex justify-between pt-1 border-t border-border/50">
-                                  <button
-                                    onClick={() => triggerRewriteBullet("work", idx, bIdx)}
-                                    className="text-[9px] text-primary hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
-                                  >
-                                    <Sparkles className="w-3 h-3" /> AI Rewrite
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      const bPoints = [...w.bulletPoints];
-                                      bPoints.splice(bIdx, 1);
-                                      handleWorkChange(idx, "bulletPoints", bPoints);
-                                    }}
-                                    className="text-[9px] text-red-400 hover:text-red-500 font-bold cursor-pointer"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-
-                      <Button variant="secondary" size="sm" onClick={addWorkEntry} className="w-full">
-                        <Plus className="w-4 h-4 mr-1.5" /> Add Experience Position
-                      </Button>
-                    </div>
-                  )}
-
-                  {editorTab === "projects" && (
-                    <div className="space-y-4">
-                      {formState?.projects?.map((p, idx) => (
-                        <div key={idx} className="border border-border/80 p-3.5 rounded-2xl space-y-3 bg-accent/5">
-                          <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                            <span className="text-xs font-bold text-foreground">Project #{idx + 1}</span>
-                            <button
-                              onClick={() => deleteProjectEntry(idx)}
-                              className="text-red-400 hover:text-red-500 cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-
-                          <div className="space-y-2 text-xs">
-                            <div className="grid grid-cols-2 gap-2">
-                              <div className="space-y-1">
-                                <span className="text-[9px] text-muted uppercase font-bold">Project Title</span>
-                                <input
-                                  type="text"
-                                  value={p.title}
-                                  onChange={(e) => handleProjectChange(idx, "title", e.target.value)}
-                                  className="w-full bg-card border border-border rounded-lg p-2 text-xs text-foreground outline-none"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <span className="text-[9px] text-muted uppercase font-bold">Link</span>
-                                <input
-                                  type="text"
-                                  value={p.link}
-                                  onChange={(e) => handleProjectChange(idx, "link", e.target.value)}
-                                  className="w-full bg-card border border-border rounded-lg p-2 text-xs text-foreground outline-none"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="space-y-1">
-                              <span className="text-[9px] text-muted uppercase font-bold">Technologies</span>
-                              <input
-                                type="text"
-                                value={p.technologies?.join(", ") || ""}
-                                onChange={(e) => {
-                                  const arr = e.target.value.split(",").map(t => t.trim()).filter(Boolean);
-                                  handleProjectChange(idx, "technologies", arr);
-                                }}
-                                className="w-full bg-card border border-border rounded-lg p-2 text-xs text-foreground outline-none"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="text-[9px] text-muted font-bold uppercase">Bullet Highlights</span>
-                              <button
-                                onClick={() => {
-                                  const bPoints = [...p.bulletPoints, "Built application services."];
-                                  handleProjectChange(idx, "bulletPoints", bPoints);
-                                }}
-                                className="text-primary hover:underline text-[10px] font-bold flex items-center gap-0.5 cursor-pointer"
-                              >
-                                <Plus className="w-3.5 h-3.5" /> Add Bullet
-                              </button>
-                            </div>
-                            {p.bulletPoints.map((bp, bIdx) => (
-                              <div key={bIdx} className="space-y-1 bg-card p-2 border border-border rounded-xl">
-                                <textarea
-                                  value={bp}
-                                  onChange={(e) => {
-                                    const bPoints = [...p.bulletPoints];
-                                    bPoints[bIdx] = e.target.value;
-                                    handleProjectChange(idx, "bulletPoints", bPoints);
-                                  }}
-                                  className="w-full bg-transparent border-none text-xs text-foreground outline-none resize-none"
-                                  rows={2}
-                                />
-                                <div className="flex justify-between pt-1 border-t border-border/50">
-                                  <button
-                                    onClick={() => triggerRewriteBullet("project", idx, bIdx)}
-                                    className="text-[9px] text-primary hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
-                                  >
-                                    <Sparkles className="w-3 h-3" /> AI Rewrite
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      const bPoints = [...p.bulletPoints];
-                                      bPoints.splice(bIdx, 1);
-                                      handleProjectChange(idx, "bulletPoints", bPoints);
-                                    }}
-                                    className="text-[9px] text-red-400 hover:text-red-500 font-bold cursor-pointer"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-
-                      <Button variant="secondary" size="sm" onClick={addProjectEntry} className="w-full">
-                        <Plus className="w-4 h-4 mr-1.5" /> Add Project Entry
-                      </Button>
-                    </div>
-                  )}
-
-                  {editorTab === "skills" && formState?.skills && (
-                    <div className="space-y-3 bg-accent/5 border border-border/60 p-4 rounded-2xl text-xs">
-                      {Object.keys(formState.skills).map((cat) => (
-                        <div key={cat} className="space-y-1">
-                          <span className="text-[10px] text-muted font-bold uppercase tracking-wider block">{cat}</span>
-                          <input
-                            type="text"
-                            value={(formState.skills as any)[cat]?.join(", ") || ""}
-                            onChange={(e) => handleSkillsChange(cat, e.target.value)}
-                            className="w-full bg-card border border-border rounded-xl p-2.5 text-xs text-foreground outline-none"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {editorTab === "education" && (
-                    <div className="space-y-4">
-                      {formState?.education?.map((e, idx) => (
-                        <div key={idx} className="border border-border/80 p-3.5 rounded-2xl space-y-3 bg-accent/5">
-                          <div className="flex justify-between items-center border-b border-border/50 pb-2">
-                            <span className="text-xs font-bold text-foreground">Education #{idx + 1}</span>
-                            <button
-                              onClick={() => {
-                                if (!formState) return;
-                                const updated = { ...formState };
-                                updated.education.splice(idx, 1);
-                                setFormState(updated);
-                                saveResumeEdits(updated);
-                              }}
-                              className="text-red-400 hover:text-red-500 cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="space-y-1 col-span-2">
-                              <span className="text-[9px] text-muted uppercase font-bold">Institution</span>
-                              <input
-                                type="text"
-                                value={e.institution}
-                                onChange={(eVal) => handleEducationChange(idx, "institution", eVal.target.value)}
-                                className="w-full bg-card border border-border rounded-lg p-2 text-xs text-foreground outline-none"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <span className="text-[9px] text-muted uppercase font-bold">Degree</span>
-                              <input
-                                type="text"
-                                value={e.degree}
-                                onChange={(eVal) => handleEducationChange(idx, "degree", eVal.target.value)}
-                                className="w-full bg-card border border-border rounded-lg p-2 text-xs text-foreground outline-none"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <span className="text-[9px] text-muted uppercase font-bold">Major</span>
-                              <input
-                                type="text"
-                                value={e.major}
-                                onChange={(eVal) => handleEducationChange(idx, "major", eVal.target.value)}
-                                className="w-full bg-card border border-border rounded-lg p-2 text-xs text-foreground outline-none"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {editorTab === "certifications" && (
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] text-muted font-bold uppercase">Certifications</span>
-                        <button
-                          onClick={() => {
-                            if (!formState) return;
-                            const updated = { ...formState };
-                            if (!updated.certifications) updated.certifications = [];
-                            updated.certifications.push({
-                              name: "New Certificate",
-                              issuer: "",
-                              issueDate: "",
-                              credentialId: "",
-                              credentialUrl: "",
-                              evidenceText: "",
-                              source: "manual",
-                              confidence: 100,
-                              isRelevant: true
-                            });
-                            setFormState(updated);
-                            saveResumeEdits(updated);
-                          }}
-                          className="text-primary hover:underline text-[10px] font-bold flex items-center gap-0.5 cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" /> Add
-                        </button>
-                      </div>
-                      {formState?.certifications?.map((cert, idx) => (
-                        <div key={idx} className="flex flex-col gap-2 bg-card border border-border p-3 rounded-xl">
-                          <div className="flex justify-between items-center">
-                            <span className="text-[10px] text-muted uppercase font-bold">Certificate #{idx + 1}</span>
-                            <button
-                              onClick={() => {
-                                if (!formState) return;
-                                const updated = { ...formState };
-                                updated.certifications.splice(idx, 1);
-                                setFormState(updated);
-                                saveResumeEdits(updated);
-                              }}
-                              className="text-red-400 hover:text-red-500 cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <span className="text-[9px] text-muted uppercase font-bold">Name</span>
-                              <input
-                                type="text"
-                                value={cert.name}
-                                onChange={(e) => {
-                                  if (!formState) return;
-                                  const updated = { ...formState };
-                                  updated.certifications[idx].name = e.target.value;
-                                  setFormState(updated);
-                                  saveResumeEdits(updated);
-                                }}
-                                className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground outline-none"
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[9px] text-muted uppercase font-bold">Issuer</span>
-                              <input
-                                type="text"
-                                value={cert.issuer}
-                                onChange={(e) => {
-                                  if (!formState) return;
-                                  const updated = { ...formState };
-                                  updated.certifications[idx].issuer = e.target.value;
-                                  setFormState(updated);
-                                  saveResumeEdits(updated);
-                                }}
-                                className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground outline-none"
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[9px] text-muted uppercase font-bold">Credential URL</span>
-                              <input
-                                type="text"
-                                value={cert.credentialUrl}
-                                onChange={(e) => {
-                                  if (!formState) return;
-                                  const updated = { ...formState };
-                                  updated.certifications[idx].credentialUrl = e.target.value;
-                                  setFormState(updated);
-                                  saveResumeEdits(updated);
-                                }}
-                                className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground outline-none"
-                              />
-                            </div>
-                            <div>
-                              <span className="text-[9px] text-muted uppercase font-bold">Date</span>
-                              <input
-                                type="text"
-                                value={cert.issueDate}
-                                onChange={(e) => {
-                                  if (!formState) return;
-                                  const updated = { ...formState };
-                                  updated.certifications[idx].issueDate = e.target.value;
-                                  setFormState(updated);
-                                  saveResumeEdits(updated);
-                                }}
-                                className="w-full bg-background border border-border rounded-lg p-2 text-xs text-foreground outline-none"
-                              />
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-2 mt-1">
-                            <input 
-                              type="checkbox" 
-                              checked={cert.isRelevant} 
-                              onChange={(e) => {
-                                if (!formState) return;
-                                const updated = { ...formState };
-                                updated.certifications[idx].isRelevant = e.target.checked;
-                                setFormState(updated);
-                                saveResumeEdits(updated);
-                              }}
-                              className="cursor-pointer"
-                            />
-                            <span className="text-[10px] text-muted font-bold uppercase">Relevant to target role</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {editorTab === "cover" && (
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] text-muted font-bold uppercase">Tailored Cover Letter</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const name = formState?.personalInfo?.name || "Candidate";
-                            const company = targetDescription || "Target Company";
-                            const letter = `Dear Hiring Manager at ${company},
-
-I am writing to express my strong interest in the open position matching my background at ${company}. As an experienced professional with key expertise in ${formState?.skills?.frontend?.join(", ") || "Frontend"} and ${formState?.skills?.backend?.join(", ") || "Backend"} technologies, I am confident in my ability to make a significant contribution to your team.
-
-My background includes:
-- Summary profile: ${formState?.summary || "software developer"}
-- Core skills: ${[...(formState?.skills?.languages || []), ...(formState?.skills?.frontend || [])].slice(0, 5).join(", ")}
-
-I am eager to apply my practical execution mindset and contribute to your engineering goals. Thank you for your time and consideration.
-
-Sincerely,
-${name}`;
-
-                            navigator.clipboard.writeText(letter);
-                            addNotification("Cover letter copied to clipboard!", "success");
-                          }}
-                          className="text-primary hover:underline text-[10px] font-bold flex items-center gap-1 cursor-pointer"
-                        >
-                          <Copy className="w-3.5 h-3.5" /> Copy Letter
-                        </button>
-                      </div>
-                      
-                      <div className="bg-accent/5 border border-border p-4 rounded-2xl text-xs space-y-3 leading-relaxed text-foreground/90 font-sans whitespace-pre-wrap">
-                        {(() => {
-                          const name = formState?.personalInfo?.name || "Candidate";
-                          const company = targetDescription || "Target Company";
-                          return `Dear Hiring Manager at ${company},
-
-I am writing to express my strong interest in the open position matching my background at ${company}. As an experienced professional with key expertise in ${formState?.skills?.frontend?.join(", ") || "Frontend"} and ${formState?.skills?.backend?.join(", ") || "Backend"} technologies, I am confident in my ability to make a significant contribution to your team.
-
-My background includes:
-- Summary profile: ${formState?.summary || "software developer"}
-- Core skills: ${[...(formState?.skills?.languages || []), ...(formState?.skills?.frontend || [])].slice(0, 5).join(", ")}
-
-I am eager to apply my practical execution mindset and contribute to your engineering goals. Thank you for your time and consideration.
-
-Sincerely,
-${name}`;
-                        })()}
-                      </div>
-                    </div>
-                  )}
-
-                  {editorTab === "achievements" && (
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] text-muted font-bold uppercase">Achievements</span>
-                        <button
-                          onClick={() => {
-                            if (!formState) return;
-                            const updated = { ...formState };
-                            updated.achievements.push("AWS Certified Solutions Architect");
-                            setFormState(updated);
-                            saveResumeEdits(updated);
-                          }}
-                          className="text-primary hover:underline text-[10px] font-bold flex items-center gap-0.5 cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" /> Add
-                        </button>
-                      </div>
-                      {formState?.achievements?.map((ach, idx) => (
-                        <div key={idx} className="flex gap-2 items-center bg-card border border-border p-2 rounded-xl">
-                          <input
-                            type="text"
-                            value={ach}
-                            onChange={(e) => {
-                              if (!formState) return;
-                              const updated = { ...formState };
-                              updated.achievements[idx] = e.target.value;
-                              setFormState(updated);
-                              saveResumeEdits(updated);
-                            }}
-                            className="flex-1 bg-transparent border-none text-xs text-foreground outline-none"
-                          />
-                          <button
-                            onClick={() => {
-                              if (!formState) return;
-                              const updated = { ...formState };
-                              updated.achievements.splice(idx, 1);
-                              setFormState(updated);
-                              saveResumeEdits(updated);
-                            }}
-                            className="text-red-400 hover:text-red-500 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </Card>
-
-              {/* AI Fact Checker panel */}
-              {factCheckList.length > 0 && (
-                <Card className="p-5 border-l-4 border-l-warning space-y-4">
-                  <div className="flex items-center space-x-2 text-warning">
-                    <AlertCircle className="w-5 h-5" />
-                    <h4 className="text-xs font-bold uppercase tracking-wider">AI Fact-Checker & Metric Validator</h4>
-                  </div>
-                  <p className="text-[11px] text-muted leading-relaxed">
-                    We found claims that lack measurable impact. You can add metrics below:
-                  </p>
-                  <div className="space-y-3">
-                    {factCheckList.map((item, idx) => (
-                      <div key={idx} className="bg-card border border-border p-3 rounded-2xl text-xs space-y-2">
-                        <p className="text-foreground italic">"{item.originalText}"</p>
-                        <p className="text-primary font-semibold text-[10px]">{item.promptQuestion}</p>
-                        <div className="flex gap-2 items-center">
-                          <input
-                            type="text"
-                            placeholder="e.g. 40%"
-                            className="flex-1 bg-accent/10 border border-border rounded-lg px-2.5 py-1 text-xs text-foreground outline-none"
-                            onBlur={(e) => {
-                              if (!e.target.value || !formState) return;
-                              const val = e.target.value;
-                              const updated = { ...formState };
-                              
-                              updated.workExperience.forEach((w, wIdx) => {
-                                w.bulletPoints.forEach((b, bIdx) => {
-                                  if (b.includes(item.originalText)) {
-                                    updated.workExperience[wIdx].bulletPoints[bIdx] = b.replace(item.originalText, `${item.originalText} by ${val}`);
-                                  }
-                                });
-                              });
-
-                              updated.projects.forEach((p, pIdx) => {
-                                p.bulletPoints.forEach((b, bIdx) => {
-                                  if (b.includes(item.originalText)) {
-                                    updated.projects[pIdx].bulletPoints[bIdx] = b.replace(item.originalText, `${item.originalText} by ${val}`);
-                                  }
-                                });
-                              });
-
-                              setFormState(updated);
-                              saveResumeEdits(updated);
-                              setFactCheckList(factCheckList.filter(f => f.originalText !== item.originalText));
-                              addNotification("Metric appended successfully!", "success");
-                            }}
-                          />
-                          <button
-                            onClick={() => setFactCheckList(factCheckList.filter(f => f.originalText !== item.originalText))}
-                            className="text-[10px] text-muted hover:underline font-bold"
-                          >
-                            Skip
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              )}
+              <Badge variant="primary">{pendingLogs.length} Suggestions Pending</Badge>
             </div>
 
-            {/* Right Side: Canva preview Page */}
-            <div className="xl:col-span-7 flex flex-col items-center space-y-6">
-              
-              {/* Score breakdown metrics and download actions (Hidden during print) */}
-              <div className="w-full grid grid-cols-3 gap-4 print-hidden">
-                <Card className="p-4 flex items-center space-x-3">
-                  <div className="p-2 bg-primary/10 text-primary border border-primary/20 rounded-xl">
-                    <Gauge className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-muted font-bold uppercase block">ATS Score</span>
-                    <span className="text-xl font-black text-foreground">{resumeAnalysis.atsScore}%</span>
-                  </div>
-                </Card>
-                <Card className="p-4 flex items-center space-x-3">
-                  <div className="p-2 bg-secondary/10 text-secondary border border-secondary/20 rounded-xl">
-                    <Cpu className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-muted font-bold uppercase block">AI Confidence</span>
-                    <span className="text-xl font-black text-foreground">{resumeAnalysis.aiConfidence}%</span>
-                  </div>
-                </Card>
-                <Card className="p-4 flex items-center justify-between gap-2">
-                  <Button size="sm" variant="secondary" onClick={handlePrint} className="flex-1">
-                    <Printer className="w-4 h-4 mr-1" />
-                    <span>PDF</span>
+            {pendingLogs.length === 0 ? (
+              <div className="p-8 text-center text-xs text-muted border border-dashed border-border rounded-2xl bg-accent/5 space-y-4">
+                <p>
+                  No pending AI suggestions available. Click <strong>Analyze Job Match</strong> in Step 4 to generate target-specific change suggestions or proceed directly to the Resume Builder.
+                </p>
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <Button variant="secondary" size="md" onClick={() => setWizardStep("job_match")}>
+                    <ArrowLeft className="w-4 h-4 mr-1.5" /> Back to Job Match
                   </Button>
-                  <Button size="sm" variant="secondary" onClick={downloadMarkdown} className="flex-1">
-                    <Download className="w-4 h-4 mr-1" />
-                    <span>MD</span>
+                  <Button variant="primary" size="md" onClick={() => setWizardStep("builder")}>
+                    <span>Proceed to Resume Builder →</span>
                   </Button>
-                </Card>
-              </div>
-
-              {/* Document rendering sheet */}
-              <div 
-                className="w-full flex justify-center overflow-x-auto p-4 bg-accent/5 border border-border rounded-3xl"
-                style={{ minHeight: "842px" }}
-              >
-                <div
-                  id="resume-paper-preview"
-                  className={`bg-white text-slate-800 shadow-2xl border border-slate-200 transition-all duration-300 ${fontClass} ${marginClass} text-left`}
-                  style={{
-                    width: canvasSize === "letter" ? "8.5in" : "210mm",
-                    minHeight: canvasSize === "letter" ? "11in" : "297mm",
-                    transform: `scale(${canvasZoom / 100})`,
-                    transformOrigin: "top center",
-                    marginBottom: `calc((1 - ${canvasZoom / 100}) * -100%)`
-                  }}
-                >
-                  {formState ? (
-                    <div className={spacingClass}>
-                      {/* Personal contact banner */}
-                      <div className="text-center border-b pb-5 border-slate-200">
-                        <h1 className={`text-2xl font-black uppercase tracking-tight ${colorHex}`}>
-                          {formState.personalInfo?.name || "Candidate Name"}
-                        </h1>
-                        <div className="text-[10px] text-slate-500 font-semibold mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1">
-                          {formState.personalInfo?.email && <span>{formState.personalInfo.email}</span>}
-                          {formState.personalInfo?.phone && <span>• {formState.personalInfo.phone}</span>}
-                          {formState.personalInfo?.location && <span>• {formState.personalInfo.location}</span>}
-                          {formState.personalInfo?.githubUrl && <span>• GitHub</span>}
-                          {formState.personalInfo?.linkedinUrl && <span>• LinkedIn</span>}
-                        </div>
-                      </div>
-
-                      {/* Summary */}
-                      {formState.summary && (
-                        <div className="space-y-1.5">
-                          <h3 className={`text-[12px] font-black uppercase tracking-widest ${colorHex} border-b pb-1`}>Professional Summary</h3>
-                          <p className="text-[10px] text-slate-600 leading-relaxed text-justify">{formState.summary}</p>
-                        </div>
-                      )}
-
-                      {/* Skills */}
-                      {formState.skills && (
-                        <div className="space-y-1.5">
-                          <h3 className={`text-[12px] font-black uppercase tracking-widest ${colorHex} border-b pb-1`}>Skills Inventory</h3>
-                          <div className="text-[10px] text-slate-600 space-y-1 pl-1">
-                            {Object.keys(formState.skills).map((cat) => {
-                              const list = (formState.skills as any)[cat];
-                              if (!list || list.length === 0) return null;
-                              return (
-                                <div key={cat} className="flex">
-                                  <span className="w-24 font-bold uppercase text-slate-500 shrink-0">{cat}:</span>
-                                  <span className="text-slate-700">{list.join(", ")}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Projects */}
-                      {formState.projects?.length > 0 && (
-                        <div className="space-y-2">
-                          <h3 className={`text-[12px] font-black uppercase tracking-widest ${colorHex} border-b pb-1`}>Key Projects</h3>
-                          <div className="space-y-3">
-                            {formState.projects.map((p, idx) => (
-                              <div key={idx} className="space-y-1">
-                                <div className="flex justify-between items-baseline">
-                                  <span className="text-[11px] font-extrabold text-slate-800">{p.title}</span>
-                                  {p.technologies?.length > 0 && (
-                                    <span className="text-[9px] bg-slate-100 text-slate-600 border border-slate-200 rounded px-2 py-0.5 font-bold">
-                                      {p.technologies.join(", ")}
-                                    </span>
-                                  )}
-                                </div>
-                                <ul className="list-disc list-inside text-[10px] text-slate-600 space-y-1 leading-relaxed pl-2">
-                                  {p.bulletPoints?.map((bp, bIdx) => (
-                                    <li key={bIdx} className="marker:text-slate-400">{bp}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Work history */}
-                      {formState.workExperience?.length > 0 && (
-                        <div className="space-y-2">
-                          <h3 className={`text-[12px] font-black uppercase tracking-widest ${colorHex} border-b pb-1`}>Employment History</h3>
-                          <div className="space-y-3">
-                            {formState.workExperience.map((w, idx) => (
-                              <div key={idx} className="space-y-1">
-                                <div className="flex justify-between items-baseline">
-                                  <span className="text-[11px] font-extrabold text-slate-800">{w.position}</span>
-                                  <span className="text-[9px] text-slate-500 font-bold">{w.startDate} - {w.endDate}</span>
-                                </div>
-                                <div className="flex justify-between items-baseline text-[10px] text-slate-500 italic">
-                                  <span>{w.company}</span>
-                                  <span>{w.location}</span>
-                                </div>
-                                <ul className="list-disc list-inside text-[10px] text-slate-600 space-y-1 leading-relaxed pl-2">
-                                  {w.bulletPoints?.map((bp, bIdx) => (
-                                    <li key={bIdx} className="marker:text-slate-400">{bp}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Education */}
-                      {formState.education?.length > 0 && (
-                        <div className="space-y-2">
-                          <h3 className={`text-[12px] font-black uppercase tracking-widest ${colorHex} border-b pb-1`}>Education</h3>
-                          <div className="space-y-2">
-                            {formState.education.map((e, idx) => (
-                              <div key={idx} className="space-y-1">
-                                <div className="flex justify-between items-baseline text-[10px]">
-                                  <div>
-                                    <span className="font-extrabold text-slate-800">{e.institution}</span>
-                                    {e.degree && <span className="text-slate-600"> — {e.degree} in {e.major}</span>}
-                                  </div>
-                                  <span className="text-slate-500 font-bold">{e.startDate} {e.endDate ? `- ${e.endDate}` : ""}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Certifications */}
-                      {formState.certifications?.length > 0 && (
-                        <div className="space-y-2">
-                          <h3 className={`text-[12px] font-black uppercase tracking-widest ${colorHex} border-b pb-1`}>Certifications & Training</h3>
-                          <ul className="list-disc list-inside text-[10px] text-slate-600 space-y-1 pl-2">
-                            {formState.certifications.filter(c => c.isRelevant).map((c, idx) => (
-                              <li key={idx} className="marker:text-slate-400">
-                                <span className="font-bold text-slate-800">{c.name}</span>
-                                {c.issuer && <span> — {c.issuer}</span>}
-                                {c.issueDate && <span>, {c.issueDate}</span>}
-                                {c.credentialUrl && /^https?:\/\//i.test(c.credentialUrl) && (
-                                  <a href={c.credentialUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold ml-1 print:hidden">
-                                    [View Credential]
-                                  </a>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-center py-20 text-slate-400">Loading optimized resume templates...</div>
-                  )}
                 </div>
               </div>
-            </div>
-
-          </div>
-
-          {/* AI Explanation Changelog list (Hidden during print) */}
-          {resumeAnalysis.changeLogs && resumeAnalysis.changeLogs.length > 0 && (
-            <Card className="p-6 print-hidden space-y-4 w-full text-left">
-              <div className="flex items-center space-x-2 border-b border-border pb-3">
-                <BookOpen className="w-5 h-5 text-primary" />
-                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Pending AI Optimizations</h3>
-              </div>
-              <div className="space-y-3">
-                {resumeAnalysis.changeLogs.map((item, idx) => (
-                  <div key={idx} className={`border p-4 rounded-2xl text-xs space-y-3 ${item.status === 'pending' ? 'bg-accent/5 border-primary/20' : 'bg-card border-border opacity-70'}`}>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-primary">{item.section}</span>
-                      <Badge variant={item.status === 'accepted' ? 'success' : item.status === 'rejected' ? 'warning' : item.status === 'edited' ? 'info' : 'muted'}>
-                        {item.status.toUpperCase()}
+            ) : (
+              <div className="space-y-4">
+                {pendingLogs.map((log: any) => (
+                  <div key={log._id} className="p-4 bg-card border border-border rounded-2xl space-y-3">
+                    <div className="flex justify-between items-center text-xs font-bold">
+                      <span className="text-primary uppercase tracking-wider text-[10px]">{log.section || "Work Experience"}</span>
+                      <Badge variant={log.status === "accepted" ? "success" : log.status === "edited" ? "info" : "muted"}>
+                        {log.status}
                       </Badge>
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 pt-1.5 border-t border-border/40">
-                      <div className="space-y-1">
-                        <span className="text-[9px] text-red-400 font-bold uppercase">Original Text</span>
-                        <p className="text-muted italic">"{item.originalText}"</p>
+
+                    <div className="space-y-2 text-xs">
+                      <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3">
+                        <span className="text-[9px] font-bold text-red-400 uppercase block">Original Text</span>
+                        <p className="text-foreground/80 mt-0.5">{log.originalText}</p>
                       </div>
-                      <div className="space-y-1">
-                        <span className="text-[9px] text-success font-bold uppercase">Proposed Rewrite</span>
-                        {item.status === 'edited' ? (
-                          <textarea 
-                            className="w-full bg-background border border-border rounded p-2 text-foreground h-20"
-                            value={item.editedText || item.rewrittenText}
-                            onChange={(e) => reviewChangeLog(item._id, "edited", e.target.value)}
-                          />
+
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">
+                        <span className="text-[9px] font-bold text-emerald-400 uppercase block">AI Proposed Enhancement</span>
+                        {editingLogId === log._id ? (
+                          <div className="space-y-2 mt-1">
+                            <textarea
+                              rows={2}
+                              value={editingLogText || ""}
+                              onChange={(e) => setEditingLogText(e.target.value)}
+                              className="w-full bg-accent/10 border border-border rounded-lg p-2 text-xs text-foreground outline-none"
+                            />
+                            <div className="flex justify-end gap-2">
+                              <Button variant="secondary" size="sm" onClick={() => setEditingLogId(null)}>Cancel</Button>
+                              <Button variant="primary" size="sm" onClick={() => handleLogAction(log._id, "edited", editingLogText)}>Save Edit</Button>
+                            </div>
+                          </div>
                         ) : (
-                          <p className="text-foreground italic">"{item.rewrittenText}"</p>
+                          <p className="text-foreground mt-0.5">{log.editedText || log.rewrittenText}</p>
                         )}
                       </div>
+
+                      <p className="text-[10px] text-muted italic">Reason: {log.reason}</p>
                     </div>
 
-                    <div className="pt-2 text-[10px] text-primary font-semibold flex items-start gap-1">
-                      <Zap className="w-3.5 h-3.5 mt-0.5 text-primary" />
-                      <span>Reasoning: {item.reason}</span>
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
+                      <Button variant="secondary" size="sm" onClick={() => handleLogAction(log._id, "rejected")}>
+                        <X className="w-3.5 h-3.5 mr-1 text-red-400" /> Reject
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setEditingLogId(log._id);
+                          setEditingLogText(log.editedText || log.rewrittenText);
+                        }}
+                      >
+                        <Edit3 className="w-3.5 h-3.5 mr-1" /> Custom Edit
+                      </Button>
+                      <Button variant="primary" size="sm" onClick={() => handleLogAction(log._id, "accepted")}>
+                        <Check className="w-3.5 h-3.5 mr-1" /> Accept Suggestion
+                      </Button>
                     </div>
-
-                    {item.status === 'pending' && (
-                      <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
-                        <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-500 hover:bg-red-500/10" onClick={() => reviewChangeLog(item._id, "rejected")}>Reject</Button>
-                        <Button size="sm" variant="secondary" onClick={() => reviewChangeLog(item._id, "edited", item.rewrittenText)}>Edit</Button>
-                        <Button size="sm" variant="primary" onClick={() => reviewChangeLog(item._id, "accepted")}>Accept</Button>
-                      </div>
-                    )}
-                    {item.status !== 'pending' && (
-                      <div className="flex justify-end pt-2">
-                        <Button size="sm" variant="ghost" onClick={() => reviewChangeLog(item._id, "pending")}>Undo</Button>
-                      </div>
-                    )}
                   </div>
                 ))}
-              </div>
-              
-              {resumeAnalysis.changeLogs.every(log => log.status !== 'pending') && (
-                <div className="pt-4 border-t border-border flex justify-end">
-                  <Button variant="primary" onClick={handleApplyLogs} className="shadow-lg shadow-primary/20">
-                    Apply Changes & Create Version
-                  </Button>
-                </div>
-              )}
-            </Card>
-          )}
-        </div>
-      )}
 
-      {/* Fork Modal dialog */}
-      {showForkModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center print-hidden">
-          <Card className="p-6 max-w-sm w-full space-y-4">
-            <h4 className="text-sm font-bold text-foreground">Fork Current Resume Version</h4>
-            <div className="space-y-1">
-              <span className="text-[9px] text-muted font-bold uppercase">Version Snapshot Title</span>
-              <input
-                type="text"
-                required
-                value={forkTitle}
-                onChange={(e) => setForkTitle(e.target.value)}
-                placeholder="e.g. Google SWE Target"
-                className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
-              />
-            </div>
-            <div className="flex space-x-2 pt-2 justify-end">
-              <Button variant="secondary" size="sm" onClick={() => setShowForkModal(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" size="sm" onClick={handleFork} disabled={!forkTitle}>
-                Fork Snapshot
-              </Button>
-            </div>
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border">
+                  <Button variant="secondary" size="md" onClick={() => setWizardStep("job_match")}>
+                    <ArrowLeft className="w-4 h-4 mr-1.5" /> Back to Job Match
+                  </Button>
+                  <div className="flex items-center gap-3">
+                    <Button variant="primary" size="md" onClick={handleApplyAllChanges}>
+                      <CheckCircle className="w-4 h-4 mr-1.5" /> Apply Accepted Changes
+                    </Button>
+                    <Button variant="primary" size="md" onClick={() => setWizardStep("builder")}>
+                      <span>Next: Resume Builder →</span>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </Card>
         </div>
       )}
 
+      {/* STEP 6: RESUME BUILDER & EXPORT */}
+      {wizardStep === "builder" && formState && (
+        <div className="space-y-6">
+          {/* Builder Control Bar */}
+          <Card className="p-4 flex flex-col md:flex-row items-center justify-between gap-4 print:hidden">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-xs font-bold text-muted uppercase">Template:</span>
+              <button
+                onClick={() => setSelectedTemplate("minimal")}
+                className={`px-3 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+                  selectedTemplate === "minimal"
+                    ? "bg-primary text-white border-primary shadow-sm"
+                    : "bg-card border-border text-muted hover:text-foreground"
+                }`}
+              >
+                Minimal ATS (1-Column Linear)
+              </button>
+              <button
+                onClick={() => setSelectedTemplate("executive")}
+                className={`px-3 py-1.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+                  selectedTemplate === "executive"
+                    ? "bg-primary text-white border-primary shadow-sm"
+                    : "bg-card border-border text-muted hover:text-foreground"
+                }`}
+              >
+                Executive ATS (1-Column Classic)
+              </button>
+
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-accent/10 border border-border text-xs font-semibold">
+                <FileText className="w-3.5 h-3.5 text-primary" />
+                <span>Doc Size: {pageCount} A4 {pageCount === 1 ? "Page" : "Pages"}</span>
+                <Badge variant={pageCount === 1 ? "success" : "info"} className="text-[10px]">
+                  {pageCount === 1 ? "Fits 1 Page" : "2 Page PDF"}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button variant="secondary" size="sm" onClick={downloadMarkdown}>
+                <Download className="w-3.5 h-3.5 mr-1" /> Markdown
+              </Button>
+
+              <Button variant="primary" size="sm" onClick={handlePrint}>
+                <Printer className="w-3.5 h-3.5 mr-1" /> Download ATS PDF
+              </Button>
+            </div>
+          </Card>
+
+          {/* Interactive Document Preview (Strict 210mm A4 Canvas - Centered) */}
+          <div className="w-full overflow-x-auto py-8 sm:py-12 flex items-center justify-center print:p-0 print:m-0 print:overflow-visible min-h-[calc(100vh-250px)]">
+            <div
+              ref={previewRef}
+              id="resume-paper-preview"
+              className="w-[210mm] min-h-[297mm] bg-white text-slate-900 border border-slate-200 shadow-2xl rounded-sm px-[14mm] py-[12mm] box-sizing-border relative print:shadow-none print:border-none print:p-0 print:m-0"
+            >
+              {/* Page Break Guide Line on screen preview */}
+              {pageCount > 1 && (
+                <div className="absolute left-0 right-0 top-[297mm] border-b-2 border-dashed border-red-500/50 pointer-events-none print:hidden flex items-center justify-end pr-4">
+                  <span className="bg-red-500 text-white text-[9px] font-mono px-2 py-0.5 rounded-b shadow-sm uppercase tracking-wider">
+                    A4 Page 1 Boundary
+                  </span>
+                </div>
+              )}
+              <div className={`space-y-4 text-sm ${fontClass}`}>
+              {/* Document Header */}
+              <div className={`border-b pb-4 ${selectedTemplate === "executive" ? "border-slate-800 text-center" : "border-slate-300"}`}>
+                <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">{formState.personalInfo?.name || "Candidate Name"}</h1>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 mt-2">
+                  {formState.personalInfo?.email && <span>{formState.personalInfo.email}</span>}
+                  {formState.personalInfo?.phone && <span>• {formState.personalInfo.phone}</span>}
+                  {formState.personalInfo?.location && <span>• {formState.personalInfo.location}</span>}
+                  {formState.personalInfo?.linkedinUrl && (
+                    <span>• <a href={formState.personalInfo.linkedinUrl} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">LinkedIn</a></span>
+                  )}
+                  {formState.personalInfo?.githubUrl && (
+                    <span>• <a href={formState.personalInfo.githubUrl} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">GitHub</a></span>
+                  )}
+                  {formState.personalInfo?.portfolioUrl && (
+                    <span>• <a href={formState.personalInfo.portfolioUrl} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">Portfolio</a></span>
+                  )}
+                </div>
+              </div>
+
+              {/* Summary */}
+              {formState.summary && (
+                <div className="space-y-1">
+                  <h2 className="text-xs font-bold text-slate-800 uppercase tracking-widest border-b border-slate-200 pb-1">Professional Summary</h2>
+                  <p className="text-xs text-slate-700 leading-relaxed pt-1">{formState.summary}</p>
+                </div>
+              )}
+
+              {/* Work Experience */}
+              {formState.workExperience && formState.workExperience.length > 0 && (
+                <div className="space-y-3">
+                  <h2 className="text-xs font-bold text-slate-800 uppercase tracking-widest border-b border-slate-200 pb-1">Work Experience</h2>
+                  {formState.workExperience.map((w, idx) => (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex justify-between items-baseline text-xs font-bold text-slate-900">
+                        <span>{w.position} — <span className="font-semibold text-slate-700">{w.company}</span></span>
+                        <span className="text-[11px] font-normal text-slate-600">{w.startDate} {w.endDate ? `- ${w.endDate}` : (w.currentlyWorking ? "- Present" : "")}</span>
+                      </div>
+                      {w.bulletPoints && w.bulletPoints.length > 0 && (
+                        <ul className="list-disc list-inside text-xs text-slate-700 space-y-1 pt-0.5">
+                          {w.bulletPoints.map((bullet, bIdx) => (
+                            <li key={bIdx}>{bullet}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Education */}
+              {formState.education && formState.education.length > 0 && (
+                <div className="space-y-2">
+                  <h2 className="text-xs font-bold text-slate-800 uppercase tracking-widest border-b border-slate-200 pb-1">Education</h2>
+                  {formState.education.map((e, idx) => (
+                    <div key={idx} className="flex justify-between items-baseline text-xs text-slate-700">
+                      <div>
+                        <strong className="font-semibold text-slate-900">{e.degree}</strong> {e.fieldOfStudy || e.major ? `in ${e.fieldOfStudy || e.major}` : ""} — {e.institution}
+                      </div>
+                      <span className="text-[11px] text-slate-600">{e.startDate} {e.endDate ? `- ${e.endDate}` : ""}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Projects */}
+              {formState.projects && formState.projects.length > 0 && (
+                <div className="space-y-3">
+                  <h2 className="text-xs font-bold text-slate-800 uppercase tracking-widest border-b border-slate-200 pb-1">Key Projects</h2>
+                  {formState.projects.map((p, idx) => (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex justify-between items-baseline text-xs font-bold text-slate-900">
+                        <span>
+                          {p.title}
+                          {(p.githubUrl || p.link?.includes("github.com")) && (
+                            <a href={p.githubUrl || p.link} target="_blank" rel="noreferrer" className="ml-2 font-normal text-indigo-600 hover:underline">
+                              [GitHub]
+                            </a>
+                          )}
+                          {(p.liveUrl || (p.link && !p.link.includes("github.com"))) && (
+                            <a href={p.liveUrl || p.link} target="_blank" rel="noreferrer" className="ml-2 font-normal text-indigo-600 hover:underline">
+                              [Live Demo]
+                            </a>
+                          )}
+                        </span>
+                        {p.technologies && p.technologies.length > 0 && (
+                          <span className="text-[11px] font-normal text-slate-600">{p.technologies.join(", ")}</span>
+                        )}
+                      </div>
+                      {p.bulletPoints && p.bulletPoints.length > 0 && (
+                        <ul className="list-disc list-inside text-xs text-slate-700 space-y-1">
+                          {p.bulletPoints.map((b, bIdx) => (
+                            <li key={bIdx}>{b}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Skills */}
+              {formState.skills && (
+                <div className="space-y-2">
+                  <h2 className="text-xs font-bold text-slate-800 uppercase tracking-widest border-b border-slate-200 pb-1">Technical Skills</h2>
+                  <div className="text-xs text-slate-700 space-y-1">
+                    {formState.skills.languages?.length > 0 && (
+                      <div><strong className="font-semibold text-slate-900">Languages:</strong> {formState.skills.languages.join(", ")}</div>
+                    )}
+                    {formState.skills.frontend?.length > 0 && (
+                      <div><strong className="font-semibold text-slate-900">Frontend:</strong> {formState.skills.frontend.join(", ")}</div>
+                    )}
+                    {formState.skills.backend?.length > 0 && (
+                      <div><strong className="font-semibold text-slate-900">Backend:</strong> {formState.skills.backend.join(", ")}</div>
+                    )}
+                    {formState.skills.database?.length > 0 && (
+                      <div><strong className="font-semibold text-slate-900">Database:</strong> {formState.skills.database.join(", ")}</div>
+                    )}
+                    {formState.skills.tools?.length > 0 && (
+                      <div><strong className="font-semibold text-slate-900">Tools:</strong> {formState.skills.tools.join(", ")}</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Certifications */}
+              {formState.certifications && formState.certifications.length > 0 && (
+                <div className="space-y-2">
+                  <h2 className="text-xs font-bold text-slate-800 uppercase tracking-widest border-b border-slate-200 pb-1">Certifications & Credentials</h2>
+                  <ul className="list-disc list-inside text-xs text-slate-700 space-y-1">
+                    {formState.certifications.map((c, idx) => (
+                      <li key={idx}>
+                        <strong className="font-semibold text-slate-900">{c.name}</strong> {c.issuer ? `— ${c.issuer}` : ""}
+                        {c.credentialUrl && (
+                          <a href={c.credentialUrl} target="_blank" rel="noreferrer" className="ml-2 text-indigo-600 hover:underline">
+                            [Credential URL]
+                          </a>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+      )}
     </PageTransition>
   );
 }
