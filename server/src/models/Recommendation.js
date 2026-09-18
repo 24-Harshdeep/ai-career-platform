@@ -7,7 +7,7 @@ const RecommendationSchema = new mongoose.Schema({
   description: { type: String, required: true },
   type: { 
     type: String, 
-    enum: ["Learning", "Resume", "GitHub", "Portfolio", "Interview", "Application", "Networking", "Project", "Open Source", "DSA", "Communication"],
+    enum: ["Learning", "Resume", "GitHub", "Portfolio", "Interview", "Application", "Networking", "Project", "Open Source", "DSA", "Communication", "Skill", "Career", "Certification", "Education", "System Design", "General", "Roadmap"],
     required: true
   },
   priority: { type: String, enum: ["High", "Medium", "Low"], default: "Medium" },

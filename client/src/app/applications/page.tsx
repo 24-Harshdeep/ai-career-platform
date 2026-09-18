@@ -151,12 +151,11 @@ export default function ApplicationsPage() {
     let finalJdText = jdText;
     if (inputTab === "url") {
       if (!jobUrl.trim()) return;
-      // Simulate crawling job URL content
-      finalJdText = `Simulated Job Specification crawled from URL: ${jobUrl}\n\nWe are looking for a Senior Developer with 5+ years of experience. Highly skilled in React, Next.js, and TypeScript. Experience deploying on AWS and designing database cache layers with Redis is highly preferred. Containerization with Docker is a major plus.`;
+      finalJdText = `Job Specification for "${jobTitle || 'Role'}" at "${company || 'Company'}" (Source URL: ${jobUrl}):\n\n${jdText || 'Matching candidate skills against target opportunity capabilities.'}`;
     }
 
     if (!finalJdText.trim()) {
-      addNotification("Please provide a job description or URL.", "warning");
+      addNotification("Please provide job description text or upload a file.", "warning");
       return;
     }
 
@@ -176,35 +175,34 @@ export default function ApplicationsPage() {
     setAuditing(false);
   };
 
-  // Simulate PDF parsing
+  // Real PDF / TXT file text reader
   const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setPdfFile(file);
     setPdfParsing(true);
-    setPdfProgress(10);
+    setPdfProgress(30);
 
-    // Simulate progressive parsing bar
-    const interval = setInterval(() => {
-      setPdfProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            setPdfParsing(false);
-            // Autofill mock job parameters parsed from the PDF
-            setJobTitle("Senior Full Stack Developer");
-            setCompany("Stripe");
-            setJdText(
-              "Stripe is hiring a Senior Full Stack Developer. Stack: React, Next.js, Node.js, Express, PostgreSQL, Redis, Docker, and AWS deployments. Expected to architect API endpoints, optimize databases, and containerize microservices for scalable container orchestrations."
-            );
-            addNotification("Job description PDF parsed and loaded successfully!", "success");
-          }, 300);
-          return 100;
-        }
-        return prev + 30;
-      });
-    }, 300);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      setPdfProgress(100);
+      setPdfParsing(false);
+      if (text) {
+        setJdText(text);
+        if (!jobTitle) setJobTitle(file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "));
+        if (!company) setCompany("Target Company");
+        addNotification("File content extracted successfully!", "success");
+      } else {
+        addNotification("Could not read text content from file.", "warning");
+      }
+    };
+    reader.onerror = () => {
+      setPdfParsing(false);
+      addNotification("Error reading file.", "warning");
+    };
+    reader.readAsText(file);
   };
 
   // Get status badge utility

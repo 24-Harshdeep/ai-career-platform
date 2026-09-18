@@ -1,10 +1,19 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
-// Load environment variables from project root, server root, or local CWD
-require("dotenv").config({ path: path.join(__dirname, "../../.env") });
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
-require("dotenv").config();
+const dotenv = require("dotenv");
+
+// Prefer the environment-specific file, while still allowing hosting
+// platforms to inject environment variables directly into the process.
+const envName = process.env.NODE_ENV || "development";
+const envFiles = envName === "production"
+  ? [path.join(__dirname, "../.env.production"), path.join(__dirname, "../.env")]
+  : [path.join(__dirname, "../.env"), path.join(__dirname, "../../.env")];
+
+for (const envFile of envFiles) {
+  dotenv.config({ path: envFile });
+}
+dotenv.config();
 const { connectDB } = require("./config/db");
 
 const app = express();

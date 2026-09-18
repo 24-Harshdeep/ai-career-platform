@@ -55,7 +55,7 @@ async function getCareerContext(userId) {
       status: "Active" 
     });
 
-    return {
+    const contextObj = {
       userId: user._id.toString(),
       targetRole: profile ? profile.targetRole : user.goal,
       experienceLevel: profile ? profile.experienceLevel : user.experience,
@@ -78,6 +78,25 @@ async function getCareerContext(userId) {
         type: r.type
       }))
     };
+
+    // Attach Machine Learning Candidate Readiness Prediction
+    try {
+      const { predictCandidateReadiness } = require("../engines/ml/readinessModel");
+      const mlPrediction = predictCandidateReadiness({
+        resumeScore: resumeContext ? resumeContext.atsScore : 0,
+        githubHealth: devContext ? devContext.overallHealth : 0,
+        skillsPossessed: profile ? profile.skillsPossessed : {},
+        skillsTarget: profile ? profile.skillsTarget : [],
+        interviewScore: user.score || 0,
+        userStreak: user.streakDays || 0,
+        projectsCount: devProfile ? devProfile.repositoryCount || 0 : 0
+      });
+      contextObj.mlReadinessPrediction = mlPrediction;
+    } catch (mlErr) {
+      console.error("ML Prediction calculation error:", mlErr.message);
+    }
+
+    return contextObj;
   } catch (err) {
     console.error("Error building Career Context:", err);
     throw err;

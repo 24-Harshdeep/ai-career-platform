@@ -9,6 +9,7 @@ import {
   CareerProfile,
   SkillSet,
 } from "@/types";
+import { API_BASE_URL, apiFetch } from "@/lib/api";
 
 export interface CareerStats {
   score: number;
@@ -27,6 +28,8 @@ export interface CareerStats {
     careerScoreAfterCompletion: number;
     jobReadinessAfterCompletion: number;
     status: string;
+    targetUrl?: string;
+    duration?: string;
   } | null;
   readiness: {
     jobReadiness: number;
@@ -142,6 +145,7 @@ export interface ResumeAnalysisData {
   suggestedImprovements: string[];
   analyzedAt?: string;
   changeLogs?: ResumeChangeLogEntry[];
+  unquantifiedStatements?: { originalText: string; promptQuestion: string }[];
 }
 
 
@@ -429,8 +433,6 @@ interface CareerState {
   addChatMessage: (sender: ChatMessage["sender"], text: string) => void;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-
 const initialStats: CareerStats = {
   score: 0,
   breakdown: {
@@ -500,7 +502,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/dashboard`, {
+      const res = await apiFetch(`${API_BASE_URL}/dashboard`, {
         method: "GET",
         headers
       });
@@ -704,8 +706,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
       "AWS": "cloud"
     };
 
-    const category = SKILL_CATEGORY_MAP[skillName];
-    if (!category) return;
+    const category = SKILL_CATEGORY_MAP[skillName] || "technical";
 
     const currentPossessed = profile.skillsPossessed || {
       technical: [], soft: [], tools: [], frameworks: [], languages: [], cloud: [], devops: []
@@ -840,7 +841,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         return true;
       } else {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.message || "Failed to analyze resume.");
+        throw new Error(errData.message || errData.error || `Failed to analyze resume (HTTP ${res.status}).`);
       }
     } catch (err) {
       console.warn("Failed to upload resume document:", err);
@@ -931,7 +932,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
   getCrossSyncSuggestions: async () => {
     try {
       const token = localStorage.getItem("careeros_token");
-      const res = await fetch(`/api/resume/cross-sync`, {
+      const res = await fetch(`${API_BASE_URL}/resume/cross-sync`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
       if (res.ok) {
@@ -948,7 +949,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
   reviewChangeLog: async (logId: string, status: string, editedText: string = "") => {
     try {
       const token = localStorage.getItem("careeros_token");
-      const res = await fetch(`/api/resume/changelog/review`, {
+      const res = await fetch(`${API_BASE_URL}/resume/changelog/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({ logId, status, editedText })
@@ -968,7 +969,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
   applyChangeLogs: async (goal: string) => {
     try {
       const token = localStorage.getItem("careeros_token");
-      const res = await fetch(`/api/resume/changelog/apply`, {
+      const res = await fetch(`${API_BASE_URL}/resume/changelog/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({ goal })
@@ -1123,12 +1124,6 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         body: JSON.stringify({ message: text, activePath })
       });
 
-      if (res.status === 401) {
-        localStorage.removeItem("careeros_token");
-        window.location.reload(); // Wipes memory state and triggers AuthGuard login
-        return;
-      }
-
       if (!res.ok) {
         let errorMessage = `status ${res.status}`;
         try {
@@ -1142,10 +1137,11 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         console.warn("AI Coach backend error:", errorMessage);
         get().addChatMessage(
           "coach",
-          `I'm sorry, I couldn't get a response from the AI coach (${errorMessage}). Please try again.`
+          `I'm sorry, I couldn't get a response from the AI coach right now. Please try again.`
         );
         return;
       }
+
 
       const envelope = await res.json();
       const coachReply = envelope?.data?.reply;
@@ -1294,7 +1290,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/interview/history`, {
+      const res = await apiFetch(`${API_BASE_URL}/interview/history`, {
         method: "GET",
         headers
       });
@@ -1316,7 +1312,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/interview/readiness`, {
+      const res = await apiFetch(`${API_BASE_URL}/interview/readiness`, {
         method: "GET",
         headers
       });
@@ -1341,7 +1337,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/interview/start`, {
+      const res = await apiFetch(`${API_BASE_URL}/interview/start`, {
         method: "POST",
         headers,
         body: JSON.stringify({ role, type, difficulty, questionCount })
@@ -1367,7 +1363,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/interview/answer`, {
+      const res = await apiFetch(`${API_BASE_URL}/interview/answer`, {
         method: "POST",
         headers,
         body: JSON.stringify({ sessionId, answer: answerText, duration: durationSeconds })
@@ -1393,7 +1389,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/interview/finish`, {
+      const res = await apiFetch(`${API_BASE_URL}/interview/finish`, {
         method: "POST",
         headers,
         body: JSON.stringify({ sessionId })
@@ -1425,7 +1421,7 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/analytics/dashboard`, {
+      const res = await apiFetch(`${API_BASE_URL}/analytics/dashboard`, {
         method: "GET",
         headers
       });
@@ -1447,10 +1443,18 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/applications`, {
+      const res = await fetch(`${API_BASE_URL}/job/save`, {
         method: "POST",
         headers,
-        body: JSON.stringify(app)
+        body: JSON.stringify({
+          title: app.role || app.title || "Target Position",
+          company: app.company || "Target Company",
+          description: app.jobDescription || app.description || `${app.role} at ${app.company}`,
+          url: app.url && /^https?:\/\//i.test(app.url) ? app.url : `https://example.com/jobs/${Date.now()}`,
+          location: app.location || "Remote",
+          salaryRange: app.salaryRange || "",
+          status: app.status || "Saved"
+        })
       });
 
       if (res.ok) {
@@ -1476,10 +1480,10 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/applications/status`, {
+      const res = await fetch(`${API_BASE_URL}/job/status`, {
         method: "PUT",
         headers,
-        body: JSON.stringify({ id, status })
+        body: JSON.stringify({ opportunityId: id, status })
       });
 
       if (res.ok) {

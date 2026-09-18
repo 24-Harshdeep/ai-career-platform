@@ -23,6 +23,23 @@ export const IntelligenceHeader: React.FC = () => {
     return "Excellent career readiness. You're well-positioned — focus on targeting specific opportunities.";
   };
 
+  const getNextActionUrl = (action: { type?: string; title?: string; targetUrl?: string }) => {
+    if (action.targetUrl) return action.targetUrl;
+    const type = (action.type || "").toLowerCase();
+    const title = (action.title || "").toLowerCase();
+
+    if (type === "resume" || title.includes("resume")) return "/resume";
+    if (type === "github" || type === "project" || type === "portfolio" || title.includes("github") || title.includes("portfolio") || title.includes("project")) return "/portfolio";
+    if (type === "interview" || title.includes("interview")) return "/interview";
+    if (type === "roadmap" || title.includes("roadmap")) return "/roadmap";
+    if (type === "application" || type === "applications" || title.includes("application") || title.includes("job")) return "/applications";
+    if (type === "skill" || title.includes("skill") || title.includes("dna")) return "/dna";
+    return "/dna";
+  };
+
+  const actionTitle = nextAction?.title?.trim();
+  const actionUrl = nextAction ? getNextActionUrl(nextAction) : null;
+
   return (
     <div className="bg-card border border-border rounded-xl p-6 mb-2">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -34,19 +51,13 @@ export const IntelligenceHeader: React.FC = () => {
             {getSummary()}
           </p>
 
-          {/* Next Best Action inline */}
-          {nextAction && (
+          {/* Next Best Action inline link */}
+          {nextAction && actionTitle && actionUrl && (
             <Link
-              href={
-                nextAction.type === "resume" ? "/resume"
-                  : nextAction.type === "github" ? "/portfolio"
-                  : nextAction.type === "interview" ? "/interview"
-                  : nextAction.type === "roadmap" ? "/roadmap"
-                  : "/dashboard"
-              }
-              className="mt-3 inline-flex items-center gap-2 text-sm text-primary font-medium hover:underline underline-offset-4 transition-colors"
+              href={actionUrl}
+              className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline underline-offset-4 transition-colors"
             >
-              <span>→ {nextAction.title}</span>
+              <span>Next Action: {actionTitle}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           )}

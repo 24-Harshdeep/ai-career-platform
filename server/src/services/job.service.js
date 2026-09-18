@@ -94,23 +94,24 @@ Output a JSON object conforming exactly to this structure:
     // Local Fallback if Gemini failed
     if (!jdSkills || !scoreData) {
       jdSkills = extractKeywords(description);
+      const resumeText = userContext.resumeText || resume?.parsedText || "";
       const resumeGap = auditResumeGaps(jdSkills, resumeText);
       const techEvidence = devProfile ? devProfile.languageDistribution : {
-        hasAuth: resumeAnalysis ? resumeAnalysis.breakdown.keywords > 80 : false,
-        hasDatabase: true,
-        hasRestApi: true,
+        hasAuth: resumeAnalysis ? (resumeAnalysis.breakdown?.keywords || 0) > 80 : false,
+        hasDatabase: false,
+        hasRestApi: false,
         hasDocker: false,
         hasTesting: false,
         hasDevOps: false
       };
       const projectGap = auditProjectGaps(jdSkills, techEvidence);
-      const userSkills = userDoc ? userDoc.skillsPossessed : ["React", "Express", "Node.js", "MongoDB"];
+      const userSkills = userContext.skills || [];
       const keywordMatch = matchJobKeywords(jdSkills, userSkills);
       const rawScore = calculateApplicationScore(
         resumeGap,
         projectGap,
         keywordMatch,
-        90,
+        70,
         100
       );
       scoreData = {

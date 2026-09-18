@@ -5,6 +5,9 @@ import Button from "@/components/ui/Button/Button";
 import Card from "@/components/ui/Card/Card";
 import { KeyRound, Mail, User as UserIcon, ShieldAlert, Eye, EyeOff } from "lucide-react";
 import { useCareerStore } from "@/store/careerStore";
+import { API_BASE_URL } from "@/lib/api";
+
+import { LoginView } from "@/components/auth/LoginView";
 
 export interface SessionUser {
   name: string;
@@ -27,7 +30,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const API_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/auth`;
+const API_URL = `${API_BASE_URL}/auth`;
 
 export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session>({
@@ -35,8 +38,17 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     status: "loading",
   });
 
-  // Session Recovery on Initial Load
+  // Session Recovery & 401 Expiry Handler
   useEffect(() => {
+    const handleAuthExpired = () => {
+      localStorage.removeItem("careeros_token");
+      setSession({
+        user: { name: "", email: "", role: "" },
+        status: "unauthenticated",
+      });
+    };
+    window.addEventListener("careeros_auth_expired", handleAuthExpired);
+
     const recoverSession = async () => {
       const token = localStorage.getItem("careeros_token");
       if (!token) {
@@ -75,8 +87,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
           });
         }
       } catch (err) {
-        // Network offline/server unreachable, force login
-        localStorage.removeItem("careeros_token");
+        // Network offline/server unreachable
         setSession({
           user: { name: "", email: "", role: "" },
           status: "unauthenticated",
@@ -85,6 +96,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     recoverSession();
+    return () => window.removeEventListener("careeros_auth_expired", handleAuthExpired);
   }, []);
 
   const signIn = async (email?: string, password?: string): Promise<boolean> => {
@@ -167,15 +179,18 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const switchUser = (role: string, name: string) => {
+    const demoToken = "demo_careeros_token_" + Date.now();
+    localStorage.setItem("careeros_token", demoToken);
     setSession({
       user: {
         name,
-        email: `${name.toLowerCase()}@careeros.dev`,
+        email: `${name.toLowerCase().replace(/\s+/g, ".")}@careeros.dev`,
         role,
       },
       status: "authenticated",
     });
   };
+
 
   return (
     <AuthContext.Provider value={{ session, signIn, signOut, switchUser, signUp }}>
@@ -194,7 +209,7 @@ export const useSession = () => {
 
 // 🔐 Client AuthGuard Interface Form Component
 export const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { session, signIn, signUp } = useSession();
+  const { session, signIn, signUp, switchUser } = useSession();
   const fetchDashboardData = useCareerStore((state) => state.fetchDashboardData);
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
@@ -262,123 +277,7 @@ export const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children })
   };
 
   if (session.status === "unauthenticated") {
-    return (
-      <div className="min-h-screen w-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
-        {/* Abstract background graphics */}
-        <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full bg-primary/5 blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full bg-secondary/5 blur-[120px] pointer-events-none" />
-
-        <Card className="w-full max-w-md p-8 bg-card/60 border-border/80 backdrop-blur-lg rounded-3xl shadow-2xl relative z-10 space-y-6">
-          {/* Logo Header */}
-          <div className="flex flex-col items-center text-center space-y-2">
-            <div className="w-14 h-14 overflow-hidden relative shrink-0 mb-2">
-              <img 
-                src="/logo1.png" 
-                alt="CareerOS Logo" 
-                className="absolute top-0 left-1/2 transform -translate-x-1/2 h-[86px] max-w-none"
-              />
-            </div>
-            <h2 className="text-xl font-bold text-foreground">
-              {isSignUp ? "Create your Account" : "Sign In to CareerOS"}
-            </h2>
-            <p className="text-xs text-muted leading-relaxed">
-              {isSignUp ? "Start indexing your career achievements today" : "Access your AI Career Intelligence telemetry"}
-            </p>
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-            {error && (
-              <div className="flex items-start space-x-2.5 p-3.5 bg-red-500/10 border border-red-500/20 text-red-500 rounded-2xl text-xs font-semibold">
-                <ShieldAlert className="w-4.5 h-4.5 shrink-0 mt-0.5" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {isSignUp && (
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-bold text-muted tracking-wider">Full Name</label>
-                <div className="flex items-center bg-accent/20 border border-border rounded-xl px-3.5 py-2.5 transition-all focus-within:border-primary/50">
-                  <UserIcon className="w-4 h-4 text-muted mr-2 shrink-0" />
-                  <input
-                    type="text"
-                    placeholder="Enter your name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="bg-transparent border-none outline-none text-xs text-foreground w-full placeholder-muted"
-                    required
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] uppercase font-bold text-muted tracking-wider">Email Address</label>
-              <div className="flex items-center bg-accent/20 border border-border rounded-xl px-3.5 py-2.5 transition-all focus-within:border-primary/50">
-                <Mail className="w-4 h-4 text-muted mr-2 shrink-0" />
-                <input
-                  type="email"
-                  placeholder="name@company.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="bg-transparent border-none outline-none text-xs text-foreground w-full placeholder-muted"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[10px] uppercase font-bold text-muted tracking-wider">Password</label>
-              <div className="flex items-center bg-accent/20 border border-border rounded-xl px-3.5 py-2.5 transition-all focus-within:border-primary/50 relative">
-                <KeyRound className="w-4 h-4 text-muted mr-2 shrink-0" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="bg-transparent border-none outline-none text-xs text-foreground w-full pr-8 placeholder-muted"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors cursor-pointer flex items-center justify-center"
-                  title={showPassword ? "Hide Password" : "Show Password"}
-                >
-                  {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
-                </button>
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              variant="primary"
-              className="w-full py-3 text-xs font-bold rounded-xl mt-4 flex items-center justify-center cursor-pointer"
-              disabled={loading}
-            >
-              {loading ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <span>{isSignUp ? "Register Account" : "Sign In"}</span>
-              )}
-            </Button>
-          </form>
-
-          {/* Toggle */}
-          <div className="text-center pt-2">
-            <button
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setError("");
-              }}
-              className="text-xs text-muted hover:text-primary font-medium transition-colors cursor-pointer"
-            >
-              {isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
-            </button>
-          </div>
-        </Card>
-      </div>
-    );
+    return <LoginView onSignIn={signIn} onSignUp={signUp} onQuickDemoLogin={switchUser} />;
   }
 
   const handleSkipOnboarding = async () => {
@@ -416,7 +315,7 @@ export const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children })
 
     try {
       const token = localStorage.getItem("careeros_token");
-       const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/career/profile`, {
+       const res = await fetch(`${API_BASE_URL}/career/profile`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

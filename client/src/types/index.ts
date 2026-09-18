@@ -52,6 +52,12 @@ export interface JobApplication {
   status: "Applied" | "Interview" | "Offer" | "Rejected";
   dateApplied: string;
   logo?: string;
+  title?: string;
+  description?: string;
+  url?: string;
+  location?: string;
+  salaryRange?: string;
+  jobDescription?: string;
 }
 
 export interface Notification {

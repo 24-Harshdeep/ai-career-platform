@@ -14,8 +14,23 @@ async function generateCoachReply(userId, activePath, userMessage) {
     const { getCareerContext } = require("./careerContext.service");
     context = await getCareerContext(userId);
   } catch (err) {
-    console.error("[Coach Service] Failed to load context:", err);
-    throw new Error("Unable to load user context for AI Coach");
+    // AI chat should remain useful even when optional profile analytics are
+    // unavailable. The user message can still be answered without inventing
+    // career data.
+    console.error("[Coach Service] Failed to load context; using minimal context:", err.message);
+    context = {
+      targetRole: "Full Stack Developer",
+      careerScore: 0,
+      experienceLevel: "Intermediate",
+      resumeContext: {
+        atsScore: 0,
+        missingKeywords: [],
+        identifiedSkills: []
+      },
+      devContext: null,
+      activeJobs: [],
+      activeRecommendations: []
+    };
   }
 
   // Save User's incoming message to DB first
@@ -72,7 +87,7 @@ User Message: "${userMessage}"
 Reply directly to the user as their personal ${routed.role}.`;
 
   const systemInstruction = `You are the CareerOS AI ${routed.role}.
-Act as a highly technical, frank, and supportive peer/buddy. Avoid formal corporate greetings, verbose filler, or repetitive introduction templates. Speak directly, honestly, and conversationally.
+Act as a highly technical, frank, and supportive peer/buddy. Speak directly, honestly, professionally, and conversationally. Do NOT use emojis (e.g. 💪, 🚀, 🔥) or informal text icons in your responses.
 
 Formatting & Markdown Rules:
 - Ensure your markdown list structures are clean and properly aligned.
@@ -90,7 +105,7 @@ Dynamic Length Scaling:
 
   // 3. Safe Local Fallback if ALL providers fail
   if (!finalReply) {
-    finalReply = "> ⚠️ **System Alert**: AI coaching is temporarily unavailable. Your current profile does not contain enough verified information to generate a personalized recommendation or the AI providers are currently unreachable. Complete your Career DNA or add a verified resume/opportunity to continue.";
+    finalReply = "> **System Alert**: AI coaching is temporarily unavailable. Your current profile does not contain enough verified information to generate a personalized recommendation or the AI providers are currently unreachable. Complete your Career DNA or add a verified resume/opportunity to continue.";
   }
 
   // Save AI reply to DB

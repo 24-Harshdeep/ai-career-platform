@@ -124,21 +124,8 @@ async function completeDailyMission(userId, missionId) {
     }
 
     let dbMission = null;
-    if (query._id) {
-      dbMission = await Mission.findOne(query);
-    }
-
-    // Fallback lookup for legacy/mock string IDs (like "m-1", "m-2")
-    if (!dbMission && typeof missionId === "string" && missionId.startsWith("m-")) {
-      const titles = {
-        "m-1": "Build API Authentication (Complete JWT Module)",
-        "m-2": "Optimize database index queries",
-        "m-3": "Complete resume upload audit"
-      };
-      const title = titles[missionId];
-      if (title) {
-        dbMission = await Mission.findOne({ userId, title });
-      }
+    if (!dbMission) {
+      dbMission = await Mission.findOne({ userId, $or: [{ _id: mongoose.Types.ObjectId.isValid(missionId) ? missionId : undefined }, { id: missionId }] });
     }
 
     if (dbMission) {

@@ -30,19 +30,22 @@ async function getRankedRecommendations(userId) {
         await activeRec.save();
       }
 
+      const validTypes = ["Learning", "Resume", "GitHub", "Portfolio", "Interview", "Application", "Networking", "Project", "Open Source", "DSA", "Communication", "Skill", "Career", "Certification", "Education", "System Design", "General", "Roadmap"];
+      const recType = topGenerated.type && validTypes.includes(topGenerated.type) ? topGenerated.type : "General";
+
       // Persist the new top priority recommendation
       const newRec = await Recommendation.create({
         userId,
-        actionId: topGenerated.actionId,
-        title: topGenerated.title,
-        description: topGenerated.description,
-        type: topGenerated.type,
-        priority: topGenerated.priority,
-        impactScore: topGenerated.impactScore,
-        estimatedTime: topGenerated.estimatedTime,
-        confidence: topGenerated.confidence,
-        reason: topGenerated.reason,
-        dependencies: topGenerated.dependencies,
+        actionId: topGenerated.actionId || "action-resume-upload",
+        title: topGenerated.title || "Update Career Action Item",
+        description: topGenerated.description || "Review and update your career action items.",
+        type: recType,
+        priority: topGenerated.priority || "Medium",
+        impactScore: topGenerated.impactScore || 10,
+        estimatedTime: topGenerated.estimatedTime || "15 mins",
+        confidence: topGenerated.confidence || 80,
+        reason: topGenerated.reason || "Recommended based on active career context.",
+        dependencies: topGenerated.dependencies || [],
         status: "Active"
       });
 

@@ -5,7 +5,7 @@ import { useCareerStore, ResumeVersionContent } from "@/store/careerStore";
 import Card from "@/components/ui/Card/Card";
 import Button from "@/components/ui/Button/Button";
 import Badge from "@/components/ui/Badge/Badge";
-import {
+import { 
   FileText,
   UploadCloud,
   CheckCircle,
@@ -34,6 +34,7 @@ import {
   ArrowRight,
   ListFilter
 } from "lucide-react";
+import { API_BASE_URL } from "@/lib/api";
 import PoweredBy from "@/components/ui/PoweredBy";
 import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
 import PageHeader from "@/components/ui/PageHeader";
@@ -127,32 +128,47 @@ export default function ResumePage() {
     if (!file) return;
 
     setWizardStep("upload");
-    setScanProgress(0);
+    setScanProgress(15);
 
-    let currentProgress = 0;
-    const interval = setInterval(async () => {
-      currentProgress += 20;
-      if (currentProgress >= 100) {
-        clearInterval(interval);
+    const interval = setInterval(() => {
+      setScanProgress((prev) => (prev < 90 ? prev + 15 : prev));
+    }, 150);
+
+    try {
+      const success = await uploadResume(file);
+      clearInterval(interval);
+
+      if (success) {
         setScanProgress(100);
+        addNotification("Resume uploaded and parsed successfully!", "success");
 
-        try {
-          const success = await uploadResume(file);
-          if (success) {
-            addNotification("Resume uploaded and parsed successfully!", "success");
+        const latestAnalysis = useCareerStore.getState().resumeAnalysis;
+        if (latestAnalysis) {
+          setFormState(JSON.parse(JSON.stringify(latestAnalysis.activeVersionContent)));
+          if (latestAnalysis.activeVersionId > 1) {
+            setWizardStep("editor");
           } else {
-            setWizardStep("upload");
-            addNotification("Failed to analyze resume. Make sure it is a valid PDF.", "warning");
+            setWizardStep("review");
           }
-        } catch (err) {
-          console.error(err);
-          setWizardStep("upload");
-          addNotification("Upload failed.", "warning");
+        } else {
+          setWizardStep("review");
         }
       } else {
-        setScanProgress(currentProgress);
+        setWizardStep("upload");
+        setScanProgress(0);
+        addNotification("Failed to analyze resume. Make sure it is a valid PDF or TXT document.", "warning");
       }
-    }, 150);
+    } catch (err) {
+      clearInterval(interval);
+      console.error("Resume upload failed:", err);
+      setWizardStep("upload");
+      setScanProgress(0);
+      addNotification("Upload failed.", "warning");
+    } finally {
+      if (e.target) {
+        e.target.value = "";
+      }
+    }
   };
 
   const proceedToAnalysisStep = async () => {
@@ -308,20 +324,20 @@ Respond with only the rewritten text, no commentary.`;
     
     try {
       const token = localStorage.getItem("careeros_token");
-      const res = await fetch(`/api/interview/hints`, {
+      const res = await fetch(`${API_BASE_URL}/coach/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ question: prompt })
+        body: JSON.stringify({ message: prompt, activePath: "/resume" })
       });
       if (res.ok) {
         const payload = await res.json();
-        const rewrittenText = payload.data?.hint || payload.data;
+        const rewrittenText = payload.data?.reply || payload.data?.response || payload.data;
         
         const updated = { ...formState };
         if (sectionType === "work") {
-          updated.workExperience[index].bulletPoints[bulletIdx] = rewrittenText;
+          updated.workExperience[index].bulletPoints[bulletIdx] = typeof rewrittenText === "string" ? rewrittenText : textToRewrite;
         } else {
-          updated.projects[index].bulletPoints[bulletIdx] = rewrittenText;
+          updated.projects[index].bulletPoints[bulletIdx] = typeof rewrittenText === "string" ? rewrittenText : textToRewrite;
         }
         setFormState(updated);
         saveResumeEdits(updated);
@@ -1915,7 +1931,7 @@ ${name}`;
                                 <span className="font-bold text-slate-800">{c.name}</span>
                                 {c.issuer && <span> — {c.issuer}</span>}
                                 {c.issueDate && <span>, {c.issueDate}</span>}
-                                {c.credentialUrl && (
+                                {c.credentialUrl && /^https?:\/\//i.test(c.credentialUrl) && (
                                   <a href={c.credentialUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold ml-1 print:hidden">
                                     [View Credential]
                                   </a>
@@ -1947,7 +1963,7 @@ ${name}`;
                   <div key={idx} className={`border p-4 rounded-2xl text-xs space-y-3 ${item.status === 'pending' ? 'bg-accent/5 border-primary/20' : 'bg-card border-border opacity-70'}`}>
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-primary">{item.section}</span>
-                      <Badge variant={item.status === 'accepted' ? 'success' : item.status === 'rejected' ? 'destructive' : item.status === 'edited' ? 'warning' : 'outline'}>
+                      <Badge variant={item.status === 'accepted' ? 'success' : item.status === 'rejected' ? 'warning' : item.status === 'edited' ? 'info' : 'muted'}>
                         {item.status.toUpperCase()}
                       </Badge>
                     </div>
@@ -1979,7 +1995,7 @@ ${name}`;
                     {item.status === 'pending' && (
                       <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
                         <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-500 hover:bg-red-500/10" onClick={() => reviewChangeLog(item._id, "rejected")}>Reject</Button>
-                        <Button size="sm" variant="outline" onClick={() => reviewChangeLog(item._id, "edited", item.rewrittenText)}>Edit</Button>
+                        <Button size="sm" variant="secondary" onClick={() => reviewChangeLog(item._id, "edited", item.rewrittenText)}>Edit</Button>
                         <Button size="sm" variant="primary" onClick={() => reviewChangeLog(item._id, "accepted")}>Accept</Button>
                       </div>
                     )}

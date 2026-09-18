@@ -70,7 +70,7 @@ export default function DashboardPage() {
                 { label: "Weekly Plan", href: "/roadmap" },
                 { label: "Skill Gaps", href: "/dna" },
                 { label: "Ask Coach", href: "/coach" },
-                { label: "View Analytics", href: "/analytics" },
+                { label: "View Telemetry", href: "/dna?tab=analytics" },
               ].map((tool) => (
                 <Link
                   key={tool.label}

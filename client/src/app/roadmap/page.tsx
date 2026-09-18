@@ -250,10 +250,13 @@ export default function RoadmapPage() {
 
   const [expandedSubSkill, setExpandedSubSkill] = useState<string | null>(null);
 
-  // Sync dashboard values and full roadmap details on initial render
+  // Sync dashboard values and full roadmap details sequentially on initial render
   useEffect(() => {
-    fetchDashboardData();
-    fetchRoadmap();
+    const loadRoadmapData = async () => {
+      await fetchDashboardData();
+      await fetchRoadmap();
+    };
+    loadRoadmapData();
   }, [fetchDashboardData, fetchRoadmap]);
 
   // Handler to toggle subskill mastery

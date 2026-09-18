@@ -77,9 +77,22 @@ router.post("/login", async (req, res) => {
     try {
       // Query database
       matchedUser = await User.findOne({ email });
-      if (matchedUser) {
+
+      // Auto-provision demo account if requested and missing
+      if (!matchedUser && (email === "alex@careeros.dev" || email.includes("demo"))) {
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(password || "password123", salt);
+        matchedUser = await User.create({
+          name: "Alex Chen",
+          email: email,
+          passwordHash,
+          role: "Senior Full Stack Developer",
+          goal: "Senior Full Stack Developer"
+        });
+        isMatch = true;
+      } else if (matchedUser) {
         if (!matchedUser.passwordHash || matchedUser.passwordHash === "undefined") {
-          // Self-healing migration: set the first entered password as the hash
+          // Self-healing migration: set the entered password as the hash
           const salt = await bcrypt.genSalt(10);
           matchedUser.passwordHash = await bcrypt.hash(password, salt);
           await matchedUser.save();
@@ -117,6 +130,7 @@ router.post("/login", async (req, res) => {
     res.status(500).json({ error: `Internal auth failure: ${err.message}` });
   }
 });
+
 
 // Validate Session Token & Return Active Profile
 router.get("/me", authMiddleware, (req, res) => {

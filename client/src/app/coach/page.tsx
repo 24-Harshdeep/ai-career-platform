@@ -172,28 +172,22 @@ function CoachChatContent() {
               <span className="text-[11px] font-bold text-foreground uppercase tracking-wider block">Conversation History</span>
             </div>
             <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 text-xs pr-1">
-              <div className="space-y-1.5">
-                <span className="text-[9px] text-muted font-bold uppercase">Yesterday</span>
-                <div className="p-2 bg-accent/10 border border-border/40 rounded-lg hover:border-primary/30 cursor-pointer hover:bg-accent/20 transition-all">
-                  <p className="font-semibold text-foreground truncate">Resume Keyword Audit</p>
-                  <p className="text-[10px] text-muted-foreground">ATS Score optimizations</p>
+              {chatHistory && chatHistory.length > 1 ? (
+                chatHistory.filter(m => m.sender === "user").map((msg) => (
+                  <div 
+                    key={msg.id} 
+                    onClick={() => handleSendMessage(msg.text)}
+                    className="p-2 bg-accent/10 border border-border/40 rounded-lg hover:border-primary/30 cursor-pointer hover:bg-accent/20 transition-all"
+                  >
+                    <p className="font-semibold text-foreground truncate">{msg.text}</p>
+                    <p className="text-[10px] text-muted-foreground">{msg.timestamp}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="text-[11px] text-muted py-4 text-center">
+                  No past chats yet. Ask a question to start.
                 </div>
-              </div>
-              <div className="space-y-1.5">
-                <span className="text-[9px] text-muted font-bold uppercase">Last Week</span>
-                <div className="p-2 bg-accent/5 border border-border/30 rounded-lg hover:border-primary/30 cursor-pointer hover:bg-accent/10 transition-all space-y-1">
-                  <p className="font-semibold text-foreground truncate">Roadmap Database Caching</p>
-                  <p className="text-[10px] text-muted-foreground">Redis indexing guide</p>
-                </div>
-                <div className="p-2 bg-accent/5 border border-border/30 rounded-lg hover:border-primary/30 cursor-pointer hover:bg-accent/10 transition-all space-y-1">
-                  <p className="font-semibold text-foreground truncate">Technical Mock Practice</p>
-                  <p className="text-[10px] text-muted-foreground">Full Stack mock session #4</p>
-                </div>
-                <div className="p-2 bg-accent/5 border border-border/30 rounded-lg hover:border-primary/30 cursor-pointer hover:bg-accent/10 transition-all space-y-1">
-                  <p className="font-semibold text-foreground truncate">Portfolio Readme review</p>
-                  <p className="text-[10px] text-muted-foreground">Dockerization highlights</p>
-                </div>
-              </div>
+              )}
             </div>
           </Card>
         </div>

@@ -13,8 +13,30 @@ const authMiddleware = async (req, res, next) => {
 
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
 
+  // Support demo token resolution when ALLOW_DEMO_MODE is true or in non-production environments
+  const allowDemo = process.env.ALLOW_DEMO_MODE === "true" || process.env.NODE_ENV !== "production";
+  if (allowDemo && token && (token.startsWith("demo_") || token === "demo_token")) {
+    try {
+      let demoUser = await User.findOne({ email: "alex@careeros.dev" });
+      if (!demoUser) {
+        demoUser = await User.create({
+          name: "Alex Chen",
+          email: "alex@careeros.dev",
+          passwordHash: "$2a$10$e846059955700cf11c50bu2vOq71.8zY46/kZp7L5P4V0hQZk.d86",
+          role: "Senior Full Stack Developer",
+          goal: "Senior Full Stack Developer"
+        });
+      }
+      req.user = demoUser;
+      return next();
+    } catch (err) {
+      console.error("Error resolving demo user token:", err);
+    }
+  }
+
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+
     
     let user = null;
     try {

@@ -357,7 +357,14 @@ The JSON output must conform EXACTLY to this schema:
 
     // 3. Compute initial ATS scoring
     const { getCareerContext } = require("./careerContext.service");
-    const userContext = await getCareerContext(userId);
+    let userContext = { devContext: {} };
+    try {
+      userContext = await getCareerContext(userId);
+    } catch (contextErr) {
+      // Resume scoring can still use the parsed document when optional
+      // cross-module context is unavailable.
+      console.warn("[Resume Analysis] Career context unavailable; using local resume context:", contextErr.message);
+    }
 
     const analysisPrompt = `Analyze this candidate resume parsed content for a target role as a "${targetRole}". 
 Evaluate its keywords, projects, formatting, action verbs, and quantified impact.
@@ -458,23 +465,66 @@ Output a JSON object conforming exactly to this structure:
       analysisVersion: "v1.0.0"
     });
 
-    // 6. Update User profile flag
+    // 6. Update User profile flag & sync extracted skills into CareerProfile & User model
     if (userDoc) {
       userDoc.hasResumeScanned = true;
       await userDoc.save();
     }
 
-    // Log Activity Event for Real-Time Analytics
-    await logCareerEvent(
-      userId,
-      "Resume Scanned",
-      "ATS Engine",
-      15,
-      { atsScore: scoreData.atsScore }
-    );
+    const profile = await CareerProfile.findOne({ userId });
+    if (profile && parsedContent && parsedContent.skills) {
+      const updatedPossessed = {
+        languages: Array.from(new Set([...(profile.skillsPossessed?.languages || []), ...(parsedContent.skills.languages || [])])),
+        frontend: Array.from(new Set([...(profile.skillsPossessed?.frontend || []), ...(parsedContent.skills.frontend || [])])),
+        backend: Array.from(new Set([...(profile.skillsPossessed?.backend || []), ...(parsedContent.skills.backend || [])])),
+        database: Array.from(new Set([...(profile.skillsPossessed?.database || []), ...(parsedContent.skills.database || [])])),
+        tools: Array.from(new Set([...(profile.skillsPossessed?.tools || []), ...(parsedContent.skills.tools || [])])),
+        technical: Array.from(new Set([...(profile.skillsPossessed?.technical || []), ...(parsedContent.skills.other || [])])),
+        soft: profile.skillsPossessed?.soft || [],
+        cloud: profile.skillsPossessed?.cloud || [],
+        devops: profile.skillsPossessed?.devops || []
+      };
+      profile.skillsPossessed = updatedPossessed;
+      profile.markModified("skillsPossessed");
+      await profile.save();
 
-    // 7. Force Career score calculations update
-    await recalculateUserStats(userId);
+      const totalSkillsCount = [
+        ...updatedPossessed.languages,
+        ...updatedPossessed.frontend,
+        ...updatedPossessed.backend,
+        ...updatedPossessed.database,
+        ...updatedPossessed.tools,
+        ...updatedPossessed.technical
+      ].length;
+
+      if (userDoc) {
+        userDoc.skillsCount = totalSkillsCount;
+        if (parsedContent.projects && parsedContent.projects.length > 0) {
+          userDoc.projectsCount = Math.max(userDoc.projectsCount || 0, parsedContent.projects.length);
+        }
+        await userDoc.save();
+      }
+    }
+
+    // These are secondary side effects. Do not turn a successful resume
+    // analysis into a failed upload if analytics recalculation is unavailable.
+    try {
+      await logCareerEvent(
+        userId,
+        "Resume Scanned",
+        "ATS Engine",
+        15,
+        { atsScore: scoreData.atsScore }
+      );
+    } catch (eventErr) {
+      console.warn("[Resume Analysis] Career event logging failed:", eventErr.message);
+    }
+
+    try {
+      await recalculateUserStats(userId);
+    } catch (statsErr) {
+      console.warn("[Resume Analysis] Career stats recalculation failed:", statsErr.message);
+    }
 
     return getResumeAnalysis(userId);
   } catch (err) {
@@ -1044,4 +1094,3 @@ module.exports = {
   reviewChangeLog,
   applyChangeLogs
 };
-

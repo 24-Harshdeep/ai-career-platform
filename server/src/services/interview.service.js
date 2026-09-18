@@ -89,7 +89,6 @@ Output a JSON array conforming exactly to this structure:
 
     // If AI generation was unsuccessful, use only questions already persisted
     if (selected.length === 0) {
-      // Build a smart regex to match any of the significant words in the target role
       const words = (role || "").split(/\s+/).filter(w => w.length > 2);
       const regexPattern = words.length > 0 ? words.join("|") : (role || "Backend Developer");
       
@@ -97,10 +96,35 @@ Output a JSON array conforming exactly to this structure:
         role: { $regex: new RegExp(regexPattern, "i") }
       });
       
-      if (dbQuestions.length === 0) throw new Error("No verified interview questions are available for this session.");
+      if (dbQuestions.length === 0) {
+        dbQuestions = await InterviewQuestion.find({});
+      }
+
+      if (dbQuestions.length === 0) {
+        // Seed standard interview questions fallback
+        const defaultQ1 = await InterviewQuestion.create({
+          question: `Explain how you design RESTful APIs for a modern ${role || "Full Stack"} application.`,
+          category: type || "Technical",
+          role: role || "Full Stack Developer",
+          difficulty: difficulty || "Intermediate",
+          expectedConcepts: ["HTTP Methods", "Status Codes", "Authentication", "Validation"],
+          expectedKeywords: ["GET", "POST", "JWT", "JSON", "middleware"],
+          hints: ["Discuss REST resource naming, status codes (200, 201, 400, 401), and stateless JWT auth."]
+        });
+        const defaultQ2 = await InterviewQuestion.create({
+          question: `How do you handle state management and async data fetching in web applications?`,
+          category: type || "Technical",
+          role: role || "Full Stack Developer",
+          difficulty: difficulty || "Intermediate",
+          expectedConcepts: ["State Store", "Immutability", "Async/Await", "Caching"],
+          expectedKeywords: ["Zustand", "Redux", "Hooks", "useEffect", "fetch"],
+          hints: ["Talk about local vs global state, side-effect hooks, and error handling."]
+        });
+        dbQuestions = [defaultQ1, defaultQ2];
+      }
       
       const poolQuestions = selectQuestions(type, role, difficulty, dbQuestions);
-      selected = poolQuestions.slice(0, count);
+      selected = (poolQuestions && poolQuestions.length > 0 ? poolQuestions : dbQuestions).slice(0, count);
     }
 
     const sessionQuestions = selected.map(q => ({

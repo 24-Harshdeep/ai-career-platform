@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { Sparkles, FileText, Code2, Map, CheckSquare, MessageSquare } from "lucide-react";
 
 interface PromptSuggestionsProps {
   onSelect: (prompt: string) => void;
@@ -19,25 +18,21 @@ export const PromptSuggestions: React.FC<PromptSuggestionsProps> = ({
   const suggestions = [
     {
       text: "Fix ATS Keywords",
-      icon: FileText,
-      prompt: `How can I fix the missing ATS keywords in my resume to raise my score of ${atsScore}% for a ${targetRole} position?`,
+      prompt: `How can I fix the missing ATS keywords in my resume to raise my target role position score?`,
     },
     {
       text: "Prepare Mock Interview",
-      icon: MessageSquare,
-      prompt: `Let's start a mock technical interview focusing on database query tuning and systems design challenges for a ${targetRole} role.`,
+      prompt: `How can I prepare for technical mock interview questions for a ${targetRole} position?`,
     },
     {
-      text: "Optimize Project README",
-      icon: Code2,
-      prompt: `I want to audit my portfolio repositories. What specific changes should I make to my GitHub README documentation to impress FAANG engineering recruiters?`,
+      text: "Optimize Portfolio README",
+      prompt: `What specific documentation improvements should I make to my GitHub repository README files for a ${targetRole} role?`,
     },
   ];
 
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center space-x-1.5 px-1">
-        <Sparkles className="w-3.5 h-3.5 text-primary" />
+      <div className="flex items-center px-1">
         <span className="text-[10px] font-bold text-muted uppercase tracking-wider">
           Suggested Actions
         </span>
@@ -45,14 +40,12 @@ export const PromptSuggestions: React.FC<PromptSuggestionsProps> = ({
 
       <div className="flex flex-col sm:flex-row gap-2.5">
         {suggestions.map((s) => {
-          const Icon = s.icon;
           return (
             <button
               key={s.text}
               onClick={() => onSelect(s.prompt)}
-              className="flex items-center justify-start space-x-2.5 p-3 rounded-xl border border-border bg-card hover:bg-accent/40 hover:border-primary/40 text-left text-xs font-semibold text-foreground transition-all duration-200 hover:-translate-y-0.5 cursor-pointer shadow-sm flex-1"
+              className="flex items-center justify-center p-3 rounded-xl border border-border bg-card hover:bg-accent/40 hover:border-primary/40 text-center text-xs font-semibold text-foreground transition-all duration-200 hover:-translate-y-0.5 cursor-pointer shadow-sm flex-1"
             >
-              <Icon className="w-4 h-4 text-primary shrink-0" />
               <span className="truncate">{s.text}</span>
             </button>
           );

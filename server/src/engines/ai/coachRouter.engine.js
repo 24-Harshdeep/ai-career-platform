@@ -18,16 +18,17 @@ function routeCoachPrompt(activePath, userContext) {
   let systemPrompt = promptConfig.systemPrompt;
 
   // Context interpolations
-  const role = userContext.goal || "Full Stack Developer";
-  const score = userContext.score ?? null;
+  const role = userContext.targetRole || userContext.goal || "Full Stack Developer";
+  const score = userContext.careerScore ?? userContext.score ?? 0;
   const level = userContext.experienceLevel || "Intermediate";
+  const resumeContext = userContext.resumeContext || {};
 
   if (coachKey === "resume") {
     systemPrompt = systemPrompt
       .replace("{targetRole}", role)
-      .replace("{atsScore}", userContext.resumeAtsScore ?? "not available")
-      .replace("{missingKeywords}", (userContext.missingKeywords || []).join(", "))
-      .replace("{suggestedImprovements}", (userContext.suggestedImprovements || []).join("; "));
+      .replace("{atsScore}", resumeContext.atsScore ?? userContext.resumeAtsScore ?? "not available")
+      .replace("{missingKeywords}", (resumeContext.missingKeywords || userContext.missingKeywords || []).join(", ") || "not available")
+      .replace("{suggestedImprovements}", (resumeContext.suggestedImprovements || userContext.suggestedImprovements || []).join("; ") || "not available");
   } else if (coachKey === "roadmap") {
     systemPrompt = systemPrompt
       .replace("{targetRole}", role)

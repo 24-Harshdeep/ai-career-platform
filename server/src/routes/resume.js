@@ -43,7 +43,17 @@ router.get("/analysis", authMiddleware, async (req, res) => {
 });
 
 // 2. Upload and Scan Resume
-router.post("/upload", authMiddleware, upload.single("file"), async (req, res) => {
+router.post("/upload", authMiddleware, (req, res, next) => {
+  upload.single("file")(req, res, (err) => {
+    if (err) {
+      const message = err.code === "LIMIT_FILE_SIZE"
+        ? "Resume file is too large. Maximum size is 5MB."
+        : `Resume upload failed: ${err.message}`;
+      return errorResponse(res, message, [], 400);
+    }
+    next();
+  });
+}, async (req, res) => {
   let targetFilename = "resume.pdf";
   let targetText = "";
   let cloudinaryUrl = "";

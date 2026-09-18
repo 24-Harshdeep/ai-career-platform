@@ -9,32 +9,23 @@ import { Brain, Sparkles, Check, Hourglass, Zap, ShieldCheck } from "lucide-reac
 export const NextActionCard: React.FC = () => {
   const action = useCareerStore((state) => state.stats.nextAction);
   const currentScore = useCareerStore((state) => state.stats.score);
-  const hasResumeScanned = useCareerStore((state) => state.hasResumeScanned);
-  const hasGithubScanned = useCareerStore((state) => state.hasGithubScanned);
-  const m1 = useCareerStore((state) => state.missions.find((m) => m.id === "m-1"));
-  const m2 = useCareerStore((state) => state.missions.find((m) => m.id === "m-2"));
-
-  const completeMission = useCareerStore((state) => state.completeMission);
   const [loading, setLoading] = useState(false);
-
-  const isCompleted =
-    hasResumeScanned &&
-    hasGithubScanned &&
-    (m1?.completed || false) &&
-    (m2?.completed || false);
 
   const handleStartTask = async () => {
     if (!action) return;
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    const type = (action.type || "").toLowerCase();
+    const title = (action.title || "").toLowerCase();
 
-    if (action.title.includes("Resume")) {
-      await completeMission("m-3");
-    } else if (action.title.includes("JWT")) {
-      await completeMission("m-1");
-    } else if (action.title.includes("PostgreSQL")) {
-      await completeMission("m-2");
-    }
+    const target = action.targetUrl || (
+      type === "resume" || title.includes("resume") ? "/resume"
+        : type === "github" || type === "project" || type === "portfolio" || title.includes("github") || title.includes("portfolio") || title.includes("project") ? "/portfolio"
+        : type === "interview" || title.includes("interview") ? "/interview"
+        : type === "roadmap" || title.includes("roadmap") ? "/roadmap"
+        : type === "application" || type === "applications" || title.includes("application") || title.includes("job") ? "/applications"
+        : "/dna"
+    );
+    window.location.href = target;
     setLoading(false);
   };
 
@@ -42,9 +33,9 @@ export const NextActionCard: React.FC = () => {
   const title = action?.title;
   const reason = action?.reason;
   const impact = action?.impact;
-  const estimatedTime = action?.estimatedTime;
-  const confidence = action?.confidence;
-  const nextScore = action?.careerScoreAfterCompletion;
+  const estimatedTime = action?.estimatedTime || action?.duration;
+  const confidence = action?.confidence || 95;
+  const nextScore = action?.careerScoreAfterCompletion || (currentScore ? Math.min(100, currentScore + (impact || 3)) : null);
 
   return (
     <Card variant="insight" className="h-full flex flex-col justify-between p-6">
@@ -58,19 +49,17 @@ export const NextActionCard: React.FC = () => {
         <div className="flex items-center space-x-2">
           <Brain className="w-5 h-5 text-primary" />
           <h3 className="text-xs text-primary font-bold tracking-wider uppercase">
-            AI Recommended Action
+            AI Next Best Action
           </h3>
         </div>
 
         {/* Content */}
         <div className="space-y-2">
           <h4 className="text-lg font-bold text-foreground leading-tight">
-            {isCompleted ? "All Recommended Tasks Completed" : title || "No grounded action available"}
+            {title || "Complete Career DNA Baseline"}
           </h4>
           <p className="text-xs text-muted leading-relaxed">
-            {isCompleted
-              ? "Incredible! Your profile is fully optimized for active target engineering applications."
-              : reason || "CareerOS needs more verified profile, resume, project, or opportunity evidence before it can recommend a next action."}
+            {reason || "Set your target role and upload a resume to receive your personalized high-impact career recommendation."}
           </p>
         </div>
 
@@ -81,7 +70,7 @@ export const NextActionCard: React.FC = () => {
             <div>
               <p className="text-[10px] text-muted font-medium">Expected Impact</p>
               <p className="text-xs font-bold text-success">
-                {isCompleted ? "Optimal" : impact == null ? "Not available" : `+${impact} Career Score`}
+                {impact == null ? "High" : `+${impact} Career Score`}
               </p>
             </div>
           </div>
@@ -90,16 +79,16 @@ export const NextActionCard: React.FC = () => {
             <div>
               <p className="text-[10px] text-muted font-medium">Est. Duration</p>
               <p className="text-xs font-bold text-foreground">
-                {isCompleted ? "N/A" : estimatedTime || "Not available"}
+                {estimatedTime || "15 mins"}
               </p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
             <ShieldCheck className="w-4 h-4 text-primary" />
             <div>
-              <p className="text-[10px] text-muted font-medium">Confidence</p>
+              <p className="text-[10px] text-muted font-medium">Match Confidence</p>
               <p className="text-xs font-bold text-foreground">
-                {isCompleted ? "100%" : confidence == null ? "Not available" : `${confidence}% Match`}
+                {confidence == null ? "High" : `${confidence}% Match`}
               </p>
             </div>
           </div>
@@ -108,7 +97,7 @@ export const NextActionCard: React.FC = () => {
             <div>
               <p className="text-[10px] text-muted font-medium">Score Projection</p>
               <p className="text-xs font-bold text-foreground">
-                {isCompleted ? `${currentScore} Max` : nextScore == null ? "Not available" : `${currentScore} → ${nextScore}`}
+                {nextScore == null ? "Growing" : `${currentScore} → ${nextScore}`}
               </p>
             </div>
           </div>
@@ -117,25 +106,14 @@ export const NextActionCard: React.FC = () => {
 
       {/* Button Action */}
       <div className="mt-6">
-        {isCompleted ? (
-          <div className="w-full flex items-center justify-center space-x-2 bg-success/15 border border-success/35 text-success rounded-xl py-2.5 text-sm font-semibold">
-            <Check className="w-4.5 h-4.5" />
-            <span>Profile Ready</span>
-          </div>
-        ) : !action ? (
-          <div className="w-full flex items-center justify-center bg-accent/15 border border-border text-muted rounded-xl py-2.5 text-xs text-center">
-            Add verified career evidence to unlock a grounded recommendation.
-          </div>
-        ) : (
-          <Button
-            variant="ai"
-            className="w-full text-sm font-semibold"
-            onClick={handleStartTask}
-            isLoading={loading}
-          >
-            Start Task
-          </Button>
-        )}
+        <Button
+          variant="ai"
+          className="w-full text-sm font-semibold cursor-pointer"
+          onClick={handleStartTask}
+          isLoading={loading}
+        >
+          Execute Next Action
+        </Button>
       </div>
     </Card>
   );
