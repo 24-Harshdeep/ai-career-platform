@@ -55,9 +55,35 @@ async function getCareerContext(userId) {
       status: "Active" 
     });
 
+    // Interview Context
+    const InterviewSession = require("../models/InterviewSession");
+    const InterviewMistake = require("../models/InterviewMistake");
+    const pastSessions = await InterviewSession.find({ userId, overallScore: { $gt: 0 } }).sort({ completedAt: -1 }).limit(10);
+    const unresolvedMistakes = await InterviewMistake.find({ userId, resolved: false }).sort({ frequency: -1 }).limit(10);
+    
+    let interviewReadinessScore = null;
+    if (pastSessions.length > 0) {
+      interviewReadinessScore = Math.round(
+        pastSessions.reduce((acc, s) => acc + (s.overallScore || 0), 0) / pastSessions.length
+      );
+    }
+
+    const interviewContext = {
+      completedCount: pastSessions.length,
+      averageScore: interviewReadinessScore,
+      latestScore: pastSessions.length > 0 ? pastSessions[0].overallScore : null,
+      repeatingMistakes: unresolvedMistakes.map(m => ({
+        concept: m.concept,
+        frequency: m.frequency,
+        severity: m.frequency > 1 ? "High" : "Medium"
+      }))
+    };
+
+    const targetRole = (profile && profile.targetRole) ? profile.targetRole : (user.role || user.goal || "Full Stack Developer");
+
     const contextObj = {
       userId: user._id.toString(),
-      targetRole: profile ? profile.targetRole : user.goal,
+      targetRole,
       experienceLevel: profile ? profile.experienceLevel : user.experience,
       careerScore: user.score,
       careerGoal: profile ? profile.careerGoal : "",
@@ -67,6 +93,7 @@ async function getCareerContext(userId) {
       skillsTarget: profile ? profile.skillsTarget : {},
       resumeContext,
       devContext,
+      interviewContext,
       activeJobs: activeJobs.map(j => ({
         company: j.company,
         role: j.roleTitle,

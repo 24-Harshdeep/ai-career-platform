@@ -28,35 +28,31 @@ ${JSON.stringify(verifiedContext, null, 2)}
 
 Question ${questionNumber} of ${totalQuestions}.
 
-Evaluate the candidate's response across 8 criteria (0-100 score for each):
-1. technicalAccuracy: How technically correct is the response?
-2. relevance: Does it directly address the prompt?
-3. completeness: Are key sub-concepts and mechanisms mentioned?
-4. clarity: Is the explanation structured and easy to follow?
-5. problemSolving: Does it show sound engineering trade-off logic?
-6. communication: Is tone, vocabulary, and articulation professional?
-7. evidence: Did they reference real projects/examples from their verified background?
-8. contextConsistency: Does their claim align with their verified background without contradiction?
+Evaluate the candidate's response across the 6 core criteria (0-100 score for each):
+1. technicalKnowledge: Technical accuracy, depth, and mastery of concepts.
+2. problemSolving: Sound engineering logic, trade-offs, and algorithmic clarity.
+3. communication: Structure, articulation, vocabulary, and delivery clarity.
+4. answerQuality: Completeness, detail level, and direct relevance to prompt.
+5. confidence: Presentation tone, delivery assurance, and engagement.
+6. roleRelevance: Specific alignment with target role (${role}) and candidate's background.
 
 Decision Policy Rules:
-- If technicalAccuracy < 60 or completeness < 60: Action = "FOLLOW_UP" or "CLARIFY". Provide a constructive follow-up question.
-- If technicalAccuracy >= 85 and questionNumber < totalQuestions: Action = "NEXT_QUESTION".
-- If questionNumber >= totalQuestions and no major follow-up is critical: Action = "END_INTERVIEW".
+- If technicalKnowledge < 60 or answerQuality < 60: Action = "FOLLOW_UP". Provide a constructive, specific follow-up question based directly on what they missed.
+- If technicalKnowledge >= 80 and questionNumber < totalQuestions: Action = "NEXT_QUESTION".
+- If questionNumber >= totalQuestions: Action = "END_INTERVIEW".
 
 Respond strictly with a JSON object conforming to:
 {
   "scores": {
-    "technicalAccuracy": 85,
-    "relevance": 90,
-    "completeness": 75,
-    "clarity": 80,
-    "problemSolving": 85,
-    "communication": 90,
-    "evidence": 80,
-    "contextConsistency": 100
+    "technicalKnowledge": 85,
+    "problemSolving": 80,
+    "communication": 85,
+    "answerQuality": 80,
+    "confidence": 75,
+    "roleRelevance": 90
   },
   "overallAnswerScore": 82,
-  "action": "FOLLOW_UP" | "CLARIFY" | "NEXT_QUESTION" | "END_INTERVIEW",
+  "action": "FOLLOW_UP" | "NEXT_QUESTION" | "END_INTERVIEW",
   "aiSpeechResponse": "Spoken interviewer response to be read aloud via TTS...",
   "strengths": ["Clear explanation of core concepts"],
   "weaknesses": ["Missed edge-case error handling"],
@@ -74,18 +70,21 @@ Respond strictly with a JSON object conforming to:
 
     if (rawJson) {
       const parsed = JSON.parse(rawJson);
+      const scores = {
+        technicalKnowledge: parsed.scores?.technicalKnowledge ?? parsed.scores?.technicalAccuracy ?? 75,
+        problemSolving: parsed.scores?.problemSolving ?? 75,
+        communication: parsed.scores?.communication ?? 80,
+        answerQuality: parsed.scores?.answerQuality ?? parsed.scores?.relevance ?? 75,
+        confidence: parsed.scores?.confidence ?? 75,
+        roleRelevance: parsed.scores?.roleRelevance ?? parsed.scores?.contextConsistency ?? 80
+      };
+
+      const scoreVals = Object.values(scores);
+      const computedAvg = Math.round(scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length);
+
       return {
-        scores: parsed.scores || {
-          technicalAccuracy: 75,
-          relevance: 80,
-          completeness: 70,
-          clarity: 75,
-          problemSolving: 75,
-          communication: 80,
-          evidence: 70,
-          contextConsistency: 90
-        },
-        overallAnswerScore: parsed.overallAnswerScore || 75,
+        scores,
+        overallAnswerScore: parsed.overallAnswerScore || computedAvg,
         action: parsed.action || (questionNumber >= totalQuestions ? "END_INTERVIEW" : "NEXT_QUESTION"),
         aiSpeechResponse: parsed.aiSpeechResponse || "Thank you for that response. Let's proceed.",
         strengths: parsed.strengths || ["Articulated main points"],

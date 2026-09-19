@@ -54,6 +54,11 @@ const InterviewSessionSchema = new mongoose.Schema({
     default: "Technical" 
   },
   difficulty: { type: String, default: "Intermediate" },
+  formatMode: { 
+    type: String, 
+    enum: ["written", "voice_only", "voice_video"], 
+    default: "voice_video" 
+  },
   status: { type: String, enum: ["Active", "Completed", "Abandoned"], default: "Active" },
   startedAt: { type: Date, default: Date.now },
   completedAt: { type: Date },
@@ -61,6 +66,14 @@ const InterviewSessionSchema = new mongoose.Schema({
   totalQuestions: { type: Number, default: 3 },
   currentQuestionIndex: { type: Number, default: 0 },
   overallScore: { type: Number, default: 0 },
+  ratings: {
+    technicalKnowledge: { type: Number, default: 0 },
+    problemSolving: { type: Number, default: 0 },
+    communication: { type: Number, default: 0 },
+    answerQuality: { type: Number, default: 0 },
+    confidence: { type: Number, default: 0 },
+    roleRelevance: { type: Number, default: 0 }
+  },
   technicalScore: { type: Number, default: 0 },
   communicationScore: { type: Number, default: 0 },
   problemSolvingScore: { type: Number, default: 0 },

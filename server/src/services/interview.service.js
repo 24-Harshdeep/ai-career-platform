@@ -35,19 +35,24 @@ async function startSession(userId, config) {
   try {
     const { getCareerContext } = require("./careerContext.service");
     const userContext = await getCareerContext(userId);
+    const effectiveRole = (role && role.trim().length > 0) ? role.trim() : (userContext.targetRole || "Full Stack Developer");
     
     // Try to dynamically generate questions using Gemini API
     let selected = [];
     try {
-      const prompt = `Generate exactly ${count} interview questions for the role "${role}".
+      const prompt = `Generate exactly ${count} interview questions for the role "${effectiveRole}".
 Category/Type of interview: "${type}"
 Difficulty Level: "${difficulty}"
 
 Candidate Career Context:
+Target Role: "${effectiveRole}"
+Experience Level: "${userContext.experienceLevel || "Intermediate"}"
 Skills possessed: ${JSON.stringify(userContext.skillsPossessed)}
-Weaknesses / Missing Skills: ${JSON.stringify(userContext.weaknesses)}
+Resume Identified Skills: ${JSON.stringify(userContext.resumeContext?.identifiedSkills || [])}
+Resume Missing Keywords: ${JSON.stringify(userContext.resumeContext?.missingKeywords || [])}
+Weaknesses / Concept Mistakes: ${JSON.stringify(userContext.interviewContext?.repeatingMistakes || userContext.weaknesses || [])}
 
-Each question must be challenging, professional, and realistic. Tailor the questions to their specific skills and weaknesses if possible.
+Each question must be challenging, professional, and realistic. Tailor the questions directly to the target role "${effectiveRole}" and their specific skills/weaknesses.
 For each question, provide:
 1. The question text.
 2. A list of 1-3 hints/suggestions the coach can give the user.
@@ -73,7 +78,7 @@ Output a JSON array conforming exactly to this structure:
             const doc = await InterviewQuestion.create({
               question: q.question,
               category: type,
-              role: role,
+              role: effectiveRole,
               difficulty: difficulty,
               expectedConcepts: q.expectedConcepts || [],
               expectedKeywords: q.expectedKeywords || [],
@@ -89,8 +94,8 @@ Output a JSON array conforming exactly to this structure:
 
     // If AI generation was unsuccessful, use only questions already persisted
     if (selected.length === 0) {
-      const words = (role || "").split(/\s+/).filter(w => w.length > 2);
-      const regexPattern = words.length > 0 ? words.join("|") : (role || "Backend Developer");
+      const words = (effectiveRole || "").split(/\s+/).filter(w => w.length > 2);
+      const regexPattern = words.length > 0 ? words.join("|") : (effectiveRole || "Full Stack Developer");
       
       let dbQuestions = await InterviewQuestion.find({
         role: { $regex: new RegExp(regexPattern, "i") }
@@ -103,27 +108,27 @@ Output a JSON array conforming exactly to this structure:
       if (dbQuestions.length === 0) {
         // Seed standard interview questions fallback
         const defaultQ1 = await InterviewQuestion.create({
-          question: `Explain how you design RESTful APIs for a modern ${role || "Full Stack"} application.`,
+          question: `Explain how you design RESTful APIs and architecture for a modern ${effectiveRole} application.`,
           category: type || "Technical",
-          role: role || "Full Stack Developer",
+          role: effectiveRole,
           difficulty: difficulty || "Intermediate",
-          expectedConcepts: ["HTTP Methods", "Status Codes", "Authentication", "Validation"],
+          expectedConcepts: ["API Architecture", "Design Tradeoffs", "Authentication", "Validation"],
           expectedKeywords: ["GET", "POST", "JWT", "JSON", "middleware"],
-          hints: ["Discuss REST resource naming, status codes (200, 201, 400, 401), and stateless JWT auth."]
+          hints: ["Discuss resource naming, status codes, and stateless JWT auth."]
         });
         const defaultQ2 = await InterviewQuestion.create({
-          question: `How do you handle state management and async data fetching in web applications?`,
+          question: `How do you handle state management and async data fetching in ${effectiveRole} applications?`,
           category: type || "Technical",
-          role: role || "Full Stack Developer",
+          role: effectiveRole,
           difficulty: difficulty || "Intermediate",
-          expectedConcepts: ["State Store", "Immutability", "Async/Await", "Caching"],
+          expectedConcepts: ["State Management", "Immutability", "Async Operations", "Caching"],
           expectedKeywords: ["Zustand", "Redux", "Hooks", "useEffect", "fetch"],
           hints: ["Talk about local vs global state, side-effect hooks, and error handling."]
         });
         dbQuestions = [defaultQ1, defaultQ2];
       }
       
-      const poolQuestions = selectQuestions(type, role, difficulty, dbQuestions);
+      const poolQuestions = selectQuestions(type, effectiveRole, difficulty, dbQuestions);
       selected = (poolQuestions && poolQuestions.length > 0 ? poolQuestions : dbQuestions).slice(0, count);
     }
 
@@ -137,9 +142,10 @@ Output a JSON array conforming exactly to this structure:
 
     const session = await InterviewSession.create({
       userId,
-      role: role || "",
+      role: effectiveRole,
       type: type || "Technical",
       difficulty: difficulty || "Intermediate",
+      formatMode: config.formatMode || "voice_video",
       status: "Active",
       startedAt: new Date(),
       questions: sessionQuestions
@@ -302,29 +308,53 @@ async function finishSession(userId, sessionId) {
     const session = await InterviewSession.findOne({ _id: sessionId, userId });
     if (!session) throw new Error("Session not found.");
 
-    // Compute average scores
-    let totalScore = 0;
-    let questionsCount = session.questions.length;
+    // Filter answered questions or evaluate based on completed questions
+    const answeredQuestions = session.questions.filter(q => q.answer && q.answer.trim().length > 0);
+    const questionsCount = answeredQuestions.length > 0 ? answeredQuestions.length : session.questions.length;
 
+    let totalScore = 0;
     session.questions.forEach(q => {
-      totalScore += q.score;
+      totalScore += (q.score || 0);
     });
 
-    if (questionsCount === 0 || session.questions.some(q => !q.answer)) {
-      throw new Error("An interview session needs an answer to every question before it can be scored.");
-    }
-    const averageScore = Math.round(totalScore / questionsCount);
+    // Compute centralized 6 dimension ratings across evaluations
+    const evaluations = session.evaluations || [];
+    let techSum = 0, probSum = 0, commSum = 0, qualSum = 0, confSum = 0, relSum = 0;
+    const evalCount = evaluations.length || 1;
+
+    evaluations.forEach((ev) => {
+      const s = ev.scores || {};
+      techSum += s.technicalKnowledge ?? s.technicalAccuracy ?? 70;
+      probSum += s.problemSolving ?? 70;
+      commSum += s.communication ?? 75;
+      qualSum += s.answerQuality ?? s.relevance ?? 75;
+      confSum += s.confidence ?? 75;
+      relSum += s.roleRelevance ?? s.contextConsistency ?? 80;
+    });
+
+    const ratings = {
+      technicalKnowledge: Math.round(techSum / evalCount),
+      problemSolving: Math.round(probSum / evalCount),
+      communication: Math.round(commSum / evalCount),
+      answerQuality: Math.round(qualSum / evalCount),
+      confidence: Math.round(confSum / evalCount),
+      roleRelevance: Math.round(relSum / evalCount)
+    };
+
+    const ratingVals = Object.values(ratings);
+    const averageScore = Math.round(ratingVals.reduce((a, b) => a + b, 0) / ratingVals.length);
 
     session.status = "Completed";
     session.completedAt = new Date();
     session.duration = 15; // total minutes
 
+    session.ratings = ratings;
     session.overallScore = averageScore;
-    session.technicalScore = Math.min(100, averageScore + 5);
-    session.communicationScore = Math.min(100, averageScore - 5);
-    session.problemSolvingScore = averageScore;
-    session.confidenceScore = 85;
-    session.timeManagementScore = 90;
+    session.technicalScore = ratings.technicalKnowledge;
+    session.communicationScore = ratings.communication;
+    session.problemSolvingScore = ratings.problemSolving;
+    session.confidenceScore = ratings.confidence;
+    session.timeManagementScore = ratings.answerQuality;
 
     const gain = calculateReadinessIncrease(averageScore);
     session.readinessIncrease = gain;
@@ -409,15 +439,9 @@ Output a JSON object conforming exactly to this structure:
         role: session.role,
         type: session.type,
         difficulty: session.difficulty,
+        formatMode: session.formatMode || "voice_video",
         overallScore: session.overallScore,
-        subscores: {
-          technicalKnowledge: session.technicalScore,
-          problemSolving: session.problemSolvingScore,
-          communication: session.communicationScore,
-          answerRelevance: session.overallScore,
-          completeness: session.overallScore,
-          clarity: session.communicationScore
-        },
+        subscores: session.ratings,
         strengths: session.questions.flatMap(q => q.feedback?.strengths || []).slice(0, 5),
         weakAreas: session.questions.flatMap(q => q.feedback?.missedConcepts || []).slice(0, 5),
         repeatedMistakes: session.questions.flatMap(q => q.feedback?.weaknesses || []).slice(0, 5),
@@ -554,13 +578,21 @@ async function submitLiveAnswer(userId, sessionId, answerText, durationSeconds =
   }
 }
 
-// 6. Fetch Report details by sessionId
+// 6. Fetch Report details by sessionId or reportId
 async function getInterviewReport(userId, sessionId) {
   const InterviewReport = require("../models/InterviewReport");
-  const report = await InterviewReport.findOne({ sessionId, userId });
+  const mongoose = require("mongoose");
+  const isObjectId = mongoose.Types.ObjectId.isValid(sessionId);
+
+  if (!isObjectId) return null;
+
+  const report = await InterviewReport.findOne({
+    $or: [{ sessionId }, { _id: sessionId }],
+    userId
+  });
   if (report) return report;
 
-  // Fallback: search session
+  // Fallback: search session by ID
   const session = await InterviewSession.findOne({ _id: sessionId, userId });
   if (!session) return null;
 
@@ -570,22 +602,31 @@ async function getInterviewReport(userId, sessionId) {
     role: session.role,
     type: session.type,
     difficulty: session.difficulty,
+    formatMode: session.formatMode || "voice_video",
     overallScore: session.overallScore,
-    subscores: {
-      technicalKnowledge: session.technicalScore,
-      problemSolving: session.problemSolvingScore,
-      communication: session.communicationScore,
-      answerRelevance: session.overallScore,
-      completeness: session.overallScore,
-      clarity: session.communicationScore
+    subscores: session.ratings || {
+      technicalKnowledge: session.technicalScore || session.overallScore || 0,
+      problemSolving: session.problemSolvingScore || session.overallScore || 0,
+      communication: session.communicationScore || session.overallScore || 0,
+      answerQuality: session.overallScore || 0,
+      confidence: session.confidenceScore || session.overallScore || 0,
+      roleRelevance: session.overallScore || 0
     },
-    strengths: session.questions.flatMap(q => q.feedback?.strengths || []).slice(0, 5),
-    weakAreas: session.questions.flatMap(q => q.feedback?.missedConcepts || []).slice(0, 5),
-    repeatedMistakes: session.questions.flatMap(q => q.feedback?.weaknesses || []).slice(0, 5),
-    qaAnalysis: session.questions.map(q => ({
-      question: q.questionText || "Question",
-      answer: q.answer || "No response",
+    strengths: session.questions.flatMap(q => q.feedback?.strengths || []).filter(Boolean).slice(0, 5),
+    weakAreas: session.questions.flatMap(q => q.feedback?.missedConcepts || []).filter(Boolean).slice(0, 5),
+    repeatedMistakes: session.questions.flatMap(q => q.feedback?.weaknesses || []).filter(Boolean).slice(0, 5),
+    qaAnalysis: session.questions.map((q, idx) => ({
+      question: q.questionText || `Question ${idx + 1}`,
+      candidateAnswer: q.answer || "No response provided",
       score: q.score || 0,
+      evaluation: {
+        technicalKnowledge: q.score || 0,
+        problemSolving: q.score || 0,
+        communication: q.score || 0,
+        answerQuality: q.score || 0,
+        confidence: q.score || 0,
+        roleRelevance: q.score || 0
+      },
       strengths: q.feedback?.strengths || [],
       weaknesses: q.feedback?.weaknesses || [],
       idealAnswer: q.feedback?.idealAnswer || "",
@@ -607,29 +648,155 @@ async function getSessionHistory(userId) {
   }
 }
 
-// 8. Fetch mistake aggregates and readiness metrics
+// 8. Fetch mistake aggregates and readiness metrics from MongoDB
 async function getReadinessSummary(userId) {
   try {
-    const mistakes = await InterviewMistake.find({ userId, resolved: false }).sort({ frequency: -1 });
-    const history = await InterviewSession.find({ userId, status: "Completed" }).sort({ completedAt: -1 });
+    let history = await InterviewSession.find({
+      userId,
+      $or: [
+        { status: "Completed" },
+        { overallScore: { $gt: 0 } },
+        { "questions.0": { $exists: true } }
+      ]
+    }).sort({ completedAt: -1, createdAt: -1 });
 
-    const avgScore = history.length > 0
-      ? Math.round(history.reduce((acc, curr) => acc + curr.overallScore, 0) / history.length)
-      : null;
+    if (!history || history.length === 0) {
+      history = await InterviewSession.find({ userId }).sort({ completedAt: -1, createdAt: -1 });
+    }
+
+    let mistakes = [];
+    try {
+      mistakes = await InterviewMistake.find({ userId, resolved: false }).sort({ frequency: -1, lastSeen: -1 });
+    } catch (e) {
+      mistakes = [];
+    }
+
+    // Fallback: If InterviewMistake collection is empty, aggregate missed concepts & weaknesses dynamically from sessions
+    if ((!mistakes || mistakes.length === 0) && history.length > 0) {
+      const conceptMap = new Map();
+      history.forEach(s => {
+        const concepts = [];
+        if (Array.isArray(s.questions)) {
+          s.questions.forEach(q => {
+            if (q?.feedback?.missedConcepts) {
+              if (Array.isArray(q.feedback.missedConcepts)) concepts.push(...q.feedback.missedConcepts);
+              else if (typeof q.feedback.missedConcepts === "string") concepts.push(q.feedback.missedConcepts);
+            }
+            if (q?.feedback?.weaknesses) {
+              if (Array.isArray(q.feedback.weaknesses)) concepts.push(...q.feedback.weaknesses);
+              else if (typeof q.feedback.weaknesses === "string") concepts.push(q.feedback.weaknesses);
+            }
+          });
+        }
+        if (Array.isArray(s.evaluations)) {
+          s.evaluations.forEach(e => {
+            if (e?.missedConcepts) {
+              if (Array.isArray(e.missedConcepts)) concepts.push(...e.missedConcepts);
+              else if (typeof e.missedConcepts === "string") concepts.push(e.missedConcepts);
+            }
+            if (e?.weaknesses) {
+              if (Array.isArray(e.weaknesses)) concepts.push(...e.weaknesses);
+              else if (typeof e.weaknesses === "string") concepts.push(e.weaknesses);
+            }
+          });
+        }
+        concepts.forEach(c => {
+          if (!c || typeof c !== "string" || c.trim().length < 3) return;
+          const trimmed = c.trim();
+          const existing = conceptMap.get(trimmed) || { concept: trimmed, frequency: 0, lastSeen: s.updatedAt || s.createdAt || new Date() };
+          existing.frequency += 1;
+          conceptMap.set(trimmed, existing);
+        });
+      });
+      mistakes = Array.from(conceptMap.values()).sort((a, b) => b.frequency - a.frequency);
+    }
+
+    if (!history || history.length === 0) {
+      return {
+        interviewReadiness: null,
+        dimensions: null,
+        recentInterviews: [],
+        weakAreas: (mistakes || []).slice(0, 10).map(m => ({
+          concept: m.concept,
+          frequency: m.frequency,
+          severity: m.frequency > 1 ? "High" : m.severity || "Medium",
+          isRepeating: m.frequency > 1,
+          lastSeen: m.lastSeen
+        })),
+        performanceTrend: [],
+        completedCount: 0
+      };
+    }
+
+    // Ensure every session in history has a computed overallScore if missing
+    history.forEach(s => {
+      if (!s.overallScore || s.overallScore === 0) {
+        if (Array.isArray(s.questions) && s.questions.length > 0) {
+          const scoredQs = s.questions.filter(q => q && q.score > 0);
+          if (scoredQs.length > 0) {
+            s.overallScore = Math.round(scoredQs.reduce((acc, q) => acc + q.score, 0) / scoredQs.length);
+          }
+        }
+      }
+    });
+
+    const scoredHistory = history.filter(s => (s.overallScore || 0) > 0);
+    const targetHistory = scoredHistory.length > 0 ? scoredHistory : history;
+
+    const avgScore = Math.round(
+      targetHistory.reduce((acc, curr) => acc + (curr.overallScore || 0), 0) / targetHistory.length
+    );
+
+    let techSum = 0, probSum = 0, commSum = 0, qualSum = 0, confSum = 0, relSum = 0;
+    targetHistory.forEach(s => {
+      const r = s.ratings || {};
+      techSum += r.technicalKnowledge ?? s.technicalScore ?? s.overallScore ?? 70;
+      probSum += r.problemSolving ?? s.problemSolvingScore ?? s.overallScore ?? 70;
+      commSum += r.communication ?? s.communicationScore ?? s.overallScore ?? 75;
+      qualSum += r.answerQuality ?? s.overallScore ?? 75;
+      confSum += r.confidence ?? s.confidenceScore ?? s.overallScore ?? 75;
+      relSum += r.roleRelevance ?? s.overallScore ?? 80;
+    });
+
+    const hLen = targetHistory.length;
+    const dimensions = {
+      technicalKnowledge: Math.round(techSum / hLen),
+      problemSolving: Math.round(probSum / hLen),
+      communication: Math.round(commSum / hLen),
+      answerQuality: Math.round(qualSum / hLen),
+      confidence: Math.round(confSum / hLen),
+      roleRelevance: Math.round(relSum / hLen)
+    };
+
+    const performanceTrend = [...targetHistory].reverse().map(s => ({
+      date: s.completedAt || s.createdAt || new Date(),
+      score: s.overallScore || 0,
+      role: s.role || "Developer"
+    }));
 
     return {
       interviewReadiness: avgScore,
-      unresolvedMistakes: mistakes.map(m => ({
+      dimensions,
+      recentInterviews: history.slice(0, 5).map(toInterviewSessionDTO).filter(Boolean),
+      weakAreas: (mistakes || []).map(m => ({
         concept: m.concept,
         frequency: m.frequency,
-        severity: m.severity,
+        severity: m.frequency > 1 ? "High" : m.severity || "Medium",
+        isRepeating: m.frequency > 1,
         lastSeen: m.lastSeen
-      }))
+      })),
+      performanceTrend,
+      completedCount: history.length
     };
   } catch (err) {
+    console.error("Error in getReadinessSummary:", err);
     return {
       interviewReadiness: null,
-      unresolvedMistakes: []
+      dimensions: null,
+      recentInterviews: [],
+      weakAreas: [],
+      performanceTrend: [],
+      completedCount: 0
     };
   }
 }

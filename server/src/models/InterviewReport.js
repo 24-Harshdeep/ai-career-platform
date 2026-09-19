@@ -6,14 +6,15 @@ const InterviewReportSchema = new mongoose.Schema({
   role: { type: String, required: true },
   type: { type: String, required: true },
   difficulty: { type: String, required: true },
+  formatMode: { type: String, enum: ["written", "voice_only", "voice_video"], default: "voice_video" },
   overallScore: { type: Number, default: 0 },
   subscores: {
     technicalKnowledge: { type: Number, default: 0 },
     problemSolving: { type: Number, default: 0 },
     communication: { type: Number, default: 0 },
-    answerRelevance: { type: Number, default: 0 },
-    completeness: { type: Number, default: 0 },
-    clarity: { type: Number, default: 0 }
+    answerQuality: { type: Number, default: 0 },
+    confidence: { type: Number, default: 0 },
+    roleRelevance: { type: Number, default: 0 }
   },
   strengths: [{ type: String }],
   weakAreas: [{ type: String }],

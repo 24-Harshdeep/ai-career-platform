@@ -26,16 +26,14 @@ const errorResponse = (res, message, errors = [], status = 400) => {
 
 // 1. Create session (POST /session or POST /start)
 router.post(["/session", "/start"], authMiddleware, async (req, res) => {
-  const { role, type, difficulty, questionCount } = req.body;
-  if (!role) {
-    return errorResponse(res, "Missing parameter: 'role' is required.");
-  }
+  const { role, type, difficulty, questionCount, formatMode } = req.body;
 
   try {
     const data = await interviewService.startSession(req.user._id || req.user.id, {
-      role,
+      role: role || "",
       type: type || "Technical",
       difficulty: difficulty || "Intermediate",
+      formatMode: formatMode || "voice_video",
       questionCount: questionCount ? parseInt(questionCount, 10) : undefined
     });
     return successResponse(res, "Mock interview session initialized.", data);
@@ -140,11 +138,11 @@ router.get("/history", authMiddleware, async (req, res) => {
   }
 });
 
-// 8. Fetch mistake aggregates and readiness metrics (GET /readiness)
-router.get("/readiness", authMiddleware, async (req, res) => {
+// 8. Fetch mistake aggregates and readiness metrics (GET /readiness or GET /summary)
+router.get(["/readiness", "/summary"], authMiddleware, async (req, res) => {
   try {
     const data = await interviewService.getReadinessSummary(req.user._id || req.user.id);
-    return successResponse(res, "Interview readiness aggregated successfully.", data);
+    return successResponse(res, "Interview summary & analytics aggregated successfully.", data);
   } catch (err) {
     return errorResponse(res, `Failed to fetch readiness summary: ${err.message}`, [], 500);
   }

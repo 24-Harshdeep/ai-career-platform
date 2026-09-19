@@ -70,6 +70,41 @@ function groundedFallbackActions(context) {
     });
   }
 
+  if (context.interviewContext && context.interviewContext.repeatingMistakes?.length > 0) {
+    const topMistake = context.interviewContext.repeatingMistakes[0].concept;
+    actions.push({
+      actionId: "action-interview-weakness",
+      title: `Practice ${topMistake}`,
+      description: `Target your recurring mock interview weakness on '${topMistake}' to increase your readiness score.`,
+      type: "Interview",
+      priority: "High",
+      impactScore: 85,
+      estimatedTime: "20 mins",
+      confidence: 90,
+      reason: `Mock interviews identified recurring weakness on ${topMistake}.`,
+      dependencies: [],
+      careerScoreAfterCompletion: null,
+      jobReadinessAfterCompletion: null,
+      rankScore: 95
+    });
+  } else if (!context.interviewContext || context.interviewContext.completedCount === 0) {
+    actions.push({
+      actionId: "action-interview-first",
+      title: "Complete First Mock Interview",
+      description: `Run a mock interview for your target role "${context.targetRole || "Full Stack Developer"}" to evaluate technical readiness.`,
+      type: "Interview",
+      priority: "High",
+      impactScore: 80,
+      estimatedTime: "15 mins",
+      confidence: 85,
+      reason: "No completed mock interviews found for this user account.",
+      dependencies: [],
+      careerScoreAfterCompletion: null,
+      jobReadinessAfterCompletion: null,
+      rankScore: 85
+    });
+  }
+
   return actions.sort((a, b) => b.rankScore - a.rankScore).slice(0, 3);
 }
 

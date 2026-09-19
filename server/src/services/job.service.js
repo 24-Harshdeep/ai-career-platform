@@ -206,8 +206,10 @@ async function updateJobStatus(userId, opportunityId, status) {
 // 4. Delete opportunity
 async function deleteJobOpportunity(userId, opportunityId) {
   try {
-    await JobOpportunity.deleteOne({ _id: opportunityId, userId });
-    await JobAnalysis.deleteOne({ jobOpportunityId: opportunityId });
+    const result = await JobOpportunity.deleteOne({ _id: opportunityId, userId });
+    if (result.deletedCount > 0) {
+      await JobAnalysis.deleteOne({ jobOpportunityId: opportunityId, userId });
+    }
     return true;
   } catch (err) {
     return false;

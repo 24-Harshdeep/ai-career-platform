@@ -83,7 +83,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (profile && !profileLoaded) {
-      setTargetRoleInput(profile.targetRole || "Backend Developer");
+      setTargetRoleInput(profile.targetRole || storeUser?.goal || "Full Stack Developer");
       setExperienceInput((profile.experienceLevel as any) || "Intermediate");
       setIndustryInput(profile.preferredIndustry || "Fintech");
       setCountryInput(profile.countryLocale || "United States");

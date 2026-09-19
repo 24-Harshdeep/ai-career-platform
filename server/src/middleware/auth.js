@@ -1,10 +1,15 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-// JWT secret key configuration
-const JWT_SECRET = process.env.JWT_SECRET || "careeros-secret-key";
+// JWT secret key configuration - require explicit process.env.JWT_SECRET in production
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === "production" ? null : "careeros-development-secret-key-3289");
 
 const authMiddleware = async (req, res, next) => {
+  if (!JWT_SECRET) {
+    console.error("[CRITICAL SECURITY] JWT_SECRET is not configured in environment variables.");
+    return res.status(500).json({ error: "Server authentication configuration error." });
+  }
+
   const authHeader = req.header("Authorization");
   
   if (!authHeader) {
@@ -13,8 +18,10 @@ const authMiddleware = async (req, res, next) => {
 
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
 
-  // Support demo token resolution when ALLOW_DEMO_MODE is true or in non-production environments
-  const allowDemo = process.env.ALLOW_DEMO_MODE === "true" || process.env.NODE_ENV !== "production";
+  // Demo token mode allowed ONLY in development and explicitly enabled via ALLOW_DEMO_MODE=true
+  const isDev = process.env.NODE_ENV !== "production";
+  const allowDemo = process.env.ALLOW_DEMO_MODE === "true" || (isDev && process.env.ALLOW_DEMO_MODE !== "false");
+
   if (allowDemo && token && (token.startsWith("demo_") || token === "demo_token")) {
     try {
       let demoUser = await User.findOne({ email: "alex@careeros.dev" });
@@ -36,7 +43,6 @@ const authMiddleware = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-
     
     let user = null;
     try {
@@ -80,7 +86,7 @@ const authMiddleware = async (req, res, next) => {
     }
 
     if (!user) {
-      return res.status(401).json({ error: "Account not found." });
+      return res.status(401).json({ error: "Account not found or session invalid." });
     }
 
     req.user = user;

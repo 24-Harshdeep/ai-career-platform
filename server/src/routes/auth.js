@@ -16,6 +16,10 @@ router.post("/register", async (req, res) => {
     return res.status(400).json({ error: "Missing required registration parameters." });
   }
 
+  if (password.length < 8) {
+    return res.status(400).json({ error: "Password must be at least 8 characters long." });
+  }
+
   try {
     // 1. Encrypt raw password
     const salt = await bcrypt.genSalt(10);
@@ -25,15 +29,15 @@ router.post("/register", async (req, res) => {
 
     try {
       // Check if email already exists
-      const existingUser = await User.findOne({ email });
+      const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
       if (existingUser) {
         return res.status(400).json({ error: "Email registration already exists." });
       }
 
       // Create document in database
       newUser = await User.create({
-        name,
-        email,
+        name: name.trim(),
+        email: email.toLowerCase().trim(),
         passwordHash
       });
     } catch (dbErr) {
@@ -58,7 +62,8 @@ router.post("/register", async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ error: `Internal registry failure: ${err.message}` });
+    console.error("Register Error:", err);
+    res.status(500).json({ error: "An unexpected error occurred during account registration." });
   }
 });
 

@@ -157,9 +157,20 @@ async function getCareerStats(userId) {
     const skillsCount = getSkillsCount(profile.skillsPossessed);
 
     const JobOpportunity = require("../models/JobOpportunity");
+    const InterviewSession = require("../models/InterviewSession");
+
     const applicationsCount = await JobOpportunity.countDocuments({ userId });
     const offerCount = await JobOpportunity.countDocuments({ userId, status: "Offer" });
     
+    // Fetch average interview score from completed interview sessions
+    const completedSessions = await InterviewSession.find({ userId, overallScore: { $gt: 0 } });
+    let interviewScore = 0;
+    if (completedSessions.length > 0) {
+      interviewScore = Math.round(
+        completedSessions.reduce((acc, s) => acc + (s.overallScore || 0), 0) / completedSessions.length
+      );
+    }
+
     // Trigger score engine
     const scoreData = calculateCareerScore({
       hasResumeScanned,
@@ -168,7 +179,7 @@ async function getCareerStats(userId) {
       skillsCount,
       roadmapAverageProgress: roadmapAvg,
       applicationsCount,
-      masteredQuestionsCount,
+      masteredQuestionsCount: Math.max(masteredQuestionsCount, completedSessions.length * 3),
       streakDays
     });
 
@@ -178,7 +189,8 @@ async function getCareerStats(userId) {
       hasGithubScanned,
       projectsCount,
       masteredQuestionsCount,
-      resumeScore // Pass real parsed ATS score!
+      resumeScore, // Pass real parsed ATS score!
+      interviewScore
     });
 
     const timeline = generateTimeline({

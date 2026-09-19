@@ -19,9 +19,20 @@ async function auditProject(userId, url, title, projectType) {
       targetUrl = "https://" + targetUrl;
     }
 
-    // 2. Perform live HTTP crawl & measure latency
+    // 2. Perform live HTTP crawl & measure latency safely (SSRF Protection)
     let crawledHtml = "";
     let latencyMs = 250;
+    
+    // Prevent SSRF attacks against localhost, internal subnets, or cloud metadata services
+    const parsedUrl = new URL(targetUrl);
+    const hostname = parsedUrl.hostname.toLowerCase();
+
+    const forbiddenHosts = ["localhost", "127.0.0.1", "0.0.0.0", "::1", "169.254.169.254"];
+    const isPrivateIp = /^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/.test(hostname);
+
+    if (forbiddenHosts.includes(hostname) || isPrivateIp || hostname.endsWith(".internal") || hostname.endsWith(".local")) {
+      throw new Error("Auditing private, internal, or loopback network addresses is prohibited.");
+    }
     
     try {
       const start = Date.now();
@@ -37,7 +48,7 @@ async function auditProject(userId, url, title, projectType) {
       }
     } catch (fetchErr) {
       console.warn(`[Project Audit] Unreachable URL target ${targetUrl}:`, fetchErr.message);
-      throw new Error(`Deployment URL is unreachable or private. Please ensure it is publicly online. (${fetchErr.message})`);
+      throw new Error(`Deployment URL is unreachable or private. Please ensure it is publicly online.`);
     }
 
     // 3. Upsert Project Audit record

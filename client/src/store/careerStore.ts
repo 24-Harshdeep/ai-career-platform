@@ -319,16 +319,33 @@ export interface AnsweredQuestionData {
   duration: number;
 }
 
+export interface InterviewDimensionRatings {
+  technicalKnowledge: number;
+  problemSolving: number;
+  communication: number;
+  answerQuality: number;
+  confidence: number;
+  roleRelevance: number;
+}
+
+export interface InterviewPerformanceTrendPoint {
+  date: string;
+  score: number;
+  role: string;
+}
+
 export interface InterviewSessionData {
   id: string;
   role: string;
   type: "Technical" | "Behavioral" | "System Design" | "HR" | "Machine Coding" | "Resume Based" | "Project Discussion" | "Custom";
   difficulty: "Junior" | "Intermediate" | "Senior";
+  formatMode?: "written" | "voice_only" | "voice_video";
   status: "Active" | "Completed" | "Abandoned";
   startedAt: string;
   completedAt?: string;
   duration: number;
   overallScore: number;
+  ratings?: InterviewDimensionRatings;
   technicalScore: number;
   communicationScore: number;
   problemSolvingScore: number;
@@ -425,7 +442,9 @@ interface CareerState {
   interviewSessions: InterviewSessionData[];
   activeInterviewSession: InterviewSessionData | null;
   currentInterviewQuestion: InterviewQuestionItem | null;
-  interviewReadiness: number;
+  interviewReadiness: number | null;
+  interviewDimensions: InterviewDimensionRatings | null;
+  interviewPerformanceTrend: InterviewPerformanceTrendPoint[];
   unresolvedMistakes: InterviewMistakeData[];
   analyticsData: AnalyticsDashboardData | null;
 
@@ -470,8 +489,8 @@ interface CareerState {
   deleteJobOpportunity: (id: string) => Promise<void>;
   fetchInterviewHistory: () => Promise<void>;
   fetchInterviewReadiness: () => Promise<void>;
-  startMockInterview: (role: string, type: string, difficulty: string, questionCount?: number) => Promise<void>;
-  createInterviewSession: (role: string, type: string, difficulty: string, questionCount?: number) => Promise<string | null>;
+  startMockInterview: (role: string, type: string, difficulty: string, questionCount?: number, formatMode?: string) => Promise<void>;
+  createInterviewSession: (role: string, type: string, difficulty: string, questionCount?: number, formatMode?: string) => Promise<string | null>;
   fetchSessionById: (sessionId: string) => Promise<InterviewSessionData | null>;
   submitLiveAnswer: (sessionId: string, answerText: string, durationSeconds?: number) => Promise<any>;
   fetchSessionReport: (sessionId: string) => Promise<any>;
@@ -535,7 +554,9 @@ export const useCareerStore = create<CareerState>((set, get) => ({
   interviewSessions: [],
   activeInterviewSession: null,
   currentInterviewQuestion: null,
-  interviewReadiness: 0,
+  interviewReadiness: null,
+  interviewDimensions: null,
+  interviewPerformanceTrend: [],
   unresolvedMistakes: [],
   analyticsData: null,
   profile: null,
@@ -1419,16 +1440,25 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
 
     try {
-      const res = await apiFetch(`${API_BASE_URL}/interview/readiness`, {
+      const res = await apiFetch(`${API_BASE_URL}/interview/summary`, {
         method: "GET",
         headers
       });
 
       if (res.ok) {
         const envelope = await res.json();
+        const data = envelope.data || {};
+        const currentHistory = get().interviewSessions;
+        const updatedHistory = (currentHistory && currentHistory.length > (data.recentInterviews?.length || 0))
+          ? currentHistory
+          : (data.recentInterviews || []);
+
         set({
-          interviewReadiness: envelope.data.interviewReadiness,
-          unresolvedMistakes: envelope.data.unresolvedMistakes
+          interviewReadiness: data.interviewReadiness ?? null,
+          interviewDimensions: data.dimensions ?? null,
+          interviewSessions: updatedHistory,
+          unresolvedMistakes: data.weakAreas || [],
+          interviewPerformanceTrend: data.performanceTrend || []
         });
       }
     } catch (err) {
@@ -1436,18 +1466,21 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
   },
 
-  startMockInterview: async (role, type, difficulty, questionCount) => {
+  startMockInterview: async (role, type, difficulty, questionCount, formatMode = "written") => {
     const token = localStorage.getItem("careeros_token");
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
+    const targetRole = (role && role.trim().length > 0)
+      ? role.trim()
+      : (get().profile?.targetRole || get().user?.goal || "Full Stack Developer");
 
     try {
       const res = await apiFetch(`${API_BASE_URL}/interview/start`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ role, type, difficulty, questionCount })
+        body: JSON.stringify({ role: targetRole, type, difficulty, questionCount, formatMode })
       });
 
       if (res.ok) {
@@ -1462,16 +1495,19 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     }
   },
 
-  createInterviewSession: async (role, type, difficulty, questionCount) => {
+  createInterviewSession: async (role, type, difficulty, questionCount, formatMode = "voice_only") => {
     const token = localStorage.getItem("careeros_token");
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
+    const targetRole = (role && role.trim().length > 0)
+      ? role.trim()
+      : (get().profile?.targetRole || get().user?.goal || "Full Stack Developer");
 
     try {
       const res = await apiFetch(`${API_BASE_URL}/interview/session`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ role, type, difficulty, questionCount })
+        body: JSON.stringify({ role: targetRole, type, difficulty, questionCount, formatMode })
       });
 
       if (res.ok) {
