@@ -389,14 +389,215 @@ Output a JSON object conforming exactly to this structure:
     // Force recalculate Career Score
     await recalculateUserStats(userId);
 
-    return toInterviewSessionDTO(session);
+    // Persist InterviewReport model document
+    const InterviewReport = require("../models/InterviewReport");
+    const qaAnalysis = session.questions.map((q) => ({
+      question: q.questionText || "Interview Question",
+      answer: q.answer || "No response",
+      score: q.score || 0,
+      strengths: q.feedback?.strengths || [],
+      weaknesses: q.feedback?.weaknesses || [],
+      idealAnswer: q.feedback?.idealAnswer || "",
+      coachAdvice: q.feedback?.improvementPlan || ""
+    }));
+
+    let report = await InterviewReport.findOne({ sessionId: session._id });
+    if (!report) {
+      report = await InterviewReport.create({
+        sessionId: session._id,
+        userId,
+        role: session.role,
+        type: session.type,
+        difficulty: session.difficulty,
+        overallScore: session.overallScore,
+        subscores: {
+          technicalKnowledge: session.technicalScore,
+          problemSolving: session.problemSolvingScore,
+          communication: session.communicationScore,
+          answerRelevance: session.overallScore,
+          completeness: session.overallScore,
+          clarity: session.communicationScore
+        },
+        strengths: session.questions.flatMap(q => q.feedback?.strengths || []).slice(0, 5),
+        weakAreas: session.questions.flatMap(q => q.feedback?.missedConcepts || []).slice(0, 5),
+        repeatedMistakes: session.questions.flatMap(q => q.feedback?.weaknesses || []).slice(0, 5),
+        qaAnalysis,
+        recommendedTopics: session.recommendations || [],
+        recommendedPractice: ["Practice architectural trade-offs", "Implement production error handling"],
+        nextBestAction: `Revise concepts in ${session.role} interview focus areas.`
+      });
+      session.reportId = report._id;
+      await session.save();
+    }
+
+    const dto = toInterviewSessionDTO(session);
+    dto.reportId = report._id;
+    return dto;
   } catch (err) {
     console.error("Interview Service Error in finishSession:", err);
     throw err;
   }
 }
 
-// 4. Fetch session history log
+// 4. Fetch session details by ID for Live Room recovery
+async function getInterviewSession(userId, sessionId) {
+  const session = await InterviewSession.findOne({ _id: sessionId, userId });
+  if (!session) return null;
+  return toInterviewSessionDTO(session);
+}
+
+// 5. Submit live answer with adaptive AI policy evaluation
+async function submitLiveAnswer(userId, sessionId, answerText, durationSeconds = 30) {
+  const session = await InterviewSession.findOne({ _id: sessionId, userId });
+  if (!session) throw new Error("Interview session not found.");
+
+  const { evaluateAnswerAdaptively } = require("../engines/interview/adaptiveInterview.engine");
+  const { getVerifiedCandidateContext } = require("../engines/interview/contextVerifier.engine");
+
+  const verifiedContext = await getVerifiedCandidateContext(userId);
+  const currentIdx = session.currentQuestionIndex || 0;
+  const currentQObj = session.questions[currentIdx] || session.questions[0];
+
+  const currentQText = currentQObj?.questionText || "Technical Question";
+
+  // Evaluate answer adaptively
+  const evalResult = await evaluateAnswerAdaptively({
+    role: session.role,
+    type: session.type,
+    difficulty: session.difficulty,
+    currentQuestionText: currentQText,
+    answerText,
+    verifiedContext,
+    questionNumber: currentIdx + 1,
+    totalQuestions: session.questions.length || session.totalQuestions || 3
+  });
+
+  // Log user answer into conversation & question object
+  session.conversation.push({
+    role: "user",
+    text: answerText,
+    timestamp: new Date(),
+    questionId: currentQObj?.questionId ? String(currentQObj.questionId) : ""
+  });
+
+  if (session.questions[currentIdx]) {
+    session.questions[currentIdx].answer = answerText;
+    session.questions[currentIdx].score = evalResult.overallAnswerScore;
+    session.questions[currentIdx].duration = durationSeconds;
+    session.questions[currentIdx].feedback = {
+      strengths: evalResult.strengths,
+      weaknesses: evalResult.weaknesses,
+      missedConcepts: evalResult.missedConcepts,
+      idealAnswer: evalResult.idealAnswer,
+      improvementPlan: evalResult.improvementPlan,
+      resources: []
+    };
+  }
+
+  // Push evaluation details
+  session.evaluations.push({
+    questionText: currentQText,
+    answerText,
+    scores: evalResult.scores,
+    actionTaken: evalResult.action,
+    strengths: evalResult.strengths,
+    weaknesses: evalResult.weaknesses,
+    missedConcepts: evalResult.missedConcepts,
+    idealAnswer: evalResult.idealAnswer,
+    improvementPlan: evalResult.improvementPlan
+  });
+
+  // Log missed concepts to InterviewMistake
+  if (evalResult.missedConcepts && evalResult.missedConcepts.length > 0) {
+    for (const concept of evalResult.missedConcepts) {
+      await InterviewMistake.findOneAndUpdate(
+        { userId, concept },
+        { 
+          $inc: { frequency: 1 }, 
+          $set: { lastSeen: new Date(), severity: "High", resolved: false } 
+        },
+        { upsert: true }
+      );
+    }
+  }
+
+  // Handle action
+  if (evalResult.action === "END_INTERVIEW" || currentIdx + 1 >= session.questions.length) {
+    session.status = "Completed";
+    await session.save();
+    return await finishSession(userId, sessionId);
+  } else {
+    session.currentQuestionIndex = currentIdx + 1;
+    const nextQ = session.questions[session.currentQuestionIndex];
+    
+    // Log AI follow-up or next question in conversation
+    session.conversation.push({
+      role: "ai",
+      text: evalResult.aiSpeechResponse,
+      timestamp: new Date(),
+      questionId: nextQ?.questionId ? String(nextQ.questionId) : ""
+    });
+
+    await session.save();
+
+    return {
+      session: toInterviewSessionDTO(session),
+      action: evalResult.action,
+      aiSpeechResponse: evalResult.aiSpeechResponse,
+      nextQuestion: {
+        id: nextQ?.questionId || session.currentQuestionIndex,
+        text: nextQ?.questionText || evalResult.aiSpeechResponse,
+        hints: []
+      },
+      evaluation: evalResult
+    };
+  }
+}
+
+// 6. Fetch Report details by sessionId
+async function getInterviewReport(userId, sessionId) {
+  const InterviewReport = require("../models/InterviewReport");
+  const report = await InterviewReport.findOne({ sessionId, userId });
+  if (report) return report;
+
+  // Fallback: search session
+  const session = await InterviewSession.findOne({ _id: sessionId, userId });
+  if (!session) return null;
+
+  return {
+    sessionId: session._id,
+    userId: session.userId,
+    role: session.role,
+    type: session.type,
+    difficulty: session.difficulty,
+    overallScore: session.overallScore,
+    subscores: {
+      technicalKnowledge: session.technicalScore,
+      problemSolving: session.problemSolvingScore,
+      communication: session.communicationScore,
+      answerRelevance: session.overallScore,
+      completeness: session.overallScore,
+      clarity: session.communicationScore
+    },
+    strengths: session.questions.flatMap(q => q.feedback?.strengths || []).slice(0, 5),
+    weakAreas: session.questions.flatMap(q => q.feedback?.missedConcepts || []).slice(0, 5),
+    repeatedMistakes: session.questions.flatMap(q => q.feedback?.weaknesses || []).slice(0, 5),
+    qaAnalysis: session.questions.map(q => ({
+      question: q.questionText || "Question",
+      answer: q.answer || "No response",
+      score: q.score || 0,
+      strengths: q.feedback?.strengths || [],
+      weaknesses: q.feedback?.weaknesses || [],
+      idealAnswer: q.feedback?.idealAnswer || "",
+      coachAdvice: q.feedback?.improvementPlan || ""
+    })),
+    recommendedTopics: session.recommendations || [],
+    recommendedPractice: ["System Architecture Design", "Core Concepts Review"],
+    nextBestAction: `Revise missed concepts from your ${session.role} mock round.`
+  };
+}
+
+// 7. Fetch session history log
 async function getSessionHistory(userId) {
   try {
     const sessions = await InterviewSession.find({ userId }).sort({ completedAt: -1 });
@@ -406,7 +607,7 @@ async function getSessionHistory(userId) {
   }
 }
 
-// 5. Fetch mistake aggregates and readiness metrics
+// 8. Fetch mistake aggregates and readiness metrics
 async function getReadinessSummary(userId) {
   try {
     const mistakes = await InterviewMistake.find({ userId, resolved: false }).sort({ frequency: -1 });
@@ -436,7 +637,10 @@ async function getReadinessSummary(userId) {
 module.exports = {
   startSession,
   submitAnswer,
+  submitLiveAnswer,
   finishSession,
+  getInterviewSession,
+  getInterviewReport,
   getSessionHistory,
   getReadinessSummary
 };

@@ -471,6 +471,10 @@ interface CareerState {
   fetchInterviewHistory: () => Promise<void>;
   fetchInterviewReadiness: () => Promise<void>;
   startMockInterview: (role: string, type: string, difficulty: string, questionCount?: number) => Promise<void>;
+  createInterviewSession: (role: string, type: string, difficulty: string, questionCount?: number) => Promise<string | null>;
+  fetchSessionById: (sessionId: string) => Promise<InterviewSessionData | null>;
+  submitLiveAnswer: (sessionId: string, answerText: string, durationSeconds?: number) => Promise<any>;
+  fetchSessionReport: (sessionId: string) => Promise<any>;
   submitInterviewAnswer: (sessionId: string, answerText: string, durationSeconds: number) => Promise<void>;
   concludeMockInterview: (sessionId: string) => Promise<InterviewSessionData | null>;
   fetchAnalyticsDashboard: () => Promise<void>;
@@ -1456,6 +1460,106 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     } catch (err) {
       console.warn("Failed to start mock interview session:", err);
     }
+  },
+
+  createInterviewSession: async (role, type, difficulty, questionCount) => {
+    const token = localStorage.getItem("careeros_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/interview/session`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ role, type, difficulty, questionCount })
+      });
+
+      if (res.ok) {
+        const envelope = await res.json();
+        const session = envelope.data?.session || envelope.data;
+        set({
+          activeInterviewSession: session,
+          currentInterviewQuestion: envelope.data?.currentQuestion || null
+        });
+        return session.id || session._id || null;
+      }
+    } catch (err) {
+      console.warn("Failed to create interview session:", err);
+    }
+    return null;
+  },
+
+  fetchSessionById: async (sessionId) => {
+    const token = localStorage.getItem("careeros_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/interview/session/${sessionId}`, {
+        method: "GET",
+        headers
+      });
+
+      if (res.ok) {
+        const envelope = await res.json();
+        const session = envelope.data;
+        set({ activeInterviewSession: session });
+        return session;
+      }
+    } catch (err) {
+      console.warn("Failed to fetch session by id:", err);
+    }
+    return null;
+  },
+
+  submitLiveAnswer: async (sessionId, answerText, durationSeconds = 30) => {
+    const token = localStorage.getItem("careeros_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/interview/session/${sessionId}/answer`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ sessionId, answer: answerText, duration: durationSeconds })
+      });
+
+      if (res.ok) {
+        const envelope = await res.json();
+        const payload = envelope.data;
+        if (payload?.session) {
+          set({
+            activeInterviewSession: payload.session,
+            currentInterviewQuestion: payload.nextQuestion || null
+          });
+        }
+        return payload;
+      }
+    } catch (err) {
+      console.warn("Failed to submit live answer:", err);
+    }
+    return null;
+  },
+
+  fetchSessionReport: async (sessionId) => {
+    const token = localStorage.getItem("careeros_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    try {
+      const res = await apiFetch(`${API_BASE_URL}/interview/session/${sessionId}/report`, {
+        method: "GET",
+        headers
+      });
+
+      if (res.ok) {
+        const envelope = await res.json();
+        return envelope.data;
+      }
+    } catch (err) {
+      console.warn("Failed to fetch session report:", err);
+    }
+    return null;
   },
 
   submitInterviewAnswer: async (sessionId, answerText, durationSeconds) => {

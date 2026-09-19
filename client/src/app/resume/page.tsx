@@ -101,9 +101,6 @@ export default function ResumePage() {
   useEffect(() => {
     if (resumeAnalysis && resumeAnalysis.activeVersionContent) {
       setFormState(JSON.parse(JSON.stringify(resumeAnalysis.activeVersionContent)));
-      if (wizardStep === "scan" && resumeAnalysis.atsScore) {
-        setWizardStep("review");
-      }
     }
   }, [resumeAnalysis]);
 

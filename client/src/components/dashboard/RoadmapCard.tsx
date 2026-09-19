@@ -29,12 +29,12 @@ export const RoadmapCard: React.FC = () => {
 
         {/* Modules */}
         <div className="space-y-5">
-          {roadmap.map((track) => {
+          {roadmap.map((track, idx) => {
             const skills = Array.isArray(track.modules)
               ? track.modules.flatMap((m) => m.subSkills?.map((s) => s.title) || [])
               : (track as any).skills || [];
             return (
-              <div key={track.id} className="space-y-2">
+              <div key={track.id || track.title || `track-${idx}`} className="space-y-2">
                 <div className="flex items-center justify-between text-xs font-semibold">
                   <span className="text-foreground">{track.title}</span>
                   <span className="text-primary">{track.progress}%</span>
@@ -50,9 +50,9 @@ export const RoadmapCard: React.FC = () => {
 
                 {/* Skill Pills */}
                 <div className="flex flex-wrap gap-1 mt-1.5">
-                  {skills.slice(0, 3).map((skill: string) => (
+                  {skills.slice(0, 3).map((skill: string, sIdx: number) => (
                     <span
-                      key={skill}
+                      key={`${skill}-${sIdx}`}
                       className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-accent/10 border border-border text-muted"
                     >
                       {skill}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useCareerStore, InterviewSessionData } from "@/store/careerStore";
 import Card from "@/components/ui/Card/Card";
@@ -21,10 +22,15 @@ import {
   Brain,
   Undo2,
   X,
-  CheckCircle
+  CheckCircle,
+  ExternalLink,
+  Mic,
+  FileText,
+  ArrowLeft
 } from "lucide-react";
 
 export default function InterviewPrepPage() {
+  const router = useRouter();
   const activeSession = useCareerStore((state) => state.activeInterviewSession);
   const currentQuestion = useCareerStore((state) => state.currentInterviewQuestion);
   const history = useCareerStore((state) => state.interviewSessions);
@@ -34,11 +40,15 @@ export default function InterviewPrepPage() {
   const fetchHistory = useCareerStore((state) => state.fetchInterviewHistory);
   const fetchReadiness = useCareerStore((state) => state.fetchInterviewReadiness);
   const startMockInterview = useCareerStore((state) => state.startMockInterview);
+  const createInterviewSession = useCareerStore((state) => state.createInterviewSession);
   const submitInterviewAnswer = useCareerStore((state) => state.submitInterviewAnswer);
   const concludeMockInterview = useCareerStore((state) => state.concludeMockInterview);
   const addNotification = useCareerStore((state) => state.addNotification);
 
   const [loading, setLoading] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<"voice" | "quiz">("voice");
+  const [showInlineQuiz, setShowInlineQuiz] = useState(false);
+
   const [roleInput, setRoleInput] = useState("Backend Developer");
   const [typeInput, setTypeInput] = useState<any>("Technical");
   const [difficultyInput, setDifficultyInput] = useState<any>("Intermediate");
@@ -118,7 +128,7 @@ export default function InterviewPrepPage() {
 
   // Start question duration timer when question loads
   useEffect(() => {
-    if (currentQuestion) {
+    if (currentQuestion && showInlineQuiz) {
       setSeconds(0);
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = setInterval(() => {
@@ -134,14 +144,29 @@ export default function InterviewPrepPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [currentQuestion]);
+  }, [currentQuestion, showInlineQuiz]);
 
-  const handleStartSession = async () => {
+  const handleStartVoiceSession = async () => {
+    setLoading(true);
+    const actualDifficulty = difficultyInput;
+    const actualCount = difficultyInput === "Real Interview" ? 5 : questionCountInput;
+    const sessionId = await createInterviewSession(roleInput, typeInput, actualDifficulty, actualCount);
+    if (sessionId) {
+      addNotification("Initiating Live Voice AI Interview Room...", "info");
+      router.push(`/interview/session/${sessionId}`);
+    } else {
+      addNotification("Failed to initiate voice interview session.", "warning");
+    }
+    setLoading(false);
+  };
+
+  const handleStartQuizSession = async () => {
     setLoading(true);
     const actualDifficulty = difficultyInput;
     const actualCount = difficultyInput === "Real Interview" ? 5 : questionCountInput;
     await startMockInterview(roleInput, typeInput, actualDifficulty, actualCount);
-    addNotification("Interview simulation started. Formulate your response carefully.", "info");
+    setShowInlineQuiz(true);
+    addNotification("Written Quiz Practice round started.", "info");
     setLoading(false);
   };
 
@@ -184,148 +209,238 @@ export default function InterviewPrepPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Live Mock Simulator / Config */}
         <div className="lg:col-span-8 space-y-6">
-          {!activeSession ? (
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-              <Card className="md:col-span-7 p-6 space-y-5">
-                <div className="flex items-center space-x-2 border-b border-border pb-3">
-                  <Play className="w-5 h-5 text-primary" />
-                  <h3 className="text-sm font-semibold text-foreground">Configure Mock Interview</h3>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-muted font-bold uppercase">Role Target</label>
-                    <input
-                      type="text"
-                      value={roleInput}
-                      onChange={(e) => setRoleInput(e.target.value)}
-                      placeholder="e.g. Backend Developer"
-                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
-                    />
+          {!showInlineQuiz ? (
+            <div className="space-y-6">
+              {/* In-Progress Quiz Session Banner */}
+              {activeSession && (
+                <div className="bg-primary/10 border border-primary/30 rounded-2xl p-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-foreground block">In-Progress Quiz Session Detected</span>
+                    <span className="text-[11px] text-muted">{activeSession.role} • {activeSession.type} ({activeSession.difficulty})</span>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-muted font-bold uppercase">Interview Category</label>
-                    <select
-                      value={typeInput}
-                      onChange={(e) => setTypeInput(e.target.value)}
-                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
+                  <Button variant="secondary" size="sm" onClick={() => setShowInlineQuiz(true)}>
+                    Resume Quiz Session
+                  </Button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                <Card className="md:col-span-7 p-6 space-y-5">
+                  <div className="flex items-center space-x-2 border-b border-border pb-3">
+                    <Play className="w-5 h-5 text-primary" />
+                    <h3 className="text-sm font-semibold text-foreground">Configure Mock Interview</h3>
+                  </div>
+
+                  {/* 1. Mode Selection: Voice AI vs Written Quiz */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] text-muted font-bold uppercase tracking-wider block">
+                      Select Interview Format Mode
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Mode 1: Live Voice AI */}
+                      <div
+                        onClick={() => setSelectedMode("voice")}
+                        className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-2 ${
+                          selectedMode === "voice"
+                            ? "border-primary bg-primary/10 shadow-md shadow-primary/10"
+                            : "border-border/60 bg-accent/5 hover:bg-accent/15"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="p-2 rounded-xl bg-primary/20 text-primary">
+                            <Mic className="w-4 h-4" />
+                          </div>
+                          <Badge variant={selectedMode === "voice" ? "primary" : "muted"} className="text-[9px] font-bold">
+                            Live Voice
+                          </Badge>
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-foreground">Live AI Voice Room</h4>
+                          <p className="text-[10px] text-muted mt-0.5 leading-tight">
+                            Interactive STT/TTS voice interview with audio visualizer & adaptive follow-ups.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Mode 2: Written Quiz Practice */}
+                      <div
+                        onClick={() => setSelectedMode("quiz")}
+                        className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between space-y-2 ${
+                          selectedMode === "quiz"
+                            ? "border-secondary bg-secondary/10 shadow-md shadow-secondary/10"
+                            : "border-border/60 bg-accent/5 hover:bg-accent/15"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="p-2 rounded-xl bg-secondary/20 text-secondary">
+                            <FileText className="w-4 h-4" />
+                          </div>
+                          <Badge variant={selectedMode === "quiz" ? "info" : "muted"} className="text-[9px] font-bold">
+                            Text & Quiz
+                          </Badge>
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-foreground">Written Quiz Round</h4>
+                          <p className="text-[10px] text-muted mt-0.5 leading-tight">
+                            Structured text questions, STAR answer builder, code editor & scorecard.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. Parameters Configuration */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-muted font-bold uppercase">Role Target</label>
+                      <input
+                        type="text"
+                        value={roleInput}
+                        onChange={(e) => setRoleInput(e.target.value)}
+                        placeholder="e.g. Backend Developer"
+                        className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-muted font-bold uppercase">Interview Category</label>
+                      <select
+                        value={typeInput}
+                        onChange={(e) => setTypeInput(e.target.value)}
+                        className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
+                      >
+                        <option value="Technical">Technical Coding</option>
+                        <option value="Behavioral">Behavioral (STAR)</option>
+                        <option value="System Design">System Design</option>
+                        <option value="HR">HR Standard</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-muted font-bold uppercase">Complexity Level</label>
+                      <select
+                        value={difficultyInput}
+                        onChange={(e) => setDifficultyInput(e.target.value)}
+                        className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
+                      >
+                        <option value="Beginner">Beginner</option>
+                        <option value="Intermediate">Intermediate</option>
+                        <option value="Advanced">Advanced</option>
+                        <option value="Real Interview">Real Interview</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-muted font-bold uppercase">No. of Questions</label>
+                      <select
+                        value={difficultyInput === "Real Interview" ? "5" : questionCountInput.toString()}
+                        onChange={(e) => setQuestionCountInput(parseInt(e.target.value, 10))}
+                        disabled={difficultyInput === "Real Interview"}
+                        className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50 disabled:opacity-50"
+                      >
+                        {difficultyInput === "Real Interview" ? (
+                          <option value="5">5 (Fixed)</option>
+                        ) : (
+                          [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                            <option key={num} value={num.toString()}>
+                              {num}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 3. Action CTA Button */}
+                  {selectedMode === "voice" ? (
+                    <Button
+                      variant="ai"
+                      onClick={handleStartVoiceSession}
+                      className="w-full text-sm font-semibold animate-pulse py-3"
+                      isLoading={loading}
                     >
-                      <option value="Technical">Technical Coding</option>
-                      <option value="Behavioral">Behavioral (STAR)</option>
-                      <option value="System Design">System Design</option>
-                      <option value="HR">HR Standard</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-muted font-bold uppercase">Complexity Level</label>
-                    <select
-                      value={difficultyInput}
-                      onChange={(e) => setDifficultyInput(e.target.value)}
-                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
+                      <Mic className="w-4 h-4 mr-1.5" /> Initiate Live Voice AI Room
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      onClick={handleStartQuizSession}
+                      className="w-full text-sm font-semibold py-3"
+                      isLoading={loading}
                     >
-                      <option value="Beginner">Beginner</option>
-                      <option value="Intermediate">Intermediate</option>
-                      <option value="Advanced">Advanced</option>
-                      <option value="Real Interview">Real Interview</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-muted font-bold uppercase">No. of Questions</label>
-                    <select
-                      value={difficultyInput === "Real Interview" ? "5" : questionCountInput.toString()}
-                      onChange={(e) => setQuestionCountInput(parseInt(e.target.value, 10))}
-                      disabled={difficultyInput === "Real Interview"}
-                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50 disabled:opacity-50"
-                    >
-                      {difficultyInput === "Real Interview" ? (
-                        <option value="5">5 (Fixed)</option>
-                      ) : (
-                        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                          <option key={num} value={num.toString()}>
-                            {num}
-                          </option>
-                        ))
-                      )}
-                    </select>
-                  </div>
-                </div>
+                      <FileText className="w-4 h-4 mr-1.5" /> Start Written Quiz Round
+                    </Button>
+                  )}
+                </Card>
 
-                <Button
-                  variant="ai"
-                  onClick={handleStartSession}
-                  className="w-full text-sm font-semibold animate-pulse"
-                  isLoading={loading}
-                >
-                  Initiate Mock Session
-                </Button>
-              </Card>
+                {/* AI Interview Overview Card */}
+                <Card className="md:col-span-5 p-6 space-y-4 bg-primary/5 border border-primary/20 flex flex-col justify-between">
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-1.5 border-b border-primary/10 pb-3">
+                      <Sparkles className="w-4 h-4 text-primary shrink-0 animate-pulse" />
+                      <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">AI Interview Overview</h4>
+                    </div>
 
-              {/* AI Interview Overview Card */}
-              <Card className="md:col-span-5 p-6 space-y-4 bg-primary/5 border border-primary/20 flex flex-col justify-between">
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-1.5 border-b border-primary/10 pb-3">
-                    <Sparkles className="w-4 h-4 text-primary shrink-0 animate-pulse" />
-                    <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">AI Interview Overview</h4>
-                  </div>
-
-                  <div className="space-y-2.5 text-xs">
-                    <div className="flex justify-between border-b border-border/40 pb-1.5">
-                      <span className="text-muted">Target Role</span>
-                      <span className="font-bold text-foreground truncate max-w-[140px] text-right" title={roleInput}>{roleInput || "General Developer"}</span>
-                    </div>
-                    <div className="flex justify-between border-b border-border/40 pb-1.5">
-                      <span className="text-muted">Total Questions</span>
-                      <span className="font-bold text-foreground">
-                        {difficultyInput === "Real Interview" ? "5 (Adaptive)" : `${questionCountInput}`}
-                      </span>
-                    </div>
-                    <div className="flex justify-between border-b border-border/40 pb-1.5">
-                      <span className="text-muted">Est. Duration</span>
-                      <span className="font-bold text-foreground">
-                        {difficultyInput === "Real Interview" ? 30 : questionCountInput * 6} min
-                      </span>
-                    </div>
-                    <div className="flex justify-between border-b border-border/40 pb-1.5">
-                      <span className="text-muted">Difficulty Prediction</span>
-                      <span className={`font-bold uppercase ${
-                        difficultyInput === "Advanced" || difficultyInput === "Real Interview"
-                          ? "text-primary"
-                          : "text-success"
-                      }`}>
-                        {difficultyInput}
-                      </span>
-                    </div>
-                    <div className="flex justify-between border-b border-border/40 pb-1.5">
-                      <span className="text-muted">Focus Areas</span>
-                      <span className="font-bold text-foreground text-right truncate max-w-[140px]" title={focusSkills}>
-                        {focusSkills}
-                      </span>
-                    </div>
-                    <div className="flex justify-between border-b border-border/40 pb-1.5">
-                      <span className="text-muted">Match Confidence</span>
-                      <Badge variant="primary" className="text-[10px] font-bold">
-                        {Math.min(96, readiness + 7)}%
-                      </Badge>
+                    <div className="space-y-2.5 text-xs">
+                      <div className="flex justify-between border-b border-border/40 pb-1.5">
+                        <span className="text-muted">Target Role</span>
+                        <span className="font-bold text-foreground truncate max-w-[140px] text-right" title={roleInput}>{roleInput || "General Developer"}</span>
+                      </div>
+                      <div className="flex justify-between border-b border-border/40 pb-1.5">
+                        <span className="text-muted">Format Mode</span>
+                        <Badge variant={selectedMode === "voice" ? "primary" : "info"} className="text-[10px] font-bold">
+                          {selectedMode === "voice" ? "Voice AI Room" : "Written Quiz"}
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between border-b border-border/40 pb-1.5">
+                        <span className="text-muted">Total Questions</span>
+                        <span className="font-bold text-foreground">
+                          {difficultyInput === "Real Interview" ? "5 (Adaptive)" : `${questionCountInput}`}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-b border-border/40 pb-1.5">
+                        <span className="text-muted">Est. Duration</span>
+                        <span className="font-bold text-foreground">
+                          {difficultyInput === "Real Interview" ? 30 : questionCountInput * 6} min
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-b border-border/40 pb-1.5">
+                        <span className="text-muted">Difficulty</span>
+                        <span className={`font-bold uppercase ${
+                          difficultyInput === "Advanced" || difficultyInput === "Real Interview"
+                            ? "text-primary"
+                            : "text-success"
+                        }`}>
+                          {difficultyInput}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="bg-card/45 border border-border/40 rounded-xl p-3 mt-2">
-                  <span className="text-[9px] font-bold text-primary uppercase block mb-1">AI Recommendation</span>
-                  <p className="text-[10px] text-muted leading-relaxed">
-                    {aiRecommendation}
-                  </p>
-                </div>
-              </Card>
+                  <div className="bg-card/45 border border-border/40 rounded-xl p-3 mt-2">
+                    <span className="text-[9px] font-bold text-primary uppercase block mb-1">AI Recommendation</span>
+                    <p className="text-[10px] text-muted leading-relaxed">
+                      {aiRecommendation}
+                    </p>
+                  </div>
+                </Card>
+              </div>
             </div>
           ) : (
             <Card className="p-6 space-y-5 border-primary/20">
               <div className="flex items-center justify-between border-b border-border pb-3">
-                <div className="flex items-center space-x-2">
-                  <Clock className="w-4 h-4 text-warning" />
-                  <span className="text-xs font-bold text-foreground">{formatTime(seconds)}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowInlineQuiz(false)}
+                  className="text-xs text-muted hover:text-foreground"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 mr-1" /> Back to Setup
+                </Button>
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-1.5 text-xs font-bold text-foreground">
+                    <Clock className="w-4 h-4 text-warning" />
+                    <span>{formatTime(seconds)}</span>
+                  </div>
+                  {activeSession && <Badge variant="warning">{activeSession.type}</Badge>}
                 </div>
-                <Badge variant="warning">{activeSession.type}</Badge>
               </div>
 
               {currentQuestion ? (
@@ -333,7 +448,7 @@ export default function InterviewPrepPage() {
                   <div className="bg-accent/10 border border-border p-4 rounded-2xl">
                     <p className="text-xs text-muted uppercase font-bold tracking-wider mb-1 flex items-center gap-1">
                       <Brain className="w-3.5 h-3.5 text-primary" />
-                      <span>Current Question</span>
+                      <span>Current Written Question</span>
                     </p>
                     <p className="text-sm font-semibold text-foreground leading-relaxed">
                       {currentQuestion.text}
@@ -386,7 +501,6 @@ export default function InterviewPrepPage() {
           )}
 
           {/* Active Completed Scorecard */}
-          {/* Active Completed Scorecard */}
           {activeReport && (
             <Card className="p-6 space-y-6 relative border-success/35">
               <button
@@ -428,24 +542,6 @@ export default function InterviewPrepPage() {
                 <div className="bg-accent/5 p-3 rounded-xl text-center">
                   <p className="text-[9px] text-muted uppercase font-bold">Code Quality</p>
                   <p className="font-black text-foreground mt-1 text-base">{activeReport.timeManagementScore}%</p>
-                </div>
-              </div>
-
-              {/* Career Impact Projections */}
-              <div className="bg-success/5 border border-success/20 rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <div>
-                  <span className="text-[10px] font-bold text-success uppercase block">Career Engine Projections</span>
-                  <span className="text-[11px] text-muted mt-0.5 block">Completing this interview unlocks direct readiness score enhancements.</span>
-                </div>
-                <div className="flex gap-4">
-                  <div className="bg-success/10 border border-success/30 px-3 py-1.5 rounded-lg text-center shrink-0">
-                    <span className="text-[9px] text-success/80 font-bold block uppercase">Career Score</span>
-                    <span className="text-xs font-extrabold text-success">+{Math.round(activeReport.overallScore / 25)} pts</span>
-                  </div>
-                  <div className="bg-success/10 border border-success/30 px-3 py-1.5 rounded-lg text-center shrink-0">
-                    <span className="text-[9px] text-success/80 font-bold block uppercase">Interview Readiness</span>
-                    <span className="text-xs font-extrabold text-success">+{activeReport.readinessIncrease || 5}%</span>
-                  </div>
                 </div>
               </div>
 
@@ -646,14 +742,29 @@ export default function InterviewPrepPage() {
                 {history.slice(0, 4).map((sess) => (
                   <div
                     key={sess.id}
-                    onClick={() => setActiveReport(sess)}
                     className="p-3 bg-accent/5 hover:bg-accent/15 border border-border rounded-xl flex items-center justify-between text-xs transition-all duration-200 cursor-pointer"
+                    onClick={() => setActiveReport(sess)}
                   >
                     <div>
-                      <p className="font-semibold text-foreground">{sess.role}</p>
+                      <p className="font-semibold text-foreground flex items-center gap-1.5">
+                        <span>{sess.role}</span>
+                      </p>
                       <p className="text-[10px] text-muted mt-0.5">{sess.type} • {sess.difficulty}</p>
                     </div>
-                    <span className="font-bold text-foreground">{sess.overallScore}%</span>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-bold text-foreground">{sess.overallScore}%</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/interview/report/${sess.id}`);
+                        }}
+                        title="View Detailed Report Page"
+                        className="p-1 hover:bg-primary/15 text-muted hover:text-primary rounded-lg transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
