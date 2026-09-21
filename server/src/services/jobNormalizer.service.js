@@ -1,4 +1,6 @@
 const crypto = require("crypto");
+const { normalizeIndiaLocation } = require("./indiaLocationNormalizer");
+const { normalizeRoleFamily, normalizeSeniority } = require("./roleNormalizer.service");
 
 // Known software engineering skill taxonomy for fast deterministic extraction
 const TECH_SKILL_PATTERNS = [
@@ -31,29 +33,58 @@ function extractSkillsFromText(text = "") {
 }
 
 /**
- * Standardizes experience level from job title and description.
+ * Categorizes extracted skills into required vs preferred skills based on section context.
  */
-function inferExperienceLevel(title = "", description = "") {
-  const combined = `${title} ${description}`.toLowerCase();
-  if (combined.includes("lead") || combined.includes("principal") || combined.includes("architect") || combined.includes("staff")) {
-    return "Senior";
+function separateSkills(description = "", allSkills = []) {
+  if (!allSkills || allSkills.length === 0) {
+    return { requiredSkills: [], preferredSkills: [] };
   }
-  if (combined.includes("senior") || combined.includes("sr.") || combined.includes("5+ years") || combined.includes("7+ years")) {
-    return "Senior";
+
+  const lowerDesc = description.toLowerCase();
+  const preferredIndex = Math.max(
+    lowerDesc.indexOf("preferred"),
+    lowerDesc.indexOf("nice to have"),
+    lowerDesc.indexOf("plus"),
+    lowerDesc.indexOf("bonus")
+  );
+
+  if (preferredIndex === -1) {
+    // All extracted skills are required
+    return {
+      requiredSkills: allSkills,
+      preferredSkills: []
+    };
   }
-  if (combined.includes("junior") || combined.includes("entry") || combined.includes("associate") || combined.includes("intern") || combined.includes("0-2 years")) {
-    return "Entry Level";
+
+  const requiredText = lowerDesc.slice(0, preferredIndex);
+  const preferredText = lowerDesc.slice(preferredIndex);
+
+  const reqSkills = extractSkillsFromText(requiredText);
+  const prefSkills = extractSkillsFromText(preferredText);
+
+  // Any remaining skills not in req are placed in pref or req
+  const reqSet = new Set(reqSkills);
+  const prefSet = new Set(prefSkills);
+
+  for (const skill of allSkills) {
+    if (!reqSet.has(skill) && !prefSet.has(skill)) {
+      reqSet.add(skill);
+    }
   }
-  return "Mid-Level";
+
+  return {
+    requiredSkills: Array.from(reqSet),
+    preferredSkills: Array.from(prefSet).filter(s => !reqSet.has(s))
+  };
 }
 
 /**
  * Generates a unique deterministic content hash for a job posting.
  */
 function generateJobHash(job) {
-  const normalizedCompany = (job.company?.name || "").toLowerCase().trim().replace(/[^a-z0-9]/g, "");
-  const normalizedTitle = (job.title || "").toLowerCase().trim().replace(/[^a-z0-9]/g, "");
-  const normalizedLocation = (job.location?.raw || "").toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+  const normalizedCompany = (job.companyNormalized || job.company?.name || "").toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+  const normalizedTitle = (job.normalizedTitle || job.title || "").toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+  const normalizedLocation = (job.normalizedLocation || job.location?.raw || "").toLowerCase().trim().replace(/[^a-z0-9]/g, "");
   
   const rawHashString = `${job.provider}:${job.sourceJobId || job.externalId || job.url}:${normalizedCompany}:${normalizedTitle}:${normalizedLocation}`;
   return crypto.createHash("sha256").update(rawHashString).digest("hex");
@@ -63,39 +94,65 @@ function generateJobHash(job) {
  * Normalizes a raw job object into the standard CareerOS Job structure.
  */
 function normalizeJob(rawJob) {
-  const extractedSkills = extractSkillsFromText(`${rawJob.title} ${rawJob.description}`);
-  const combinedSkills = Array.from(new Set([...(rawJob.skills || []), ...extractedSkills]));
+  const rawTitle = (rawJob.title || "Untitled Position").trim();
+  const rawDesc = (rawJob.description || "").trim();
+  const rawCompanyName = (rawJob.company?.name || rawJob.company?.display_name || "Unknown Company").trim();
 
-  const experienceLevel = rawJob.experienceLevel || inferExperienceLevel(rawJob.title, rawJob.description);
+  // Location Normalization
+  const locationDetails = normalizeIndiaLocation(rawJob.location);
+
+  // Role & Seniority Normalization
+  const roleFamily = rawJob.roleFamily || normalizeRoleFamily(rawTitle, rawDesc);
+  const seniority = rawJob.seniority || rawJob.experienceLevel || normalizeSeniority(rawTitle, rawDesc, rawJob.yearsExperienceRequired || 0);
+
+  // Skill Extraction
+  const extractedSkills = extractSkillsFromText(`${rawTitle} ${rawDesc}`);
+  const combinedSkills = Array.from(new Set([...(rawJob.skills || []), ...extractedSkills]));
+  const { requiredSkills, preferredSkills } = separateSkills(rawDesc, combinedSkills);
+
+  const companyNormalized = rawCompanyName.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normalizedTitle = rawTitle.toLowerCase().replace(/[^a-z0-9]/g, "");
 
   const normalized = {
     provider: rawJob.provider || "external",
     externalId: String(rawJob.externalId || rawJob.sourceJobId || ""),
     sourceJobId: String(rawJob.sourceJobId || rawJob.externalId || ""),
-    title: (rawJob.title || "Untitled Position").trim(),
+    title: rawTitle,
+    normalizedTitle: normalizedTitle,
     company: {
-      name: (rawJob.company?.name || rawJob.company?.display_name || "Unknown Company").trim(),
+      name: rawCompanyName,
       logo: rawJob.company?.logo || "",
       website: rawJob.company?.website || ""
     },
+    companyNormalized: companyNormalized,
     location: {
-      city: rawJob.location?.city || "",
-      state: rawJob.location?.state || "",
-      country: rawJob.location?.country || "",
-      remote: Boolean(rawJob.location?.remote),
-      raw: (rawJob.location?.raw || (rawJob.location?.remote ? "Remote" : "Location unspecified")).trim()
+      city: locationDetails.city || rawJob.location?.city || "",
+      state: locationDetails.state || rawJob.location?.state || "",
+      country: locationDetails.country || "India",
+      remote: locationDetails.remoteType === "Remote",
+      raw: (rawJob.location?.raw || locationDetails.normalizedLocation).trim()
     },
+    normalizedLocation: locationDetails.normalizedLocation,
+    country: locationDetails.country,
+    remoteType: locationDetails.remoteType,
     employmentType: rawJob.employmentType || "Full-time",
-    experienceLevel: experienceLevel,
-    description: (rawJob.description || "").trim(),
+    experienceLevel: seniority,
+    seniority: seniority,
+    roleFamily: roleFamily,
+    description: rawDesc,
     skills: combinedSkills,
+    requiredSkills: rawJob.requiredSkills || requiredSkills,
+    preferredSkills: rawJob.preferredSkills || preferredSkills,
     salary: rawJob.salary || null,
     url: rawJob.url || "",
     publishedAt: rawJob.publishedAt ? new Date(rawJob.publishedAt) : null,
     fetchedAt: rawJob.fetchedAt ? new Date(rawJob.fetchedAt) : new Date(),
+    lastSeenAt: new Date(),
     expiresAt: rawJob.expiresAt ? new Date(rawJob.expiresAt) : null,
+    status: rawJob.status || "ACTIVE",
     source: rawJob.source || rawJob.provider || "External",
-    sources: [rawJob.source || rawJob.provider || "External"]
+    sources: [rawJob.source || rawJob.provider || "External"],
+    providerMetadata: rawJob.providerMetadata || {}
   };
 
   normalized.hash = generateJobHash(normalized);
@@ -104,7 +161,7 @@ function normalizeJob(rawJob) {
 
 module.exports = {
   extractSkillsFromText,
-  inferExperienceLevel,
+  separateSkills,
   generateJobHash,
   normalizeJob
 };

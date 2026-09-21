@@ -19,11 +19,14 @@ const optionalAuthMiddleware = async (req, res, next) => {
   }
 };
 
-// 1. Search & Discover Jobs
-router.get("/", optionalAuthMiddleware, jobsController.searchJobs);
+// 0. Provider Health Status Check (Must be before /:id)
+router.get("/health", optionalAuthMiddleware, jobsController.getHealth);
 
-// 2. Candidate Saved Jobs
+// 1. Candidate Saved Jobs (Must be before /:id)
 router.get("/saved", authMiddleware, jobsController.getSavedJobs);
+
+// 2. Search & Discover Jobs
+router.get("/", optionalAuthMiddleware, jobsController.searchJobs);
 
 // 3. Single Job Details & Match Breakdown
 router.get("/:id", optionalAuthMiddleware, jobsController.getJobById);

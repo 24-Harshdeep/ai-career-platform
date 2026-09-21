@@ -1,14 +1,34 @@
 /**
- * Normalizes company, title, and location into a canonical deduplication key.
+ * Job Deduplicator Service
+ * Merges job postings from multiple providers (Adzuna, IndianAPI, Jobvetta, Jooble, Greenhouse, Lever, Ashby)
+ * using canonical identity matching (normalized company + title/roleFamily + location/remote).
+ */
+
+/**
+ * Generates a canonical deduplication key for a job posting.
  */
 function getDeduplicationKey(job) {
-  const normCompany = (job.company?.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  const normTitle = (job.title || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  const isRemote = Boolean(job.location?.remote);
-  const normLoc = isRemote ? "remote" : (job.location?.raw || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normCompany = job.companyNormalized || (job.company?.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normTitle = job.normalizedTitle || (job.title || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normLoc = (job.normalizedLocation || job.location?.raw || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const remoteTag = job.remoteType || (job.location?.remote ? "remote" : "onsite");
 
-  return `${normCompany}:${normTitle}:${normLoc}`;
+  return `${normCompany}:${job.roleFamily || normTitle}:${normLoc}:${remoteTag}`;
 }
+
+/**
+ * Priority order for direct company job boards over aggregators.
+ */
+const PROVIDER_PRIORITY = {
+  greenhouse: 10,
+  lever: 10,
+  ashby: 10,
+  jobvetta: 8,
+  indianapi: 7,
+  jooble: 5,
+  adzuna: 4,
+  external: 1
+};
 
 /**
  * Deduplicates an array of normalized Job objects.
@@ -36,8 +56,11 @@ function deduplicateJobs(jobs = []) {
     } else {
       const existing = jobMap.get(key);
 
-      // Merge sources
-      const mergedSources = Array.from(new Set([...(existing.sources || []), job.source || job.provider]));
+      // Merge sources array
+      const mergedSources = Array.from(new Set([
+        ...(existing.sources || []),
+        job.source || job.provider
+      ]));
       existing.sources = mergedSources;
 
       // Prefer earlier published date if valid
@@ -47,19 +70,27 @@ function deduplicateJobs(jobs = []) {
         existing.publishedAt = job.publishedAt;
       }
 
-      // Prefer direct company boards over aggregators for canonical URL
-      const isAggregator = existing.provider === "adzuna";
-      const isDirectBoard = job.provider === "greenhouse" || job.provider === "lever" || job.provider === "ashby";
+      // Merge direct ATS URL if new job has higher priority provider
+      const existingPriority = PROVIDER_PRIORITY[existing.provider?.toLowerCase()] || 0;
+      const newPriority = PROVIDER_PRIORITY[job.provider?.toLowerCase()] || 0;
 
-      if (isAggregator && isDirectBoard) {
+      if (newPriority > existingPriority) {
         existing.url = job.url;
         existing.provider = job.provider;
         existing.source = job.source;
+        if (job.description && job.description.length > (existing.description || "").length) {
+          existing.description = job.description;
+        }
       }
 
       // Merge skills
       const mergedSkills = Array.from(new Set([...(existing.skills || []), ...(job.skills || [])]));
+      const mergedReqSkills = Array.from(new Set([...(existing.requiredSkills || []), ...(job.requiredSkills || [])]));
+      const mergedPrefSkills = Array.from(new Set([...(existing.preferredSkills || []), ...(job.preferredSkills || [])]));
+
       existing.skills = mergedSkills;
+      existing.requiredSkills = mergedReqSkills;
+      existing.preferredSkills = mergedPrefSkills;
     }
   }
 

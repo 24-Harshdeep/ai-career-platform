@@ -1,38 +1,72 @@
 /**
+ * Job Matching Service
+ * 7-Factor Transparent CareerOS Scoring Engine with subscore breakdown,
+ * seniority penalties, and Roadmap skill status mapping.
+ */
+
+/**
+ * Robustly extracts and flattens all candidate skills from candidate context.
+ */
+function extractUserSkills(candidateContext = {}) {
+  const userSkillsSet = new Set();
+  
+  const sources = [
+    candidateContext.skillsPossessed,
+    candidateContext.skillsTarget,
+    candidateContext.skills,
+    candidateContext.resumeContext?.identifiedSkills,
+    candidateContext.strengths
+  ];
+
+  function addSkill(s) {
+    if (typeof s === "string" && s.trim()) {
+      userSkillsSet.add(s.toLowerCase().trim());
+    }
+  }
+
+  function traverse(val) {
+    if (!val) return;
+    if (typeof val === "string") {
+      val.split(/[,;\n]/).forEach(addSkill);
+    } else if (Array.isArray(val)) {
+      val.forEach(traverse);
+    } else if (typeof val === "object") {
+      Object.values(val).forEach(traverse);
+    }
+  }
+
+  sources.forEach(traverse);
+  return userSkillsSet;
+}
+
+/**
  * Evaluates candidate career context against a normalized Job.
- * Computes deterministic CareerOS Match score, skill gaps, and match explanations.
+ * Computes deterministic CareerOS 7-Factor Match score, subscores, skill gaps,
+ * and roadmap integration status.
  *
  * @param {Object} candidateContext - User career context from getCareerContext()
  * @param {Object} job - Normalized Job object
+ * @param {Object} roadmapProgressMap - Map of skillId/subSkillId to status ({ completed: Set, inProgress: Set })
  * @returns {Object} Structured match results
  */
-function evaluateJobMatch(candidateContext = {}, job = {}) {
-  const targetRole = candidateContext.targetRole || "Full Stack Developer";
-  const userExperience = candidateContext.experienceLevel || "Intermediate";
+function evaluateJobMatch(candidateContext = {}, job = {}, roadmapProgressMap = { completed: new Set(), inProgress: new Set() }) {
+  const targetRole = candidateContext.targetRole || "Software Engineer";
+  const userExperience = candidateContext.experienceLevel || "Mid-Level";
   
-  // Extract all candidate skills (possessed + resume identified skills)
-  const possessedSkillsObj = candidateContext.skillsPossessed || {};
-  const userSkillsSet = new Set();
+  // Extract all candidate possessed skills
+  const userSkillsSet = extractUserSkills(candidateContext);
 
-  Object.values(possessedSkillsObj).forEach((skillArr) => {
-    if (Array.isArray(skillArr)) {
-      skillArr.forEach((s) => userSkillsSet.add(s.toLowerCase().trim()));
-    }
-  });
+  // Job Required & Preferred Skills
+  const requiredSkills = (job.requiredSkills && job.requiredSkills.length > 0)
+    ? job.requiredSkills
+    : (job.skills && job.skills.length > 0 ? job.skills : ["JavaScript", "React", "Node.js"]);
 
-  if (candidateContext.resumeContext?.identifiedSkills) {
-    candidateContext.resumeContext.identifiedSkills.forEach((s) => userSkillsSet.add(s.toLowerCase().trim()));
-  }
-
-  // Job skills
-  const jobSkills = (job.skills && job.skills.length > 0) 
-    ? job.skills 
-    : ["JavaScript", "React", "Node.js"];
+  const preferredSkills = job.preferredSkills || [];
 
   const matchedSkills = [];
   const missingSkills = [];
 
-  jobSkills.forEach((skill) => {
+  requiredSkills.forEach((skill) => {
     const sLower = skill.toLowerCase().trim();
     if (userSkillsSet.has(sLower)) {
       matchedSkills.push(skill);
@@ -41,74 +75,172 @@ function evaluateJobMatch(candidateContext = {}, job = {}) {
     }
   });
 
-  // 1. Skill Match Score (0 - 100)
-  const skillRatio = jobSkills.length > 0 ? (matchedSkills.length / jobSkills.length) : 1;
-  const skillMatchScore = Math.round(skillRatio * 100);
-
-  // 2. Role Match
+  // Factor 1: Role Compatibility (Weight: 25%)
+  let roleScore = 0;
   const jobTitleLower = (job.title || "").toLowerCase();
   const targetRoleLower = targetRole.toLowerCase();
-  
-  const roleKeywords = targetRoleLower.split(/\s+/).filter(w => w.length > 2);
-  const roleMatch = roleKeywords.some(kw => jobTitleLower.includes(kw)) || jobTitleLower.includes(targetRoleLower);
+  const jobRoleFamily = (job.roleFamily || "").toLowerCase();
 
-  // 3. Experience Match
-  const expMatch = isExperienceCompatible(userExperience, job.experienceLevel);
+  const isFullstackTarget = targetRoleLower.includes("fullstack") || targetRoleLower.includes("full stack");
+  const isFrontendTarget = targetRoleLower.includes("frontend") || targetRoleLower.includes("front end");
+  const isBackendTarget = targetRoleLower.includes("backend") || targetRoleLower.includes("back end");
 
-  // 4. Location & Remote Preference Match
-  const isRemotePreferred = (candidateContext.workType || "").toLowerCase().includes("remote") ||
-                            (candidateContext.preferredJobType || "").toLowerCase().includes("remote");
-  
-  const isJobRemote = Boolean(job.location?.remote);
-  const locationMatch = !isRemotePreferred || isJobRemote;
-
-  // Weighted CareerOS Match Calculation
-  // 50% Skills + 25% Role + 15% Experience + 10% Location
-  let totalScore = (skillMatchScore * 0.50);
-  if (roleMatch) totalScore += 25;
-  if (expMatch) totalScore += 15;
-  if (locationMatch) totalScore += 10;
-
-  const finalMatchScore = Math.min(99, Math.max(35, Math.round(totalScore)));
-
-  // Generate Match Reasons
-  const reasons = [];
-  if (roleMatch) {
-    reasons.push(`Job title "${job.title}" aligns directly with your target role "${targetRole}"`);
+  if (jobTitleLower.includes(targetRoleLower) || targetRoleLower.includes(jobTitleLower)) {
+    roleScore = 25;
+  } else if (isFullstackTarget && (jobRoleFamily.includes("frontend") || jobRoleFamily.includes("backend") || jobRoleFamily.includes("fullstack"))) {
+    roleScore = 22;
+  } else if (jobRoleFamily && targetRoleLower.includes(jobRoleFamily.split(" ")[0].toLowerCase())) {
+    roleScore = 22;
   } else {
-    reasons.push(`Role relates to software engineering in your domain`);
+    const roleKeywords = targetRoleLower.split(/\s+/).filter(w => w.length > 2);
+    const matchesCount = roleKeywords.filter(kw => jobTitleLower.includes(kw)).length;
+    if (matchesCount > 0) {
+      roleScore = Math.min(25, 14 + matchesCount * 4);
+    } else {
+      roleScore = 12;
+    }
   }
 
-  if (matchedSkills.length > 0) {
-    reasons.push(`You possess ${matchedSkills.length} of ${jobSkills.length} required skills (${matchedSkills.slice(0, 4).join(", ")})`);
+  // Factor 2: Seniority Fit (Weight: 20%) & Penalty Calculation
+  let seniorityScore = 20;
+  let seniorityPenalty = 0;
+
+  const jobSeniority = (job.seniority || job.experienceLevel || "Mid-Level").toLowerCase();
+  const candSeniority = userExperience.toLowerCase();
+
+  if (candSeniority.includes("senior") || candSeniority.includes("advanced") || candSeniority.includes("lead")) {
+    if (jobSeniority.includes("intern") || jobSeniority.includes("graduate") || jobSeniority.includes("entry")) {
+      seniorityScore = 5;
+      seniorityPenalty = 15;
+    } else {
+      seniorityScore = 20;
+    }
+  } else if (candSeniority.includes("mid") || candSeniority.includes("intermediate")) {
+    if (jobSeniority.includes("senior") || jobSeniority.includes("lead")) {
+      seniorityScore = 14;
+    } else if (jobSeniority.includes("intern")) {
+      seniorityScore = 10;
+    } else {
+      seniorityScore = 20;
+    }
+  } else {
+    // Beginner / Junior / Intern candidate
+    if (jobSeniority.includes("lead") || jobSeniority.includes("staff") || jobSeniority.includes("principal")) {
+      seniorityScore = 2;
+      seniorityPenalty = 15;
+    } else if (jobSeniority.includes("senior")) {
+      seniorityScore = 8;
+      seniorityPenalty = 10;
+    } else {
+      seniorityScore = 20;
+    }
   }
 
-  if (expMatch) {
-    reasons.push(`Required experience (${job.experienceLevel || "Mid-Level"}) matches your background (${userExperience})`);
+  // Factor 3: Required Skills Overlap (Weight: 20%)
+  const skillRatio = requiredSkills.length > 0 ? (matchedSkills.length / requiredSkills.length) : 0.5;
+  const requiredSkillsScore = Math.round(skillRatio * 20);
+
+  // Factor 4: Experience Fit (Weight: 15%)
+  const experienceScore = Math.round(isExperienceCompatible(userExperience, job.experienceLevel) ? 15 : 8);
+
+  // Factor 5: Location & Remote Fit (Weight: 10%)
+  let locationScore = 10;
+  if (job.country && job.country === "India") {
+    locationScore = 10;
+  } else if (job.remoteType === "Remote" || job.location?.remote) {
+    locationScore = 10;
+  } else {
+    locationScore = 6;
   }
 
-  if (isJobRemote) {
-    reasons.push(`Offers remote work flexibility`);
-  } else if (job.location?.raw) {
-    reasons.push(`Location specified as ${job.location.raw}`);
+  // Factor 6: Freshness Score (Weight: 5%)
+  let freshnessScore = 5;
+  if (job.publishedAt) {
+    const ageDays = (new Date().getTime() - new Date(job.publishedAt).getTime()) / (1000 * 60 * 60 * 24);
+    if (ageDays <= 3) freshnessScore = 5;
+    else if (ageDays <= 7) freshnessScore = 4;
+    else if (ageDays <= 14) freshnessScore = 3;
+    else if (ageDays <= 30) freshnessScore = 2;
+    else freshnessScore = 1;
   }
 
-  // Skill Gaps & Roadmap Recommendations
-  const skillGaps = missingSkills.map((missingSkill) => ({
-    skill: missingSkill,
-    reason: `"${missingSkill}" is requested in the job description but not currently listed in your Career DNA or Resume skills.`,
-    recommendation: `Add a project or complete a learning module covering ${missingSkill} to increase your match percentage.`
-  }));
+  // Factor 7: Trajectory Alignment (Weight: 5%)
+  let trajectoryScore = 3;
+  const targetSkills = candidateContext.skillsTarget || [];
+  const targetSkillsList = Array.isArray(targetSkills) ? targetSkills : Object.values(targetSkills).flat();
+  
+  const hasTargetSkillMatch = targetSkillsList.some(ts => 
+    requiredSkills.some(rs => rs.toLowerCase().includes(String(ts).toLowerCase()))
+  );
+
+  if (hasTargetSkillMatch || roleScore >= 20) {
+    trajectoryScore = 5;
+  }
+
+  // Calculate Raw & Final Net Score after Seniority Penalty
+  const rawTotalScore = roleScore + seniorityScore + requiredSkillsScore + experienceScore + locationScore + freshnessScore + trajectoryScore;
+  const netScore = Math.max(0, rawTotalScore - seniorityPenalty);
+  const finalMatchScore = Math.min(99, Math.max(25, Math.round(netScore)));
+
+  const subscores = {
+    role: roleScore,
+    seniority: seniorityScore,
+    requiredSkills: requiredSkillsScore,
+    experience: experienceScore,
+    location: locationScore,
+    freshness: freshnessScore,
+    trajectory: trajectoryScore,
+    seniorityPenalty: seniorityPenalty
+  };
+
+  // Reasons Breakdown
+  const reasons = [];
+  reasons.push(`Role Match (${roleScore}/25): Title "${job.title}" aligns with target "${targetRole}"`);
+  reasons.push(`Seniority Fit (${seniorityScore}/20): Required "${job.seniority || job.experienceLevel || "Mid-Level"}" vs candidate level "${userExperience}"${seniorityPenalty ? ` (Applied -${seniorityPenalty} penalty)` : ""}`);
+  reasons.push(`Required Skills (${requiredSkillsScore}/20): Possess ${matchedSkills.length} of ${requiredSkills.length} core required skills`);
+  reasons.push(`Experience Fit (${experienceScore}/15): Compatible career track requirement`);
+  reasons.push(`Location Fit (${locationScore}/10): ${job.normalizedLocation || job.location?.raw || "Remote"}`);
+  reasons.push(`Freshness (${freshnessScore}/5): Posted recently`);
+  reasons.push(`Career Trajectory (${trajectoryScore}/5): Aligns with growth path`);
+
+  // Skill Gaps & Roadmap Status Integration
+  const roadmapSkillStatus = {};
+  const skillGaps = missingSkills.map((missingSkill) => {
+    const sLower = missingSkill.toLowerCase().trim();
+    let status = "Not Started";
+
+    if (roadmapProgressMap.completed && roadmapProgressMap.completed.has(sLower)) {
+      status = "Completed";
+    } else if (roadmapProgressMap.inProgress && roadmapProgressMap.inProgress.has(sLower)) {
+      status = "In Progress";
+    }
+
+    roadmapSkillStatus[missingSkill] = status;
+
+    return {
+      skill: missingSkill,
+      roadmapStatus: status,
+      reason: `"${missingSkill}" is requested in the job description but not currently listed in your Career DNA or Resume skills.`,
+      recommendation: status === "Completed"
+        ? `Skill marked completed on your roadmap! Update your Career Profile to reflect this.`
+        : status === "In Progress"
+        ? `You are currently working on this skill in your Roadmap.`
+        : `Add a project or complete a learning module covering ${missingSkill} to increase your match percentage.`
+    };
+  });
 
   return {
     matchScore: finalMatchScore,
+    subscores,
     matchedSkills,
     missingSkills,
-    roleMatch,
-    experienceMatch: expMatch,
-    locationMatch,
+    preferredSkills,
+    roleMatch: roleScore >= 18,
+    experienceMatch: seniorityScore >= 12,
+    locationMatch: locationScore >= 8,
     reasons,
-    skillGaps
+    skillGaps,
+    roadmapSkillStatus
   };
 }
 
@@ -116,14 +248,19 @@ function isExperienceCompatible(userLevel = "Intermediate", jobLevel = "Mid-Leve
   const normUser = userLevel.toLowerCase();
   const normJob = (jobLevel || "").toLowerCase();
 
-  if (normUser === "advanced" || normUser === "senior") return true;
-  if (normUser === "intermediate" && (normJob.includes("mid") || normJob.includes("entry") || normJob.includes("junior"))) return true;
-  if (normUser === "beginner" && (normJob.includes("entry") || normJob.includes("junior"))) return true;
+  if (normUser.includes("senior") || normUser.includes("advanced") || normUser.includes("lead")) return true;
+  if (normUser.includes("mid") || normUser.includes("intermediate")) {
+    return normJob.includes("mid") || normJob.includes("entry") || normJob.includes("junior");
+  }
+  if (normUser.includes("beginner") || normUser.includes("junior")) {
+    return normJob.includes("entry") || normJob.includes("junior") || normJob.includes("intern");
+  }
 
-  return false;
+  return true;
 }
 
 module.exports = {
+  extractUserSkills,
   evaluateJobMatch,
   isExperienceCompatible
 };

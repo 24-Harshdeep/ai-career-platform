@@ -35,16 +35,13 @@ class LeverProvider extends JobProvider {
         return data
           .map((raw) => this.normalizeLeverJob(raw, company))
           .filter((job) => {
-            if (lowerQuery && !job.title.toLowerCase().includes(lowerQuery) && !job.description.toLowerCase().includes(lowerQuery)) {
-              return false;
-            }
             if (lowerLoc && !job.location.raw.toLowerCase().includes(lowerLoc)) {
               return false;
             }
             if (remote && !job.location.remote) {
               return false;
             }
-            return true;
+            return this.isJobMatch(job, q);
           });
       } catch (err) {
         return [];
@@ -54,6 +51,37 @@ class LeverProvider extends JobProvider {
     const resultsArray = await Promise.all(fetchPromises);
     const flattened = resultsArray.flat();
     return flattened.slice(0, limit);
+  }
+
+  isJobMatch(job, queryStr) {
+    if (!queryStr || !queryStr.trim()) return true;
+    const qLower = queryStr.toLowerCase().trim();
+    const titleLower = (job.title || "").toLowerCase();
+
+    // Exclude non-tech / non-engineering positions
+    const nonTechExclusions = ["recruiter", "account executive", "sales", "compliance", "legal", "hr ", "human resources", "marketing manager", "office manager", "accountant", "advisor", "hunter", "partner"];
+    if (nonTechExclusions.some(ex => titleLower.includes(ex))) {
+      return false;
+    }
+
+    if (titleLower.includes(qLower)) return true;
+
+    const normQ = qLower.replace(/full\s*stack/g, "fullstack");
+    const normTitle = titleLower.replace(/full\s*stack/g, "fullstack");
+    if (normTitle.includes(normQ)) return true;
+
+    const techWords = qLower.replace(/[-\/]/g, " ").split(/\s+/).filter(w => w.length > 2 && w !== "full");
+    if (techWords.length > 0 && techWords.some(w => titleLower.includes(w))) {
+      return true;
+    }
+
+    if (qLower.includes("developer") || qLower.includes("engineer") || qLower.includes("software") || qLower.includes("full")) {
+      if (titleLower.includes("engineer") || titleLower.includes("developer") || titleLower.includes("architect") || titleLower.includes("fullstack") || titleLower.includes("frontend") || titleLower.includes("backend")) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   normalizeLeverJob(raw, company) {

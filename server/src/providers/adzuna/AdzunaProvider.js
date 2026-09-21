@@ -5,6 +5,23 @@ class AdzunaProvider extends JobProvider {
     super("adzuna");
   }
 
+  async healthCheck() {
+    const appId = process.env.ADZUNA_APP_ID;
+    const appKey = process.env.ADZUNA_APP_KEY;
+    if (!appId || !appKey) {
+      return {
+        provider: this.name,
+        status: "UNCONFIGURED",
+        reason: "ADZUNA_APP_ID or ADZUNA_APP_KEY environment variable is not configured."
+      };
+    }
+    return {
+      provider: this.name,
+      status: "HEALTHY",
+      reason: "Credentials configured."
+    };
+  }
+
   /**
    * Search Adzuna API
    */

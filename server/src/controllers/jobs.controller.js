@@ -1,8 +1,20 @@
 const jobDiscoveryService = require("../services/jobDiscovery.service");
+const { getProvidersHealth } = require("../providers");
 
 // Standardized JSON Envelopes
 const successResponse = (res, message, data) => res.json({ success: true, message, data });
 const errorResponse = (res, message, errors = [], status = 400) => res.status(status).json({ success: false, message, errors });
+
+// 0. Provider Health Status Check
+async function getHealth(req, res) {
+  try {
+    const health = await getProvidersHealth();
+    return successResponse(res, "Provider health retrieved successfully.", health);
+  } catch (err) {
+    console.error("[JobsController] Error in getHealth:", err);
+    return errorResponse(res, `Failed to retrieve provider health: ${err.message}`, [], 500);
+  }
+}
 
 // 1. Search & Discover Jobs
 async function searchJobs(req, res) {
@@ -84,6 +96,7 @@ async function updateApplicationStatus(req, res) {
 }
 
 module.exports = {
+  getHealth,
   searchJobs,
   getSavedJobs,
   getJobById,
