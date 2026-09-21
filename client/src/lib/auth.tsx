@@ -5,7 +5,7 @@ import Button from "@/components/ui/Button/Button";
 import Card from "@/components/ui/Card/Card";
 import { KeyRound, Mail, User as UserIcon, ShieldAlert, Eye, EyeOff } from "lucide-react";
 import { useCareerStore } from "@/store/careerStore";
-import { API_BASE_URL } from "@/lib/api";
+import { API_BASE_URL, safeParseJson } from "@/lib/api";
 
 import { LoginView } from "@/components/auth/LoginView";
 
@@ -69,7 +69,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         });
 
         if (res.ok) {
-          const data = await res.json();
+          const data = await safeParseJson(res);
           setSession({
             user: {
               name: data.user.name,
@@ -110,7 +110,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
 
       if (res.ok) {
-        const data = await res.json();
+        const data = await safeParseJson(res);
         localStorage.setItem("careeros_token", data.token);
         setSession({
           user: {
@@ -144,7 +144,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
 
       if (res.ok) {
-        const data = await res.json();
+        const data = await safeParseJson(res);
         localStorage.setItem("careeros_token", data.token);
         localStorage.setItem("careeros_show_profile_onboarding", "true");
         setSession({

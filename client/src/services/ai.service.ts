@@ -1,5 +1,4 @@
-// Real AI Coach Service delegating requests to backend express router
-import { API_BASE_URL } from "@/lib/api";
+import { API_BASE_URL, safeParseJson } from "@/lib/api";
 
 export const aiService = {
   async generateCoachResponse(userMessage: string, activePath: string = "/dashboard"): Promise<string> {
@@ -15,7 +14,7 @@ export const aiService = {
       });
 
       if (res.ok) {
-        const envelope = await res.json();
+        const envelope = await safeParseJson(res);
         return envelope.data?.reply || envelope.data?.response || "I am evaluating your request against your CareerContext.";
       }
       return "Unable to connect to AI Coach service. Please ensure your API keys or server connection are active.";

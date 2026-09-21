@@ -87,6 +87,23 @@ async function updateProfile(userId, profileData) {
 
     await profile.save();
 
+    // Log PROFILE_UPDATED CareerEvent
+    try {
+      const CareerEvent = require("../models/CareerEvent");
+      await CareerEvent.create({
+        userId,
+        eventType: "PROFILE_UPDATED",
+        source: "SETTINGS",
+        metadata: {
+          targetRole: profile.targetRole,
+          careerGoal: profile.careerGoal,
+          experienceLevel: profile.experienceLevel
+        }
+      });
+    } catch (evtErr) {
+      console.error("Failed to log PROFILE_UPDATED event:", evtErr.message);
+    }
+
     // Trigger stats recalculation
     await recalculateUserStats(userId);
 

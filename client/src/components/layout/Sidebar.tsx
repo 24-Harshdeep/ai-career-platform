@@ -16,7 +16,8 @@ import {
   GraduationCap,
   LineChart,
   Settings,
-  User
+  User,
+  Briefcase
 } from "lucide-react";
 
 interface NavGroup {
@@ -44,8 +45,10 @@ export const Sidebar: React.FC = () => {
       ]
     },
     {
-      label: "CAREER",
+      label: "CAREER & JOBS",
       items: [
+        { name: "Career Report", href: "/dashboard/report", icon: LineChart },
+        { name: "Job Intelligence", href: "/dashboard/jobs", icon: Briefcase },
         { name: "Career DNA", href: "/dna", icon: Dna },
         { name: "Roadmap", href: "/roadmap", icon: Map },
         { name: "Career Coach", href: "/coach", icon: MessageSquareCode }
@@ -117,7 +120,9 @@ export const Sidebar: React.FC = () => {
               </div>
               <div className="space-y-0.5">
                 {group.items.map((item) => {
-                  const isActive = pathname === item.href || (pathname?.startsWith(item.href + "/") && item.href !== "/");
+                  const isActive = item.href === "/dashboard"
+                    ? pathname === "/dashboard"
+                    : pathname === item.href || (pathname?.startsWith(item.href + "/") && item.href !== "/");
                   const Icon = item.icon;
 
                   return (

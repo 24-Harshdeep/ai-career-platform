@@ -94,6 +94,7 @@ app.get("/api/health", (req, res) => {
 
 // API Routes prefix mounting
 app.use("/api/auth", require("./routes/auth"));
+app.use("/api/career/report", require("./routes/report.routes"));
 app.use("/api/career", require("./routes/career"));
 app.use("/api/dashboard", require("./routes/dashboard"));
 app.use("/api/roadmap", require("./routes/roadmap"));
@@ -103,6 +104,7 @@ app.use("/api/developer", require("./routes/developer"));
 app.use("/api/project", require("./routes/project"));
 app.use("/api/coach", require("./routes/coach"));
 app.use("/api/job", require("./routes/job"));
+app.use("/api/jobs", require("./routes/jobs.routes"));
 app.use("/api/interview", require("./routes/interview"));
 app.use("/api/analytics", require("./routes/analytics"));
 app.use("/api/notifications", require("./routes/notification"));

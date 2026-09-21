@@ -5,8 +5,10 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const authMiddleware = require("../middleware/auth");
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) throw new Error("JWT_SECRET must be configured.");
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === "production" ? null : "careeros-development-secret-key-3289");
+if (process.env.NODE_ENV === "production" && !process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET must be configured in production.");
+}
 
 // Register Account
 router.post("/register", async (req, res) => {
@@ -83,8 +85,9 @@ router.post("/login", async (req, res) => {
       // Query database
       matchedUser = await User.findOne({ email });
 
-      // Auto-provision demo account if requested and missing
-      if (!matchedUser && (email === "alex@careeros.dev" || email.includes("demo"))) {
+      // Auto-provision demo account if requested and missing (development mode only)
+      const isDev = process.env.NODE_ENV !== "production";
+      if (isDev && !matchedUser && (email === "alex@careeros.dev" || email.includes("demo"))) {
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(password || "password123", salt);
         matchedUser = await User.create({

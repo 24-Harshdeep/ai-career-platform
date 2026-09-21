@@ -20,7 +20,7 @@ const authMiddleware = async (req, res, next) => {
 
   // Demo token mode allowed ONLY in development and explicitly enabled via ALLOW_DEMO_MODE=true
   const isDev = process.env.NODE_ENV !== "production";
-  const allowDemo = process.env.ALLOW_DEMO_MODE === "true" || (isDev && process.env.ALLOW_DEMO_MODE !== "false");
+  const allowDemo = isDev && (process.env.ALLOW_DEMO_MODE === "true" || process.env.ALLOW_DEMO_MODE !== "false");
 
   if (allowDemo && token && (token.startsWith("demo_") || token === "demo_token")) {
     try {

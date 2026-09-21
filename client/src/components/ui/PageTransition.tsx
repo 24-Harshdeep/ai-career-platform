@@ -48,12 +48,14 @@ export const PageTransition: React.FC<PageTransitionProps> = ({ children, classN
 };
 
 // Stagger child wrapper — use inside PageTransition for staggered card entrance
-export const StaggerItem: React.FC<{ children: React.ReactNode; className?: string }> = ({
+export const StaggerItem: React.FC<{ children: React.ReactNode; className?: string; id?: string }> = ({
   children,
   className,
+  id,
 }) => {
   return (
     <motion.div
+      id={id}
       variants={{
         initial: { opacity: 0, y: 10 },
         enter: { opacity: 1, y: 0 },

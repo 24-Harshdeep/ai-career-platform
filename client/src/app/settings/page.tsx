@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
 import PageHeader from "@/components/ui/PageHeader";
+import { CareerReportWidget } from "@/components/dashboard/CareerReportWidget";
 
 type SettingsTab = "profile" | "ai" | "documents" | "notifications" | "accounts" | "theme" | "security";
 
@@ -252,6 +253,11 @@ export default function SettingsPage() {
           title="System Configuration"
           description="Configure profile targets, customize AI behavior, manage links, and review connected accounts."
         />
+      </StaggerItem>
+
+      {/* Central Brain Career Report Widget */}
+      <StaggerItem>
+        <CareerReportWidget />
       </StaggerItem>
 
       {/* Grid: Left tabs menu sidebar vs Right forms card */}
