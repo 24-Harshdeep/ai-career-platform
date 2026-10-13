@@ -1,4 +1,5 @@
 const express = require("express");
+const { getErrorMessage } = require("../utils/errorMessage");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
 
@@ -28,7 +29,7 @@ router.get("/", authMiddleware, async (req, res) => {
     const data = await roadmapService.getUserRoadmapTracks(req.user._id || req.user.id);
     return successResponse(res, "Roadmap tracks retrieved successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to retrieve roadmap: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve roadmap"), [], 500);
   }
 });
 
@@ -48,7 +49,7 @@ router.put("/progress", authMiddleware, async (req, res) => {
     );
     return successResponse(res, "Sub-skill progress updated successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to update progress: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to update progress"), [], 500);
   }
 });
 
@@ -67,7 +68,55 @@ router.post("/missions/complete", authMiddleware, async (req, res) => {
     );
     return successResponse(res, "Daily mission completed successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to complete mission: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to complete mission"), [], 500);
+  }
+});
+
+// 4. Force Dynamic Roadmap Re-evaluation
+router.post("/reevaluate", authMiddleware, async (req, res) => {
+  const userId = req.user._id || req.user.id;
+  const { reason = "MANUAL_USER_TRIGGER" } = req.body;
+
+  try {
+    const { reevaluateRoadmap } = require("../services/roadmapAdaptation.service");
+    const data = await reevaluateRoadmap(userId, reason);
+    return successResponse(res, "Roadmap re-evaluated and adapted successfully.", data);
+  } catch (err) {
+    return errorResponse(res, getErrorMessage(err, "Failed to re-evaluate roadmap"), [], 500);
+  }
+});
+
+// 5. Add Missing Job Gaps to Roadmap
+router.post("/add-job-gaps", authMiddleware, async (req, res) => {
+  const userId = req.user._id || req.user.id;
+  const { jobId, skills = [] } = req.body;
+
+  if (!jobId || !skills.length) {
+    return errorResponse(res, "Missing parameters: 'jobId' and 'skills' array are required.");
+  }
+
+  try {
+    const { addJobGapsToRoadmap } = require("../services/roadmapAdaptation.service");
+    const result = await addJobGapsToRoadmap(userId, jobId, skills);
+    return successResponse(res, "Job-specific skills added to roadmap successfully.", result);
+  } catch (err) {
+    return errorResponse(res, getErrorMessage(err, "Failed to add job gaps to roadmap"), [], 500);
+  }
+});
+
+// 6. Fetch Target Role Live Market Intelligence Signals
+router.get("/market-signals", authMiddleware, async (req, res) => {
+  const userId = req.user._id || req.user.id;
+
+  try {
+    const { getCareerContext } = require("../services/careerContext.service");
+    const { getMarketIntelligence } = require("../services/marketIntelligence.service");
+
+    const context = await getCareerContext(userId);
+    const data = await getMarketIntelligence(context.targetRole, context.experienceLevel, 30);
+    return successResponse(res, "Market intelligence signals fetched successfully.", data);
+  } catch (err) {
+    return errorResponse(res, getErrorMessage(err, "Failed to fetch market signals"), [], 500);
   }
 });
 

@@ -1,4 +1,5 @@
 const express = require("express");
+const { getErrorMessage } = require("../utils/errorMessage");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
 
@@ -38,7 +39,7 @@ router.post(["/session", "/start"], authMiddleware, async (req, res) => {
     });
     return successResponse(res, "Mock interview session initialized.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to start session: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to start session"), [], 500);
   }
 });
 
@@ -54,7 +55,7 @@ router.get("/session/:id", authMiddleware, async (req, res) => {
     }
     return successResponse(res, "Session retrieved successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to fetch session: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to fetch session"), [], 500);
   }
 });
 
@@ -70,7 +71,7 @@ router.post("/session/:id/start", authMiddleware, async (req, res) => {
     }
     return successResponse(res, "Live interview started.", sessionData);
   } catch (err) {
-    return errorResponse(res, `Failed to start live session: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to start live session"), [], 500);
   }
 });
 
@@ -92,7 +93,7 @@ router.post(["/session/:id/answer", "/answer"], authMiddleware, async (req, res)
     );
     return successResponse(res, "Live answer evaluated adaptively.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to evaluate answer: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to evaluate answer"), [], 500);
   }
 });
 
@@ -107,7 +108,7 @@ router.post(["/session/:id/end", "/finish"], authMiddleware, async (req, res) =>
     const data = await interviewService.finishSession(req.user._id || req.user.id, sessionId);
     return successResponse(res, "Mock session completed successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to finish session: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to finish session"), [], 500);
   }
 });
 
@@ -124,7 +125,7 @@ router.get(["/session/:id/report", "/report/:sessionId"], authMiddleware, async 
     }
     return successResponse(res, "Interview report retrieved successfully.", reportData);
   } catch (err) {
-    return errorResponse(res, `Failed to fetch report: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to fetch report"), [], 500);
   }
 });
 
@@ -134,7 +135,7 @@ router.get("/history", authMiddleware, async (req, res) => {
     const data = await interviewService.getSessionHistory(req.user._id || req.user.id);
     return successResponse(res, "Mock interview history retrieved successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to retrieve history: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve history"), [], 500);
   }
 });
 
@@ -144,7 +145,7 @@ router.get(["/readiness", "/summary"], authMiddleware, async (req, res) => {
     const data = await interviewService.getReadinessSummary(req.user._id || req.user.id);
     return successResponse(res, "Interview summary & analytics aggregated successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to fetch readiness summary: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to fetch readiness summary"), [], 500);
   }
 });
 

@@ -21,6 +21,8 @@ import {
   ChevronUp,
   FileText
 } from "lucide-react";
+import { fetchMarketSignals, reevaluateRoadmap } from "@/services/jobs.service";
+import { MarketIntelligenceData } from "@/types";
 import PoweredBy from "@/components/ui/PoweredBy";
 import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
 import PageHeader from "@/components/ui/PageHeader";
@@ -37,15 +39,37 @@ export default function RoadmapPage() {
   const resumeAnalysis = useCareerStore((state) => state.resumeAnalysis);
 
   const [expandedSubSkill, setExpandedSubSkill] = useState<string | null>(null);
+  const [marketData, setMarketData] = useState<MarketIntelligenceData | null>(null);
+  const [reevaluating, setReevaluating] = useState(false);
 
-  // Sync dashboard values and full roadmap details on initial render
+  // Sync dashboard values, full roadmap details, and live market intelligence on initial render
   useEffect(() => {
     const loadRoadmapData = async () => {
       await fetchDashboardData();
       await fetchRoadmap();
+      try {
+        const mSignals = await fetchMarketSignals();
+        setMarketData(mSignals);
+      } catch (err) {
+        console.warn("Market signals load warning:", err);
+      }
     };
     loadRoadmapData();
   }, [fetchDashboardData, fetchRoadmap]);
+
+  const handleReevaluateRoadmap = async () => {
+    setReevaluating(true);
+    try {
+      await reevaluateRoadmap("MANUAL_USER_TRIGGER");
+      await fetchRoadmap();
+      await fetchDashboardData();
+      addNotification("Roadmap adapted! Market signals, interests, and profile evidence re-calculated.", "success");
+    } catch (err: any) {
+      console.error("Roadmap adaptation error:", err);
+    } finally {
+      setReevaluating(false);
+    }
+  };
 
   // Handler to toggle subskill mastery
   const toggleSubskill = async (subSkillId: string, currentlyMastered: boolean, name: string) => {
@@ -139,12 +163,88 @@ export default function RoadmapPage() {
           title="Interactive AI Career Roadmap"
           description="This personalized AI-driven learning roadmap continuously aligns your skills with real-time market demands to ensure you are fully job-ready."
         >
-          <span className="inline-flex items-center text-xs font-medium text-muted bg-accent px-2.5 py-1 rounded-full border border-border">
-            <span className="w-1.5 h-1.5 mr-2 bg-success rounded-full animate-ping" />
-            Synced with CareerContext
-          </span>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleReevaluateRoadmap}
+              disabled={reevaluating}
+              className="text-xs font-semibold gap-2 border border-primary/30 hover:border-primary"
+            >
+              <Sparkles className={`w-3.5 h-3.5 text-primary ${reevaluating ? "animate-spin" : ""}`} />
+              {reevaluating ? "Re-evaluating..." : "Re-evaluate Roadmap"}
+            </Button>
+            <span className="inline-flex items-center text-xs font-medium text-muted bg-accent px-2.5 py-1 rounded-full border border-border">
+              <span className="w-1.5 h-1.5 mr-2 bg-success rounded-full animate-ping" />
+              Synced with Market Signals
+            </span>
+          </div>
         </PageHeader>
       </StaggerItem>
+
+      {/* Live Market Intelligence Signals Banner */}
+      {marketData && (
+        <StaggerItem>
+          <Card className="p-5 border-primary/20 bg-gradient-to-r from-primary/5 via-card to-accent/10 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/40 pb-3">
+              <div className="flex items-center space-x-2">
+                <TrendingUp className="w-4 h-4 text-primary shrink-0" />
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                  Live Market Signals: {marketData.targetRole}
+                </h3>
+                <Badge variant="primary" className="text-[9px] px-1.5 py-0.5">
+                  {marketData.sampleSize} Jobs Analyzed
+                </Badge>
+              </div>
+              <span className="text-[10px] text-muted">
+                Aggregated live skill frequency demand from active job postings
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Top Demanded Skills in Market */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-muted uppercase block">Top Demanded Skills</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {marketData.topSkills && marketData.topSkills.length > 0 ? (
+                    marketData.topSkills.slice(0, 6).map((item) => (
+                      <span
+                        key={item.name}
+                        className="inline-flex items-center gap-1.5 text-[11px] font-semibold bg-accent/20 border border-border px-2.5 py-1 rounded-lg text-foreground"
+                      >
+                        {item.name}
+                        <span className="text-[9px] font-bold text-primary bg-primary/10 px-1 rounded">
+                          {item.percentage}%
+                        </span>
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-muted">No market demand metrics available yet.</span>
+                  )}
+                </div>
+              </div>
+
+              {/* High Demand Market Skills */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-muted uppercase block">High Demand Target Skills</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {marketData.highDemand && marketData.highDemand.length > 0 ? (
+                    marketData.highDemand.slice(0, 6).map((item) => (
+                      <Badge key={item.name} variant="warning" className="text-[10px] py-1 px-2 font-medium">
+                        {item.name} ({item.percentage}% demand)
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-xs text-success font-medium flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> All top market skills aligned!
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
+        </StaggerItem>
+      )}
 
       {/* Global Core Projections Metrics Card */}
       <Card className="p-6 bg-gradient-to-br from-card to-accent/5">

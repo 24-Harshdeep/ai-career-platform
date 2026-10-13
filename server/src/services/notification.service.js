@@ -1,6 +1,7 @@
 const SystemNotification = require("../models/SystemNotification");
 const WebhookDeliveryLog = require("../models/WebhookDeliveryLog");
 const User = require("../models/User");
+const CareerProfile = require("../models/CareerProfile");
 
 
 const { parseGithubPushPayload } = require("../engines/notification/githubWebhook.engine");
@@ -53,38 +54,46 @@ async function markAsRead(userId, notificationId) {
 
 // 4. Process GitHub commit Webhook deliveries
 async function handleGithubPushWebhook(deliveryId, payload) {
+  const senderLogin = payload?.sender?.login || payload?.repository?.owner?.login;
+  if (!senderLogin) {
+    console.warn("[GitHub Webhook] No sender login found in verified payload.");
+    return { status: "Failed" };
+  }
+
+  const repository = payload?.repository?.full_name || payload?.repository?.name || "repository";
+  let deliveryLog;
   try {
-    const exists = await WebhookDeliveryLog.findOne({ deliveryId });
-    if (exists) return { status: "Ignored (Duplicate delivery)" };
-
-    const senderLogin = payload?.sender?.login || payload?.repository?.owner?.login;
-    if (!senderLogin) {
-      console.warn(`[GitHub Webhook] No sender login found in payload.`);
-      return { status: "Failed (No sender info)" };
+    deliveryLog = await WebhookDeliveryLog.create({
+      deliveryId,
+      payload: {
+        sender: senderLogin,
+        repository,
+        commitCount: Array.isArray(payload.commits) ? payload.commits.length : 0
+      },
+      status: "Processing"
+    });
+  } catch (err) {
+    if (err.code === 11000) {
+      return { status: "Ignored (Duplicate delivery)" };
     }
+    throw err;
+  }
 
-    const userDoc = await User.findOne({
-      $or: [
-        { githubUsername: senderLogin },
-        { githubUrl: { $regex: senderLogin, $options: "i" } }
-      ]
+  try {
+    const escapedSender = senderLogin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const careerProfile = await CareerProfile.findOne({
+      githubUrl: { $regex: `(?:^|/)${escapedSender}/?$`, $options: "i" }
     });
 
-    const userId = userDoc ? userDoc._id : null;
-    if (!userId) {
-      console.warn(`[GitHub Webhook] No user found matching GitHub username: ${senderLogin}`);
-      await WebhookDeliveryLog.create({
-        deliveryId,
-        payload,
-        status: "Failed"
-      });
-      return { status: "Failed (No matching user)" };
+    if (!careerProfile) {
+      await WebhookDeliveryLog.updateOne({ _id: deliveryLog._id }, { status: "Failed" });
+      console.warn("[GitHub Webhook] No user found for verified sender.");
+      return { status: "Failed" };
     }
 
-    // Run Webhook Parser Engine
+    const userId = careerProfile.userId;
     const parsed = parseGithubPushPayload(payload);
 
-    // Create Notification and Activity event logs
     await SystemNotification.create({
       userId,
       title: parsed.title,
@@ -94,27 +103,14 @@ async function handleGithubPushWebhook(deliveryId, payload) {
       metadata: parsed.metadata
     });
 
-    await logCareerEvent(
-      userId,
-      parsed.title,
-      "GitHub Webhook",
-      parsed.pointsGained,
-      parsed.metadata
-    );
-
-    // Persist Delivery Log
-    await WebhookDeliveryLog.create({
-      deliveryId,
-      payload,
-      status: "Success"
-    });
-
-    // Force recalculate Career Score
+    await logCareerEvent(userId, parsed.title, "GitHub Webhook", parsed.pointsGained, parsed.metadata);
     await recalculateUserStats(userId);
+    await WebhookDeliveryLog.updateOne({ _id: deliveryLog._id }, { status: "Success" });
 
     return { status: "Success" };
   } catch (err) {
-    return { status: "Failed", error: err.message };
+    await WebhookDeliveryLog.updateOne({ _id: deliveryLog._id }, { status: "Failed" });
+    throw err;
   }
 }
 

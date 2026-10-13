@@ -6,10 +6,9 @@ import { Mail, KeyRound, User as UserIcon, ShieldAlert, Eye, EyeOff, ArrowRight,
 interface LoginViewProps {
   onSignIn: (email?: string, password?: string) => Promise<boolean>;
   onSignUp: (name: string, email: string, password: string) => Promise<boolean>;
-  onQuickDemoLogin?: (role: string, name: string) => void;
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({ onSignIn, onSignUp, onQuickDemoLogin }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ onSignIn, onSignUp }) => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -60,11 +59,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignIn, onSignUp, onQuic
     if (success) {
       window.location.href = "/dashboard";
       return;
-    } else if (onQuickDemoLogin) {
-      onQuickDemoLogin("Senior Developer", "Alex Chen");
-      window.location.href = "/dashboard";
-      return;
     }
+    setError("Demo sign-in failed. Start the API with demo mode enabled or use your account.");
     setLoading(false);
   };
 
@@ -258,7 +254,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignIn, onSignUp, onQuic
             </form>
 
             {/* Quick Demo Login Option */}
-            {!isSignUp && (
+            {!isSignUp && process.env.NODE_ENV !== "production" && (
               <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-center">
                 <button
                   type="button"
@@ -329,13 +325,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignIn, onSignUp, onQuic
       {/* 🦶 Footer Bar */}
       <footer className="w-full max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row items-center justify-between border-t border-slate-200/50 text-[11px] text-slate-400 font-medium relative z-20">
         <div>© 2026 CareerOS Inc. All rights reserved.</div>
-        <div className="flex items-center space-x-4 mt-2 sm:mt-0">
-          <a href="#" className="hover:text-slate-600 transition-colors">Privacy Policy</a>
-          <span>•</span>
-          <a href="#" className="hover:text-slate-600 transition-colors">Terms of Service</a>
-          <span>•</span>
-          <a href="#" className="hover:text-slate-600 transition-colors">Security</a>
-        </div>
+        <div className="mt-2 sm:mt-0">CareerOS</div>
       </footer>
     </div>
   );

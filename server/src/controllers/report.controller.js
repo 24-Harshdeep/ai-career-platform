@@ -1,4 +1,5 @@
-const { generateCareerIntelligenceReport, createCareerReportSnapshot } = require("../services/careerIntelligence.service");
+const { getErrorMessage } = require("../utils/errorMessage");
+const { generateCareerIntelligenceReport, generateAiExecutiveSummary, createCareerReportSnapshot } = require("../services/careerIntelligence.service");
 const { buildCareerReportPdf } = require("../services/reportPdf.service");
 const CareerReportSnapshot = require("../models/CareerReportSnapshot");
 
@@ -35,7 +36,7 @@ async function getCareerReport(req, res) {
     console.error("Error in getCareerReport controller:", err);
     return res.status(500).json({
       success: false,
-      message: err.message || "Failed to generate Career Intelligence Report"
+      message: getErrorMessage(err, "Failed to generate Career Intelligence Report")
     });
   }
 }
@@ -79,7 +80,7 @@ async function downloadReportPdf(req, res) {
     console.error("Error in downloadReportPdf controller:", err);
     return res.status(500).json({
       success: false,
-      message: err.message || "Failed to generate Report PDF"
+      message: getErrorMessage(err, "Failed to generate Report PDF")
     });
   }
 }
@@ -116,7 +117,7 @@ async function getReportSummary(req, res) {
     console.error("Error in getReportSummary controller:", err);
     return res.status(500).json({
       success: false,
-      message: err.message || "Failed to fetch report summary"
+      message: getErrorMessage(err, "Failed to fetch report summary")
     });
   }
 }
@@ -140,7 +141,7 @@ async function getSnapshots(req, res) {
     console.error("Error in getSnapshots controller:", err);
     return res.status(500).json({
       success: false,
-      message: err.message || "Failed to fetch report snapshots"
+      message: getErrorMessage(err, "Failed to fetch report snapshots")
     });
   }
 }
@@ -166,7 +167,30 @@ async function createSnapshot(req, res) {
     console.error("Error in createSnapshot controller:", err);
     return res.status(500).json({
       success: false,
-      message: err.message || "Failed to create report snapshot"
+      message: getErrorMessage(err, "Failed to create report snapshot")
+    });
+  }
+}
+
+/**
+ * POST /api/career/report/ai-summary
+ * Explicitly generates a new AI Executive Summary for candidate and persists it.
+ */
+async function generateAiSummary(req, res) {
+  try {
+    const userId = req.user._id || req.user.id;
+    const aiSummary = await generateAiExecutiveSummary(userId);
+
+    return res.status(200).json({
+      success: true,
+      message: "AI Executive Summary generated successfully.",
+      aiSummary
+    });
+  } catch (err) {
+    console.error("Error in generateAiSummary controller:", err);
+    return res.status(500).json({
+      success: false,
+      message: getErrorMessage(err, "Failed to generate AI Executive Summary")
     });
   }
 }
@@ -176,5 +200,6 @@ module.exports = {
   downloadReportPdf,
   getReportSummary,
   getSnapshots,
-  createSnapshot
+  createSnapshot,
+  generateAiSummary
 };

@@ -4,9 +4,9 @@ const WebhookDeliveryLogSchema = new mongoose.Schema({
   deliveryId: { type: String, required: true, unique: true },
   provider: { type: String, default: "github" },
   payload: { type: mongoose.Schema.Types.Mixed, default: {} },
-  status: { 
+  status: {
     type: String, 
-    enum: ["Success", "Failed"], 
+    enum: ["Processing", "Success", "Failed"],
     default: "Success" 
   },
   processedAt: { type: Date, default: Date.now }

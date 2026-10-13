@@ -14,12 +14,24 @@ if (process.env.NODE_ENV === "production" && !process.env.JWT_SECRET) {
 router.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
 
-  if (!email || !password || !name) {
+  if (
+    typeof name !== "string" ||
+    typeof email !== "string" ||
+    typeof password !== "string" ||
+    !name.trim() ||
+    !email.trim() ||
+    !password
+  ) {
     return res.status(400).json({ error: "Missing required registration parameters." });
   }
 
-  if (password.length < 8) {
-    return res.status(400).json({ error: "Password must be at least 8 characters long." });
+  const normalizedName = name.trim();
+  const normalizedEmail = email.trim().toLowerCase();
+  if (normalizedName.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return res.status(400).json({ error: "Enter a valid name and email address." });
+  }
+  if (password.length < 8 || Buffer.byteLength(password, "utf8") > 72) {
+    return res.status(400).json({ error: "Password must be at least 8 characters and no more than 72 bytes." });
   }
 
   try {
@@ -30,19 +42,24 @@ router.post("/register", async (req, res) => {
     let newUser = null;
 
     try {
-      // Check if email already exists
-      const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+      const escapedEmail = normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const existingUser = await User.findOne({
+        email: { $regex: `^${escapedEmail}$`, $options: "i" }
+      });
       if (existingUser) {
-        return res.status(400).json({ error: "Email registration already exists." });
+        return res.status(409).json({ error: "Email registration already exists." });
       }
 
       // Create document in database
       newUser = await User.create({
-        name: name.trim(),
-        email: email.toLowerCase().trim(),
+        name: normalizedName,
+        email: normalizedEmail,
         passwordHash
       });
     } catch (dbErr) {
+      if (dbErr.code === 11000) {
+        return res.status(409).json({ error: "Email registration already exists." });
+      }
       return res.status(503).json({ error: "Account storage is unavailable." });
     }
 
@@ -73,9 +90,14 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
-  if (!email || !password) {
+  if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password) {
     return res.status(400).json({ error: "Missing login parameters." });
   }
+  if (email.length > 254 || Buffer.byteLength(password, "utf8") > 72) {
+    return res.status(400).json({ error: "Invalid email or password." });
+  }
+  const enteredEmail = email.trim();
+  const normalizedEmail = email.trim().toLowerCase();
 
   try {
     let matchedUser = null;
@@ -83,29 +105,27 @@ router.post("/login", async (req, res) => {
 
     try {
       // Query database
-      matchedUser = await User.findOne({ email });
+      matchedUser = await User.findOne({ email: enteredEmail });
+      if (!matchedUser && normalizedEmail !== enteredEmail) {
+        matchedUser = await User.findOne({ email: normalizedEmail });
+      }
 
-      // Auto-provision demo account if requested and missing (development mode only)
+      // Demo login is available only when explicitly enabled in development.
       const isDev = process.env.NODE_ENV !== "production";
-      if (isDev && !matchedUser && (email === "alex@careeros.dev" || email.includes("demo"))) {
+      const allowDemo = isDev && process.env.ALLOW_DEMO_MODE === "true";
+      if (allowDemo && !matchedUser && normalizedEmail === "alex@careeros.dev" && password === "password123") {
         const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash(password || "password123", salt);
+        const passwordHash = await bcrypt.hash(password, salt);
         matchedUser = await User.create({
           name: "Alex Chen",
-          email: email,
+          email: normalizedEmail,
           passwordHash,
           role: "Senior Full Stack Developer",
           goal: "Senior Full Stack Developer"
         });
         isMatch = true;
       } else if (matchedUser) {
-        if (!matchedUser.passwordHash || matchedUser.passwordHash === "undefined") {
-          // Self-healing migration: set the entered password as the hash
-          const salt = await bcrypt.genSalt(10);
-          matchedUser.passwordHash = await bcrypt.hash(password, salt);
-          await matchedUser.save();
-          isMatch = true;
-        } else {
+        if (matchedUser.passwordHash) {
           isMatch = await bcrypt.compare(password, matchedUser.passwordHash);
         }
       }
@@ -114,7 +134,7 @@ router.post("/login", async (req, res) => {
     }
 
     if (!matchedUser || !isMatch) {
-      return res.status(400).json({ error: "Invalid email or password combination." });
+      return res.status(401).json({ error: "Invalid email or password combination." });
     }
 
     // Sign JWT Session Token
@@ -135,7 +155,8 @@ router.post("/login", async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ error: `Internal auth failure: ${err.message}` });
+    console.error("Authentication request failed:", err.message);
+    res.status(500).json({ error: "An unexpected authentication error occurred." });
   }
 });
 

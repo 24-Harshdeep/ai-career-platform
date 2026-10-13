@@ -66,6 +66,7 @@ function CareerDnaContent() {
 
   const updateGoal = useCareerStore((state) => state.updateGoal);
   const updateExperience = useCareerStore((state) => state.updateExperience);
+  const updateProfileSettings = useCareerStore((state) => state.updateProfileSettings);
   const toggleSkill = useCareerStore((state) => state.toggleSkill);
   const fetchDashboardData = useCareerStore((state) => state.fetchDashboardData);
   const fetchAnalyticsDashboard = useCareerStore((state) => state.fetchAnalyticsDashboard);
@@ -75,11 +76,38 @@ function CareerDnaContent() {
 
   const [mainTab, setMainTab] = useState<"dna" | "analytics">(initialTab);
 
-  const [goalInput, setGoalInput] = useState(storeUser?.goal || profile?.targetRole || "Full Stack Developer");
+  const [goalInput, setGoalInput] = useState(profile?.targetRole || storeUser?.goal || "Full Stack Developer");
+  const [growthModeInput, setGrowthModeInput] = useState<any>(profile?.growthMode || "JOB_READINESS");
+  const [careerGoalInput, setCareerGoalInput] = useState(profile?.careerGoal || "");
   const [experienceInput, setExperienceInput] = useState<any>(
     storeUser?.experience || profile?.experienceLevel || "Intermediate"
   );
+  const [interestsInput, setInterestsInput] = useState<string[]>(
+    profile?.interests ? profile.interests.map(i => i.name) : ["Web Development", "AI / ML"]
+  );
+  const [customInterestInput, setCustomInterestInput] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const presetInterests = [
+    "Web Development", "Frontend", "Backend", "AI / ML", "Automation",
+    "DevOps", "Cloud", "System Design", "Mobile Development", "Cybersecurity", "UI/UX", "Open Source"
+  ];
+
+  const toggleInterest = (interestName: string) => {
+    setInterestsInput(prev =>
+      prev.includes(interestName) ? prev.filter(i => i !== interestName) : [...prev, interestName]
+    );
+  };
+
+  const handleAddCustomInterest = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customInterestInput.trim()) return;
+    const clean = customInterestInput.trim();
+    if (!interestsInput.includes(clean)) {
+      setInterestsInput(prev => [...prev, clean]);
+    }
+    setCustomInterestInput("");
+  };
 
   // Search, filter, and sorting states for skills inventory
   const [searchQuery, setSearchQuery] = useState("");
@@ -113,18 +141,24 @@ function CareerDnaContent() {
 
   // Synchronize state when storeUser data is loaded from API
   useEffect(() => {
-    if (storeUser?.goal || profile?.targetRole) {
-      setGoalInput(storeUser.goal || profile?.targetRole || "Full Stack Developer");
+    if (profile?.targetRole || storeUser?.goal) {
+      setGoalInput(profile?.targetRole || storeUser?.goal || "Full Stack Developer");
+    }
+    if (profile?.careerGoal) {
+      setCareerGoalInput(profile.careerGoal);
     }
     if (storeUser?.experience || profile?.experienceLevel) {
       setExperienceInput(storeUser.experience || profile?.experienceLevel || "Intermediate");
     }
-  }, [storeUser?.goal, storeUser?.experience, profile?.targetRole, profile?.experienceLevel]);
+    if (profile?.interests && profile.interests.length > 0) {
+      setInterestsInput(profile.interests.map(i => i.name));
+    }
+  }, [storeUser?.goal, storeUser?.experience, profile?.targetRole, profile?.careerGoal, profile?.experienceLevel, profile?.interests]);
 
   // Aggregate possessed skills from profile
   const possessedSkills = useMemo(() => {
     if (!profile?.skillsPossessed) return [];
-    
+
     const skills: { name: string; category: string }[] = [];
     for (const [category, skillList] of Object.entries(profile.skillsPossessed)) {
       if (Array.isArray(skillList)) {
@@ -146,7 +180,7 @@ function CareerDnaContent() {
     }
     return set;
   }, [resumeAnalysis, developerProfile]);
-  
+
   // Combine possessed and evidence skills from profile, resume, and GitHub
   const allSkillsList = useMemo(() => {
     const list: { name: string; category: string; source: string }[] = [];
@@ -202,9 +236,14 @@ function CareerDnaContent() {
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
-      await updateGoal(goalInput);
-      await updateExperience(experienceInput);
-      addNotification("Career Direction updated. CareerContext recalculated.", "success");
+      await updateProfileSettings({
+        targetRole: goalInput,
+        experienceLevel: experienceInput,
+        growthMode: growthModeInput,
+        careerGoal: careerGoalInput.trim(),
+        interests: interestsInput.map((name, idx) => ({ name, category: "General", priority: idx + 1 }))
+      });
+      addNotification("Career Direction and Growth Strategy updated. Adaptive roadmap re-evaluated.", "success");
     } finally {
       setSaving(false);
     }
@@ -282,7 +321,7 @@ function CareerDnaContent() {
     if (type === "github" || type === "project" || type === "portfolio" || title.includes("github") || title.includes("portfolio") || title.includes("project") || actionId.includes("github") || actionId.includes("portfolio") || actionId.includes("project")) return "/portfolio";
     if (type === "interview" || title.includes("interview") || actionId.includes("interview") || reason.includes("interview")) return "/interview";
     if (type === "roadmap" || type === "learning" || title.includes("roadmap") || title.includes("module") || title.includes("skill") || actionId.includes("roadmap") || actionId.includes("learning")) return "/roadmap";
-    if (type === "application" || type === "applications" || title.includes("application") || title.includes("job") || actionId.includes("application") || actionId.includes("job")) return "/applications";
+    if (type === "application" || type === "applications" || title.includes("application") || title.includes("job") || actionId.includes("application") || actionId.includes("job")) return "/resume?step=4";
 
     return "/resume";
   };
@@ -386,9 +425,9 @@ function CareerDnaContent() {
       {/* 1. Header Section */}
       <StaggerItem>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <PageHeader 
-            icon={Dna} 
-            title="Career DNA" 
+          <PageHeader
+            icon={Dna}
+            title="Career DNA"
             description="Your professional identity, skills inventory, and current career state. CareerOS uses this information to personalize your career intelligence."
           >
             <div className="flex items-center space-x-2 bg-primary/10 border border-primary/20 text-primary px-3 py-1.5 rounded-xl text-xs font-bold shrink-0">
@@ -455,15 +494,15 @@ function CareerDnaContent() {
                 {/* Benchmark Indicator Cards */}
                 <div className="space-y-2.5 pt-2.5 border-t border-border/40 text-xs">
                   <span className="text-[10px] text-muted font-bold uppercase tracking-wider block">Market Positioning Benchmarks</span>
-                  
+
                   <div className="relative pt-3 pb-1">
                     <div className="h-2.5 w-full bg-accent/20 rounded-full z-0 relative flex overflow-hidden">
                       <div className="h-full bg-warning/30 border-r border-background" style={{ width: "60%" }} />
                       <div className="h-full bg-info/30 border-r border-background" style={{ width: "15%" }} />
                       <div className="h-full bg-success/30" style={{ width: "25%" }} />
                     </div>
-                    
-                    <div 
+
+                    <div
                       className="absolute top-1 w-3.5 h-3.5 bg-primary border-2 border-card rounded-full z-20 shadow-md transition-all duration-300"
                       style={{ left: `${Math.min(95, Math.max(5, overallScore))}%` }}
                     />
@@ -709,8 +748,8 @@ function CareerDnaContent() {
                       return (
                         <div key={idx} className="flex items-center space-x-3 text-xs relative pl-1">
                           <div className={`w-6 h-6 rounded-full border flex items-center justify-center shrink-0 z-10 ${
-                            item.active 
-                              ? "bg-primary text-white border-primary" 
+                            item.active
+                              ? "bg-primary text-white border-primary"
                               : "bg-card text-muted border-border/80"
                           }`}>
                             <IconComponent className="w-3.5 h-3.5" />
@@ -760,6 +799,33 @@ function CareerDnaContent() {
                       </div>
 
                       <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-muted uppercase tracking-wide">Growth Mode / Strategy</label>
+                        <select
+                          value={growthModeInput}
+                          onChange={(e) => setGrowthModeInput(e.target.value as any)}
+                          className="w-full bg-accent border border-border outline-none rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50"
+                        >
+                          <option value="JOB_READINESS">Job Readiness (Maximize ATS, Portfolio & Interview)</option>
+                          <option value="SKILL_GROWTH">Skill Growth (Master Deep Technical Concepts)</option>
+                          <option value="INTERNSHIP_TO_FULLTIME">Internship → Full-Time Conversion</option>
+                          <option value="CAREER_PROGRESSION">Career Progression (Junior → Mid/Senior)</option>
+                          <option value="ROLE_TRANSITION">Role Transition (Switching Fields)</option>
+                          <option value="CUSTOM">Custom Outcome</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-muted uppercase tracking-wide">Career Goal / Objective</label>
+                        <input
+                          type="text"
+                          value={careerGoalInput}
+                          onChange={(e) => setCareerGoalInput(e.target.value)}
+                          placeholder="e.g. Lead engineering teams building high-scale SaaS platforms"
+                          className="w-full bg-accent border border-border outline-none rounded-xl px-3 py-2.5 text-xs text-foreground focus:border-primary/50"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
                         <label className="text-[11px] font-bold text-muted uppercase tracking-wide">Experience Level</label>
                         <div className="grid grid-cols-3 gap-2">
                           {(["Beginner", "Intermediate", "Advanced"] as const).map((level) => (
@@ -777,6 +843,52 @@ function CareerDnaContent() {
                             </button>
                           ))}
                         </div>
+                      </div>
+
+                      {/* Technical & Domain Interests Selection */}
+                      <div className="space-y-2 pt-1 border-t border-border/50">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-muted uppercase tracking-wide">User Interests (Specialization Signals)</label>
+                          <span className="text-[10px] text-purple-400 font-medium">Interests personalize projects & optional paths</span>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1 bg-accent/20 rounded-xl border border-border/50">
+                          {presetInterests.map((interest) => {
+                            const isSelected = interestsInput.includes(interest);
+                            return (
+                              <button
+                                key={interest}
+                                type="button"
+                                onClick={() => toggleInterest(interest)}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer ${
+                                  isSelected
+                                    ? "bg-purple-600/20 text-purple-300 border-purple-500/40 font-bold"
+                                    : "bg-card border-border text-muted hover:text-foreground"
+                                }`}
+                              >
+                                {isSelected ? "✓ " : "+ "}
+                                {interest}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Custom Interest Input */}
+                        <form onSubmit={handleAddCustomInterest} className="flex gap-2 pt-1">
+                          <input
+                            type="text"
+                            value={customInterestInput}
+                            onChange={(e) => setCustomInterestInput(e.target.value)}
+                            placeholder="Add custom interest (e.g. Distributed Systems)..."
+                            className="flex-1 bg-accent border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary/50"
+                          />
+                          <button
+                            type="submit"
+                            className="px-3 py-1.5 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-lg text-xs font-bold transition-colors"
+                          >
+                            Add
+                          </button>
+                        </form>
                       </div>
                     </div>
                   </div>
@@ -926,7 +1038,7 @@ function CareerDnaContent() {
                     + Add Skill
                   </Button>
                 </form>
-                
+
                 <div className="flex items-center gap-2 shrink-0">
                   <SlidersHorizontal className="w-4 h-4 text-muted" />
                   <select
@@ -942,19 +1054,19 @@ function CareerDnaContent() {
 
               {/* Skills Grid */}
               {processedSkillsList.length === 0 ? (
-                <EmptyState 
-                  title="No skills match your filter" 
-                  description="Adjust your search query or filter settings above." 
+                <EmptyState
+                  title="No skills match your filter"
+                  description="Adjust your search query or filter settings above."
                 />
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-1">
                   {processedSkillsList.map((skill, i) => (
-                    <div 
+                    <div
                       key={`${skill.name}-${i}`}
                       onClick={() => handleToggleSkill(skill.name, skill.category)}
                       className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                        skill.isPossessed 
-                          ? "bg-primary/5 border-primary/20 hover:bg-primary/10 shadow-xs" 
+                        skill.isPossessed
+                          ? "bg-primary/5 border-primary/20 hover:bg-primary/10 shadow-xs"
                           : "bg-card border-border/80 hover:bg-accent/30"
                       }`}
                     >

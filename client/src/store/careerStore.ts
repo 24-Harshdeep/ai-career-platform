@@ -1680,6 +1680,15 @@ export const useCareerStore = create<CareerState>((set, get) => ({
 
   addApplication: async (app) => {
     const token = localStorage.getItem("careeros_token");
+    const title = app.role || app.title;
+    const company = app.company;
+    const description = app.jobDescription || app.description;
+    const url = app.url;
+    if (!title || !company || !description || !url || !/^https?:\/\//i.test(url)) {
+      get().addNotification("Add a job title, company, description, and valid job URL before saving.", "warning");
+      return;
+    }
+
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
@@ -1690,28 +1699,21 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         method: "POST",
         headers,
         body: JSON.stringify({
-          title: app.role || app.title || "Target Position",
-          company: app.company || "Target Company",
-          description: app.jobDescription || app.description || `${app.role} at ${app.company}`,
-          url: app.url && /^https?:\/\//i.test(app.url) ? app.url : `https://example.com/jobs/${Date.now()}`,
+          title,
+          company,
+          description,
+          url,
           location: app.location || "Remote",
           salaryRange: app.salaryRange || "",
           status: app.status || "Saved"
         })
       });
 
-      if (res.ok) {
-        await get().fetchDashboardData();
-      }
+      if (!res.ok) throw new Error("The job could not be saved.");
+      await get().fetchDashboardData();
     } catch (err) {
-      set((state) => {
-        const newApp: JobApplication = {
-          ...app,
-          id: `app-${Date.now()}`,
-          dateApplied: new Date().toISOString().split("T")[0]
-        };
-        return { applications: [newApp, ...state.applications] };
-      });
+      console.error("Failed to save application:", err instanceof Error ? err.message : err);
+      get().addNotification("Unable to save this application. Check your connection and try again.", "warning");
     }
   },
 
@@ -1729,16 +1731,11 @@ export const useCareerStore = create<CareerState>((set, get) => ({
         body: JSON.stringify({ opportunityId: id, status })
       });
 
-      if (res.ok) {
-        await get().fetchDashboardData();
-      }
+      if (!res.ok) throw new Error("The application status could not be updated.");
+      await get().fetchDashboardData();
     } catch (err) {
-      set((state) => {
-        const updatedApps = state.applications.map((a) =>
-          a.id === id ? { ...a, status } : a
-        );
-        return { applications: updatedApps };
-      });
+      console.error("Failed to update application status:", err instanceof Error ? err.message : err);
+      get().addNotification("Unable to update this application. Check your connection and try again.", "warning");
     }
   },
 

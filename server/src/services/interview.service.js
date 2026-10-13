@@ -18,6 +18,7 @@ const { calculateReadinessIncrease } = require("../engines/interview/readiness.e
 const { toInterviewSessionDTO } = require("../dto/interview.dto");
 const { recalculateUserStats } = require("./career.service");
 const { logCareerEvent } = require("./analytics.service");
+const { escapeRegex } = require("../utils/escapeRegex");
 
 
 
@@ -35,7 +36,7 @@ async function startSession(userId, config) {
   try {
     const { getCareerContext } = require("./careerContext.service");
     const userContext = await getCareerContext(userId);
-    const effectiveRole = (role && role.trim().length > 0) ? role.trim() : (userContext.targetRole || "Full Stack Developer");
+    const effectiveRole = (role && role.trim().length > 0) ? role.trim().slice(0, 120) : (userContext.targetRole || "Full Stack Developer");
     
     // Try to dynamically generate questions using Gemini API
     let selected = [];
@@ -94,7 +95,7 @@ Output a JSON array conforming exactly to this structure:
 
     // If AI generation was unsuccessful, use only questions already persisted
     if (selected.length === 0) {
-      const words = (effectiveRole || "").split(/\s+/).filter(w => w.length > 2);
+      const words = (effectiveRole || "").split(/\s+/).filter(w => w.length > 2).map(escapeRegex);
       const regexPattern = words.length > 0 ? words.join("|") : (effectiveRole || "Full Stack Developer");
       
       let dbQuestions = await InterviewQuestion.find({

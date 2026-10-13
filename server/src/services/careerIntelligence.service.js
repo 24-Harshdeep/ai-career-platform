@@ -1,4 +1,4 @@
-const { getCareerContext } = require("./careerContext.service");
+const { getCareerContext, resolveCareerGoal } = require("./careerContext.service");
 const User = require("../models/User");
 const CareerProfile = require("../models/CareerProfile");
 const Resume = require("../models/Resume");
@@ -9,14 +9,35 @@ const InterviewMistake = require("../models/InterviewMistake");
 const Roadmap = require("../models/Roadmap");
 const LearningProgress = require("../models/LearningProgress");
 const JobApplication = require("../models/JobApplication");
+const JobOpportunity = require("../models/JobOpportunity");
 const AnalyticsSnapshot = require("../models/AnalyticsSnapshot");
 const CareerEvent = require("../models/CareerEvent");
 const CareerReportSnapshot = require("../models/CareerReportSnapshot");
+const CareerAiSummary = require("../models/CareerAiSummary");
 
 const { calculateCareerScore } = require("../engines/careerScore.engine");
 const { calculateReadiness } = require("../engines/readiness.engine");
-const { computeNextBestAction } = require("../engines/nextBestAction.engine");
+const { calculateConfidenceScore } = require("../engines/confidence.engine");
+const { groundedFallbackActions } = require("../engines/nextBestAction.engine");
 const { generateAiContent } = require("../config/ai");
+
+/**
+ * Helper to count flat skills in segmented structure.
+ */
+function getSkillsCount(skillsObj) {
+  if (!skillsObj) return 0;
+  const obj = typeof skillsObj.toObject === "function" ? skillsObj.toObject() : skillsObj;
+  return [
+    ...(obj.technical || []),
+    ...(obj.soft || []),
+    ...(obj.tools || []),
+    ...(obj.frameworks || []),
+    ...(obj.languages || []),
+    ...(obj.cloud || []),
+    ...(obj.devops || []),
+    ...(obj.database || [])
+  ].length;
+}
 
 /**
  * Formats a raw skill gap into a professional 5-stage growth lifecycle entry for the shareable report.
@@ -66,7 +87,7 @@ function extractSkillsFromSkillSet(skillSet) {
   if (typeof skillSet === "object") {
     const skills = [];
     const obj = typeof skillSet.toObject === "function" ? skillSet.toObject() : skillSet;
-    
+
     // Check known category arrays first
     const categories = ["technical", "frameworks", "languages", "tools", "database", "cloud", "devops", "soft", "frontend", "backend"];
     for (const cat of categories) {
@@ -76,7 +97,7 @@ function extractSkillsFromSkillSet(skillSet) {
         });
       }
     }
-    
+
     // Fallback for general key-value pairs if categories yielded nothing
     if (skills.length === 0) {
       for (const [k, v] of Object.entries(obj)) {
@@ -197,21 +218,42 @@ async function computeSkillGapLifecycle(userId, targetRole, profile, resumeConte
  * Supports mode = "shareable" (professional recruiter-grade portfolio) vs mode = "private" (internal diagnostic).
  */
 async function generateCareerIntelligenceReport(userId, mode = "shareable") {
-  const user = await User.findById(userId).select("-password");
+  // Independent persisted reads run together; report reads never invoke AI.
+  const GithubRepository = require("../models/GithubRepository");
+  const ProjectAudit = require("../models/ProjectAudit");
+  const [user, profile, latestResume, resumeAnalysis, devProfile, githubRepos,
+    projectAudits, pastSessions, unresolvedMistakes, roadmap, learningProgressList,
+    applicationCount, opportunityCount, latestSnapshot, latestAiSummary] = await Promise.all([
+    User.findById(userId).select("-passwordHash").lean(),
+    CareerProfile.findOne({ userId }).lean(),
+    Resume.findOne({ userId }).sort({ uploadDate: -1 }).lean(),
+    ResumeAnalysis.findOne({ userId }).sort({ analyzedAt: -1 }).lean(),
+    DeveloperProfile.findOne({ userId }).lean(),
+    GithubRepository.find({ userId }).sort({ stars: -1, updatedAt: -1 }).limit(10).lean(),
+    ProjectAudit.find({ userId }).sort({ createdAt: -1 }).lean(),
+    InterviewSession.find({ userId }).sort({ createdAt: -1 }).lean(),
+    InterviewMistake.find({ userId, resolved: false }).lean(),
+    Roadmap.findOne({ userId }).lean(),
+    LearningProgress.find({ userId }).lean(),
+    JobApplication.countDocuments({ userId }),
+    JobOpportunity.countDocuments({ userId }),
+    AnalyticsSnapshot.findOne({ userId }).sort({ createdAt: -1 }).lean(),
+    CareerAiSummary.findOne({ userId }).sort({ createdAt: -1 }).lean()
+  ]);
   if (!user) throw new Error("User not found");
+  const targetRole = profile?.targetRole || user.role || "Software Engineer";
+  const missingKeywords = (resumeAnalysis?.missingKeywords || [])
+    .map(item => typeof item === "string" ? item : item.keyword)
+    .filter(item => typeof item === "string" && item.trim());
+  const resumeContext = resumeAnalysis ? { ...resumeAnalysis, missingKeywords } : null;
 
-  const profile = await CareerProfile.findOne({ userId });
-  const careerContext = await getCareerContext(userId);
-  const targetRole = careerContext.targetRole;
-  const careerGoal = profile?.careerGoal || user.goal || "Not available";
+  const rawGoal = (profile?.careerGoal && profile.careerGoal.trim()) || (user?.goal && user.goal.trim());
+  const careerGoal = (rawGoal && rawGoal !== "Not available") ? rawGoal : "Career goal not configured";
 
   // Fetch Resume & structured version data
-  const latestResume = await Resume.findOne({ userId }).sort({ uploadDate: -1 });
-  let resumeAnalysis = null;
   let resumeVersion = null;
 
   if (latestResume) {
-    resumeAnalysis = await ResumeAnalysis.findOne({ resumeId: latestResume._id });
     if (latestResume.versions && latestResume.versions.length > 0) {
       resumeVersion = latestResume.versions.find(v => v.versionNumber === latestResume.activeVersionId) || latestResume.versions[0];
     }
@@ -225,12 +267,32 @@ async function generateCareerIntelligenceReport(userId, mode = "shareable") {
   const personalInfo = resumeVersion?.personalInfo || {};
 
   // Fetch Developer, GitHub, and Portfolio Project Audit evidence
-  const devProfile = await DeveloperProfile.findOne({ userId });
-  const GithubRepository = require("../models/GithubRepository");
-  const ProjectAudit = require("../models/ProjectAudit");
-
-  const githubRepos = await GithubRepository.find({ userId }).sort({ stars: -1, updatedAt: -1 }).limit(10);
-  const projectAudits = await ProjectAudit.find({ userId }).sort({ createdAt: -1 });
+  // Helper to resolve project role without falling back to "Not available"
+  const resolveProjectRole = (projRole, projTech = []) => {
+    if (projRole && typeof projRole === "string" && projRole.trim() && projRole.trim() !== "Not available") {
+      return projRole.trim();
+    }
+    if (profile?.targetRole && typeof profile.targetRole === "string" && profile.targetRole.trim() && profile.targetRole.trim() !== "Not available") {
+      return profile.targetRole.trim();
+    }
+    if (targetRole && typeof targetRole === "string" && targetRole.trim() && targetRole.trim() !== "Not available") {
+      return targetRole.trim();
+    }
+    if (user?.role && typeof user.role === "string" && user.role.trim() && user.role.trim() !== "Not available") {
+      return user.role.trim();
+    }
+    const stackStr = (Array.isArray(projTech) ? projTech.join(" ") : String(projTech)).toLowerCase();
+    if (stackStr.includes("react") || stackStr.includes("node") || stackStr.includes("express") || stackStr.includes("mongo")) {
+      return "Full Stack Developer";
+    }
+    if (stackStr.includes("python") || stackStr.includes("sql") || stackStr.includes("api") || stackStr.includes("backend")) {
+      return "Backend Developer";
+    }
+    if (stackStr.includes("frontend") || stackStr.includes("css") || stackStr.includes("html") || stackStr.includes("vue")) {
+      return "Frontend Developer";
+    }
+    return "Software Developer";
+  };
 
   // Combine Resume Projects, GitHub Repositories, and Project Audits for Portfolio Section
   const combinedProjects = [];
@@ -243,7 +305,7 @@ async function generateCareerIntelligenceReport(userId, mode = "shareable") {
       seenProjectTitles.add(shortTitle.toLowerCase());
       combinedProjects.push({
         name: shortTitle,
-        role: profile?.targetRole || "Not available",
+        role: resolveProjectRole(proj.role || proj.position, proj.technologies),
         techStack: proj.technologies || [],
         description: proj.description || (proj.bulletPoints ? proj.bulletPoints.join(". ") : rawTitle),
         bulletPoints: proj.bulletPoints || [rawTitle],
@@ -259,10 +321,13 @@ async function generateCareerIntelligenceReport(userId, mode = "shareable") {
       seenProjectTitles.add(pa.title.trim().toLowerCase());
       combinedProjects.push({
         name: pa.title.trim(),
-        role: profile?.targetRole || "Not available",
+        role: resolveProjectRole(pa.role, pa.projectType ? [pa.projectType] : []),
         techStack: pa.projectType ? [pa.projectType] : [],
         description: `Verified project record${pa.projectType ? ` in ${pa.projectType}` : ""}.`,
-        bulletPoints: [`Platform: ${pa.deploymentPlatform || "Not available"}`, `Status: ${pa.status || "Not available"}`],
+        bulletPoints: [
+          pa.deploymentPlatform ? `Platform: ${pa.deploymentPlatform}` : null,
+          pa.status ? `Status: ${pa.status}` : null
+        ].filter(Boolean),
         githubUrl: pa.url || "",
         liveUrl: pa.url || "",
         evidence: "Portfolio Intelligence Verified"
@@ -273,10 +338,11 @@ async function generateCareerIntelligenceReport(userId, mode = "shareable") {
   for (const repo of githubRepos) {
     if (repo.name && !seenProjectTitles.has(repo.name.trim().toLowerCase())) {
       seenProjectTitles.add(repo.name.trim().toLowerCase());
+      const tech = repo.topics && repo.topics.length > 0 ? repo.topics : (repo.primaryLanguage ? [repo.primaryLanguage] : []);
       combinedProjects.push({
         name: repo.name.trim(),
-        role: "Not available",
-        techStack: repo.topics && repo.topics.length > 0 ? repo.topics : (repo.primaryLanguage ? [repo.primaryLanguage] : []),
+        role: resolveProjectRole(null, tech),
+        techStack: tech,
         description: repo.description || "GitHub repository record available.",
         bulletPoints: [repo.primaryLanguage && `Primary Language: ${repo.primaryLanguage}`, repo.stars !== undefined && `Stars: ${repo.stars}`].filter(Boolean),
         githubUrl: repo.url || "",
@@ -289,14 +355,14 @@ async function generateCareerIntelligenceReport(userId, mode = "shareable") {
   // Sanitize raw resume experience entries to prevent blank position/company fields
   const cleanedWorkExperience = workExperience
     .map(exp => {
-      const pos = (exp.position && exp.position.trim()) 
-        ? exp.position.trim() 
+      const pos = (exp.position && exp.position.trim())
+        ? exp.position.trim()
         : "";
 
-      let comp = (exp.company && exp.company.trim() && exp.company.trim() !== pos) 
-        ? exp.company.trim() 
+      let comp = (exp.company && exp.company.trim() && exp.company.trim() !== pos)
+        ? exp.company.trim()
         : "";
-      
+
       if (comp.length > 40) comp = comp.substring(0, 37) + "...";
 
       return {
@@ -314,9 +380,7 @@ async function generateCareerIntelligenceReport(userId, mode = "shareable") {
   const effectiveWorkExperience = cleanedWorkExperience;
 
   // Fetch Interview History & Extract Technical Topics
-  const pastSessions = await InterviewSession.find({ userId }).sort({ createdAt: -1 });
   const completedSessions = pastSessions.filter(s => s.overallScore && s.overallScore > 0);
-  const unresolvedMistakes = await InterviewMistake.find({ userId, resolved: false });
 
   const topicsSet = new Set();
   for (const s of completedSessions) {
@@ -354,7 +418,9 @@ async function generateCareerIntelligenceReport(userId, mode = "shareable") {
     confidenceScore: null,
     repeatingMistakes: unresolvedMistakes.map(m => m.concept),
     topicsCovered: topicsArray,
-    statusText: completedSessions.length > 0 ? `${completedSessions.length} interview assessment(s) completed across key technical topics.` : "Interview development tracking active."
+    statusText: completedSessions.length > 0
+      ? `${completedSessions.length} interview assessment(s) completed across key technical topics.`
+      : "No completed interviews yet. Complete your first interview to establish an interview-performance baseline."
   };
 
   if (completedSessions.length > 0) {
@@ -374,12 +440,9 @@ async function generateCareerIntelligenceReport(userId, mode = "shareable") {
   }
 
   // Fetch Roadmap & Learning Progress
-  // Roadmap does not currently have an isArchived field. Querying for
-  // `isArchived: false` excludes every document where the field is absent,
-  // which made valid roadmaps disappear from the report.
-  const roadmap = await Roadmap.findOne({ userId });
-  const learningProgressList = await LearningProgress.find({ userId });
-  const completedModules = learningProgressList.filter(p => p.completed);
+  const roadmapSkills = (roadmap?.modules || []).flatMap(module => module.subSkills || []);
+  const roadmapSkillIds = new Set(roadmapSkills.map(skill => skill.id));
+  const completedModules = learningProgressList.filter(p => p.completed && roadmapSkillIds.has(p.subSkillId));
 
   const roadmapModuleCount = (roadmap?.modules || []).reduce(
     (count, module) => count + (module.subSkills?.length || 0),
@@ -399,42 +462,42 @@ async function generateCareerIntelligenceReport(userId, mode = "shareable") {
     modules: roadmap?.modules || []
   };
 
-  // Fetch Applications
-  const applications = await JobApplication.find({ userId });
+  // Combine JobApplication and JobOpportunity counts for application parity across services
+  const applicationsCount = applicationCount + opportunityCount;
+  const skillsCount = getSkillsCount(profile?.skillsPossessed) || extractSkillsFromSkillSet(profile?.skillsPossessed).length;
 
-  // Calculate Real-Time Career Score
+  // Calculate Real-Time Career Score using authoritative engine
   const scoreInput = {
-    hasResumeScanned: !!resumeAnalysis,
-    hasGithubScanned: !!devProfile,
-    projectsCount: devProfile?.repositoryCount || combinedProjects.length,
-    skillsCount: Object.keys(profile?.skillsPossessed || {}).length,
+    hasResumeScanned: !!resumeAnalysis || !!user.hasResumeScanned,
+    hasGithubScanned: !!user.hasGithubScanned,
+    projectsCount: user.projectsCount || 0,
+    skillsCount,
     roadmapAverageProgress: roadmapMetrics.completionPercentage,
-    applicationsCount: applications.length,
-    masteredQuestionsCount: interviewMetrics.completedCount,
+    applicationsCount,
+    masteredQuestionsCount: Math.max(user.masteredQuestionsCount || 0, completedSessions.length * 3),
     streakDays: user.streakDays || 0
   };
   const careerScoreObj = calculateCareerScore(scoreInput);
 
-  // Calculate Real-Time Job Readiness
+  // Calculate Real-Time Job Readiness using authoritative engine
   const readinessInput = {
     careerScore: careerScoreObj.score,
-    hasResumeScanned: !!resumeAnalysis,
+    hasResumeScanned: !!resumeAnalysis || !!user.hasResumeScanned,
     resumeScore: resumeAnalysis?.atsScore || 0,
-    hasGithubScanned: !!devProfile,
-    projectsCount: devProfile?.repositoryCount || combinedProjects.length,
+    hasGithubScanned: !!user.hasGithubScanned,
+    projectsCount: user.projectsCount || 0,
     interviewScore: interviewMetrics.averageScore,
-    masteredQuestionsCount: interviewMetrics.completedCount
+    masteredQuestionsCount: user.masteredQuestionsCount || 0
   };
   const readinessObj = calculateReadiness(readinessInput);
 
   // Compute Historical Growth Deltas
-  const latestSnapshot = await AnalyticsSnapshot.findOne({ userId }).sort({ createdAt: -1 });
   let growthMetrics = {
     previousScore: null,
     currentScore: careerScoreObj.score,
     weeklyGrowth: 0,
     monthlyGrowth: 0,
-    growthText: latestSnapshot ? `Score updated based on recent activity.` : "Initial baseline established."
+    growthText: latestSnapshot ? `Score updated based on recent activity.` : "Initial baseline established. Future reports will show measurable growth from this baseline."
   };
 
   if (latestSnapshot && latestSnapshot.careerScore !== undefined) {
@@ -446,59 +509,54 @@ async function generateCareerIntelligenceReport(userId, mode = "shareable") {
 
   // Skill Gap Lifecycle
   const gapLifecycle = await computeSkillGapLifecycle(
-    userId, 
-    targetRole, 
-    profile, 
-    careerContext.resumeContext, 
-    completedSessions, 
-    unresolvedMistakes, 
-    learningProgressList
+    userId,
+    targetRole,
+    profile,
+    resumeContext,
+    completedSessions,
+    unresolvedMistakes,
+    learningProgressList.map(progress => ({
+      ...progress,
+      title: roadmapSkills.find(skill => skill.id === progress.subSkillId)?.title || ""
+    }))
   );
 
   // Next Best Action
-  const nextActions = await computeNextBestAction(careerContext);
+  const nextActions = groundedFallbackActions({
+    targetRole, resumeContext, devContext: devProfile,
+    interviewContext: { ...interviewMetrics, repeatingMistakes: unresolvedMistakes }
+  });
 
-  // AI Executive Summary
-  let executiveSummary = "";
-  try {
-    const prompt = `Synthesize a professional, recruiter-facing Career Growth Summary for candidate ${user.name} targeting the role of "${targetRole}".
-Candidate Goal: ${careerGoal}.
-Projects: ${combinedProjects.length > 0 ? combinedProjects.map(p => p.name).join(", ") : "No verified projects available"}
-Experience: ${workExperience.length > 0 ? workExperience.map(e => `${e.position} at ${e.company}`).join(", ") : "No verified professional experience available"}
+  // Fetch last persisted AI summary and check staleness against live parameters
+  const experienceLevel = profile?.experienceLevel || user.experience || "Intermediate";
 
-Requirements:
-1. Write 2 concise, factual, highly professional paragraphs detailing: Current Career Direction -> Core Technical Focus -> Major Demonstrated Projects -> Professional Development.
-2. Refer explicitly to the target role "${targetRole}".
-3. Do NOT use generic AI fluff or self-praise phrases like "demonstrates proactive determination".
-4. Use gender-neutral language only. Refer to the person as "the candidate" or "the professional"; never use he, his, him, she, her, or hers.
-5. Do NOT make claims that are not supported by the supplied CareerOS data. If data is missing, say that it is not available.
-6. Do NOT output markdown symbols like asterisks (**), headers (###), or horizontal rules (---). Plain text only.`;
+  let aiSummaryObj = {
+    content: null,
+    status: "NONE",
+    generatedAt: null,
+    versionNumber: 0,
+    targetRole: null,
+    careerGoal: null
+  };
 
-    executiveSummary = await generateAiContent(
-      prompt,
-      "You are a Principal Executive Recruiter and Technical Architect. Write concise, factual, professional paragraphs without raw markdown tags.",
-      false
-    );
-  } catch (aiErr) {
-    console.error("AI Summary generation error:", aiErr.message);
+  if (latestAiSummary) {
+    const isTargetRoleChanged = latestAiSummary.targetRole && latestAiSummary.targetRole !== targetRole;
+    const isGoalChanged = latestAiSummary.careerGoal !== undefined && latestAiSummary.careerGoal !== careerGoal;
+    const isExperienceChanged = latestAiSummary.experienceLevel && latestAiSummary.experienceLevel !== experienceLevel;
+
+    const isStale = latestAiSummary.status === "STALE" || isTargetRoleChanged || isGoalChanged || isExperienceChanged;
+
+    aiSummaryObj = {
+      content: latestAiSummary.content,
+      status: isStale ? "STALE" : "CURRENT",
+      generatedAt: latestAiSummary.generatedAt || latestAiSummary.createdAt,
+      versionNumber: latestAiSummary.versionNumber || 1,
+      targetRole: latestAiSummary.targetRole,
+      careerGoal: latestAiSummary.careerGoal
+    };
   }
 
-  // Clean raw markdown
-  if (executiveSummary) {
-    executiveSummary = executiveSummary
-      .replace(/\*\*(.*?)\*\*/g, "$1")
-      .replace(/\*(.*?)\*/g, "$1")
-      .replace(/^#+\s*/gm, "")
-      .replace(/^---\s*$/gm, "")
-      .replace(/`/g, "")
-      .replace(/\b(he|she|him)\b/gi, "the candidate")
-      .replace(/\b(his|her|hers)\b/gi, "the candidate's")
-      .trim();
-  }
-
-  if (!executiveSummary || executiveSummary.trim().length === 0) {
-    executiveSummary = `The candidate is targeting the role of ${targetRole} with the stated career goal of ${careerGoal}. Verified projects, professional experience, and capability evidence are included only where available in CareerOS.\n\nNo additional professional claims are made where supporting CareerOS data is unavailable.`;
-  }
+  const executiveSummary = aiSummaryObj.content || `The candidate is targeting the role of ${targetRole} with the stated career goal of ${careerGoal}. Verified projects, professional experience, and capability evidence are included only where available in CareerOS.\n\nNo additional professional claims are made where supporting CareerOS data is unavailable.`;
 
   // Build Technology & Capability Matrix (Grouped)
   const skillsMatrix = {
@@ -540,40 +598,34 @@ Requirements:
     [...(possessedObj.cloud || []), ...(possessedObj.devops || [])].forEach(s => addSkillToMatrix("engineering", s, "Verified", ["Career Profile"]));
   }
 
-  // Build Career Trajectory Visual Timeline
-  const currentRole = effectiveWorkExperience[0]?.position || "Not available";
+  // Build Career Trajectory Visual Timeline & Remove Missing Stage Fallbacks
+  const currentRole = effectiveWorkExperience[0]?.position || null;
+
   const trajectoryTimeline = [
-    educationList.length > 0 && { title: "Education", detail: `${educationList[0].degree || "Qualification"} at ${educationList[0].institution || "Institution not available"}` },
+    educationList.length > 0 && { title: "Education", detail: `${educationList[0].degree || "Qualification"}${educationList[0].institution ? ` at ${educationList[0].institution}` : ""}` },
     skillsMatrix.languages.length > 0 && { title: "Verified capabilities", detail: skillsMatrix.languages.map(s => s.name).slice(0, 3).join(", ") },
     combinedProjects.length > 0 && { title: "Verified projects", detail: `${combinedProjects.length} project record(s)` },
     effectiveWorkExperience.length > 0 && { title: "Verified experience", detail: `${effectiveWorkExperience.length} experience record(s)` },
     interviewMetrics.completedCount > 0 && { title: "Interview validation", detail: `${interviewMetrics.completedCount} completed assessment(s)` },
-    { title: "Target role", detail: `${targetRole} — ${careerGoal}` }
+    { title: "Target role", detail: careerGoal !== "Career goal not configured" ? `${targetRole} — ${careerGoal}` : targetRole }
   ].filter(Boolean);
 
   // Build Shareable Growth Lifecycles
   const shareableLifecycles = gapLifecycle.map(buildShareableGrowthLifecycle);
 
-  // Compute Confidence Contributors Breakdown
+  // Compute Confidence Score using authoritative Confidence Engine
   const totalMatrixSkills = Object.values(skillsMatrix).flat().length;
-  const confidenceContributors = {
-    interviewPerformance: interviewMetrics.confidenceScore || (interviewMetrics.completedCount > 0 ? Math.min(100, interviewMetrics.averageScore || 70) : 60),
-    projectEvidence: combinedProjects.length > 0 ? Math.min(100, combinedProjects.length * 25) : 35,
-    skillEvidence: totalMatrixSkills > 0 ? Math.min(100, totalMatrixSkills * 10) : 45,
-    learningConsistency: user.streakDays ? Math.min(100, user.streakDays * 15 + 30) : 40
-  };
-
-  const calculatedConfidence = Math.round(
-    (confidenceContributors.interviewPerformance * 0.35) +
-    (confidenceContributors.projectEvidence * 0.25) +
-    (confidenceContributors.skillEvidence * 0.25) +
-    (confidenceContributors.learningConsistency * 0.15)
-  );
+  const confidenceObj = calculateConfidenceScore({
+    interviewMetrics,
+    projectsCount: combinedProjects.length,
+    totalSkillsCount: totalMatrixSkills,
+    streakDays: user.streakDays || 0
+  });
 
   const reportDTO = {
     mode,
     userId: user._id.toString(),
-    candidateName: user.name,
+    candidateName: personalInfo.name || user.name,
     candidateEmail: mode === "shareable" ? undefined : user.email,
     personalInfo: {
       githubUrl: personalInfo.githubUrl || profile?.githubUrl || user.githubUrl || "",
@@ -581,25 +633,26 @@ Requirements:
       portfolioUrl: personalInfo.portfolioUrl || profile?.portfolioUrl || ""
     },
     targetRole,
-    currentRole,
+    currentRole: currentRole || "Career Context Active",
     careerGoal,
     experienceLevel: profile?.experienceLevel || user.experience || "Intermediate",
     generatedAt: new Date().toISOString(),
     reportPeriod: `${new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toLocaleDateString()} – ${new Date().toLocaleDateString()}`,
-    
+
     // Core Scores
     careerScore: careerScoreObj.score,
     scoreBreakdown: mode === "private" ? careerScoreObj.breakdown : undefined,
     jobReadiness: readinessObj.jobReadiness,
     recommendationLevel: readinessObj.recommendation,
-    confidence: calculatedConfidence,
-    confidenceContributors,
-    
+    confidence: confidenceObj.confidence,
+    confidenceContributors: confidenceObj.contributors,
+
     // Growth
     growth: growthMetrics,
-    
+
     // Sections for Shareable Report
     executiveSummary,
+    aiSummary: aiSummaryObj,
     currentFocusAreas: [
       "Frontend Architecture & Modern Web UI",
       "Backend API Engineering & Database Optimization",
@@ -608,10 +661,10 @@ Requirements:
     ],
     careerDirectionVisual: [
       "Current Development",
-      currentRole,
-      targetRole,
-      careerGoal
-    ],
+      (currentRole && currentRole !== "Not available" && currentRole !== "Career Context Active") ? currentRole : null,
+      (targetRole && targetRole !== currentRole && targetRole !== "Not available") ? targetRole : null,
+      (careerGoal && careerGoal !== "Career goal not configured" && careerGoal !== "Not available") ? careerGoal : null
+    ].filter(step => step && typeof step === "string" && step.trim() !== "" && step.trim() !== "Not available" && step.trim() !== "Career goal not configured"),
     skillsMatrix,
     projects: combinedProjects,
     workExperience: effectiveWorkExperience,
@@ -619,16 +672,16 @@ Requirements:
     certifications: certificationsList,
     shareableLifecycles,
     trajectoryTimeline,
-    
+
     // Private Diagnostics
     skillGapLifecycle: gapLifecycle,
     resumeIntelligence: {
       atsScore: resumeAnalysis?.atsScore || 0,
-      missingKeywords: resumeAnalysis?.missingKeywords || [],
-      identifiedSkills: resumeAnalysis?.identifiedSkills || [],
+      missingKeywords,
+      identifiedSkills: [...new Set(Object.values(resumeSkills).flat().filter(skill => typeof skill === "string"))],
       statusText: resumeAnalysis ? "Resume scanned and analyzed." : "No resume scanned yet."
     },
-    
+
     interviewIntelligence: interviewMetrics,
     roadmapIntelligence: roadmapMetrics,
     projectIntelligence: {
@@ -637,7 +690,7 @@ Requirements:
       missingPractices: devProfile?.missingPractices || [],
       languages: devProfile?.languageDistribution || {}
     },
-    
+
     nextBestActions: nextActions
   };
 
@@ -675,8 +728,111 @@ async function createCareerReportSnapshot(userId, mode = "shareable", title = ""
   return { snapshot, reportDTO };
 }
 
+// In-memory locks to prevent concurrent duplicate AI summary generations per candidate
+const activeGenerations = new Set();
+
+/**
+ * Explicitly generates a new AI Executive Summary for a candidate and persists it.
+ */
+async function generateAiExecutiveSummary(userId) {
+  const userIdStr = userId.toString();
+  if (activeGenerations.has(userIdStr)) {
+    throw new Error("AI Summary generation is already in progress for this candidate.");
+  }
+
+  activeGenerations.add(userIdStr);
+
+  try {
+    const user = await User.findById(userId).select("-password");
+    if (!user) throw new Error("User not found");
+
+    const profile = await CareerProfile.findOne({ userId });
+    const careerContext = await getCareerContext(userId);
+    const targetRole = careerContext.targetRole;
+    const careerGoal = resolveCareerGoal(profile?.careerGoal, user?.goal, targetRole);
+    const experienceLevel = profile?.experienceLevel || user.experience || "Intermediate";
+
+    const latestResume = await Resume.findOne({ userId }).sort({ uploadDate: -1 });
+    let resumeVersion = null;
+    if (latestResume && latestResume.versions && latestResume.versions.length > 0) {
+      resumeVersion = latestResume.versions.find(v => v.versionNumber === latestResume.activeVersionId) || latestResume.versions[0];
+    }
+    const workExperience = resumeVersion?.workExperience || [];
+    const resumeProjects = resumeVersion?.projects || [];
+
+    const prompt = `Synthesize a professional, recruiter-facing Career Growth Summary for candidate ${user.name} targeting the role of "${targetRole}".
+Candidate Goal: ${careerGoal}.
+Experience Level: ${experienceLevel}.
+Projects: ${resumeProjects.length > 0 ? resumeProjects.map(p => p.title || p.name).join(", ") : "No verified projects available"}
+Experience: ${workExperience.length > 0 ? workExperience.map(e => `${e.position} at ${e.company}`).join(", ") : "No verified professional experience available"}
+
+Requirements:
+1. Write 2 concise, factual, highly professional paragraphs detailing: Current Career Direction -> Core Technical Focus -> Major Demonstrated Projects -> Professional Development.
+2. Refer explicitly to the target role "${targetRole}".
+3. Do NOT use generic AI fluff or self-praise phrases like "demonstrates proactive determination".
+4. Use gender-neutral language only. Refer to the person as "the candidate" or "the professional"; never use he, his, him, she, her, or hers.
+5. Do NOT make claims that are not supported by the supplied CareerOS data. If data is missing, say that it is not available.
+6. Do NOT output markdown symbols like asterisks (**), headers (###), or horizontal rules (---). Plain text only.`;
+
+    let content = await generateAiContent(
+      prompt,
+      "You are a Principal Executive Recruiter and Technical Architect. Write concise, factual, professional paragraphs without raw markdown tags.",
+      false
+    );
+
+    if (content) {
+      content = content
+        .replace(/\*\*(.*?)\*\*/g, "$1")
+        .replace(/\*(.*?)\*/g, "$1")
+        .replace(/^#+\s*/gm, "")
+        .replace(/^---\s*$/gm, "")
+        .replace(/`/g, "")
+        .replace(/\b(he|she|him)\b/gi, "the candidate")
+        .replace(/\b(his|her|hers)\b/gi, "the candidate's")
+        .trim();
+    }
+
+    if (!content || content.trim().length === 0) {
+      content = `The candidate is targeting the role of ${targetRole} with the stated career goal of ${careerGoal}. Verified projects, professional experience, and capability evidence are included only where available in CareerOS.\n\nNo additional professional claims are made where supporting CareerOS data is unavailable.`;
+    }
+
+    // Mark previous summaries for this user as STALE
+    await CareerAiSummary.updateMany({ userId }, { status: "STALE" });
+
+    // Determine next version number
+    const count = await CareerAiSummary.countDocuments({ userId });
+    const versionNumber = count + 1;
+
+    // Save new AI summary
+    const aiSummary = new CareerAiSummary({
+      userId,
+      content,
+      targetRole,
+      careerGoal,
+      experienceLevel,
+      versionNumber,
+      status: "CURRENT",
+      generatedAt: new Date()
+    });
+
+    await aiSummary.save();
+
+    return {
+      content: aiSummary.content,
+      status: "CURRENT",
+      generatedAt: aiSummary.generatedAt,
+      versionNumber: aiSummary.versionNumber,
+      targetRole: aiSummary.targetRole,
+      careerGoal: aiSummary.careerGoal
+    };
+  } finally {
+    activeGenerations.delete(userIdStr);
+  }
+}
+
 module.exports = {
   generateCareerIntelligenceReport,
+  generateAiExecutiveSummary,
   createCareerReportSnapshot,
   computeSkillGapLifecycle
 };

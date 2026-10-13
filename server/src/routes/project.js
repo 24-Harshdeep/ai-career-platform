@@ -1,4 +1,5 @@
 const express = require("express");
+const { getErrorMessage } = require("../utils/errorMessage");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
 
@@ -38,7 +39,7 @@ router.post("/audit", authMiddleware, async (req, res) => {
     );
     return successResponse(res, "Project deployment audited successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to audit project: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to audit project"), [], 500);
   }
 });
 
@@ -48,7 +49,7 @@ router.get("/history", authMiddleware, async (req, res) => {
     const data = await projectService.getProjectHistory(req.user._id || req.user.id);
     return successResponse(res, "Project audits history retrieved successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to retrieve history: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve history"), [], 500);
   }
 });
 
@@ -70,7 +71,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
 
     return successResponse(res, "Project summary details retrieved successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to retrieve summary: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve summary"), [], 500);
   }
 });
 
@@ -86,7 +87,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
     }
     return successResponse(res, "Audited project report retrieved successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to retrieve report: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve report"), [], 500);
   }
 });
 

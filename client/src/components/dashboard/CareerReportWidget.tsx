@@ -11,10 +11,6 @@ export function CareerReportWidget() {
   const [downloading, setDownloading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchSummary();
-  }, []);
-
   const fetchSummary = async () => {
     try {
       setLoading(true);
@@ -27,6 +23,10 @@ export function CareerReportWidget() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchSummary();
+  }, []);
 
   const handleDownloadPdf = async () => {
     try {

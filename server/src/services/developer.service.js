@@ -2,6 +2,7 @@ const User = require("../models/User");
 const GithubRepository = require("../models/GithubRepository");
 const GithubRepositoryAnalysis = require("../models/GithubRepositoryAnalysis");
 const DeveloperProfile = require("../models/DeveloperProfile");
+const CareerProfile = require("../models/CareerProfile");
 
 
 const { syncRepositories } = require("../engines/github/sync.engine");
@@ -21,75 +22,25 @@ const { recalculateUserStats } = require("./career.service");
 async function syncDeveloperProfile(userId, githubUsername) {
   const username = githubUsername?.trim();
   if (!username) throw new Error("GitHub username is required.");
-  let reposList = [];
-
+  let response;
   try {
-    // Crawl user public repositories list
-    const res = await fetch(`https://api.github.com/users/${encodeURIComponent(username)}/repos?per_page=6&sort=updated`, {
-      headers: { "User-Agent": "CareerOS-DeveloperScanner/1.0" }
+    response = await fetch(`https://api.github.com/users/${encodeURIComponent(username)}/repos?per_page=6&sort=updated`, {
+      headers: { "User-Agent": "CareerOS-DeveloperScanner/1.0" },
+      signal: AbortSignal.timeout(10000)
     });
-    
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        reposList = data;
-      }
-    } else {
-      console.warn(`[GitHub Sync] GitHub API status ${res.status} for '${username}'. Falling back to candidate project evidence.`);
-    }
   } catch (err) {
-    console.warn(`[GitHub Sync] Failed to retrieve repos from GitHub REST API:`, err.message);
+    console.warn("[GitHub Sync] GitHub repository request failed:", err.message);
+    throw new Error("Could not reach GitHub. Please retry the repository sync.");
   }
 
-  // Fallback to candidate resume projects or role-based baseline evidence if GitHub 404s or API is offline
-  if (reposList.length === 0) {
-    const Resume = require("../models/Resume");
-    const resume = await Resume.findOne({ userId });
-    const activeVersion = resume?.versions?.find(v => v.versionNumber === resume.activeVersionId) || resume?.versions?.[0];
-    const candidateProjects = activeVersion?.projects || [];
-
-    const userDoc = await User.findById(userId);
-    const targetRole = userDoc?.goal || "Full Stack Developer";
-
-    if (candidateProjects.length > 0) {
-      reposList = candidateProjects.map((p, idx) => ({
-        name: (p.title || `project-${idx + 1}`).toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
-        description: p.description || `Repository for ${p.title}`,
-        html_url: p.link || `https://github.com/${username}/${(p.title || "repo").toLowerCase().replace(/\s+/g, "-")}`,
-        language: p.technologies?.[0] || (targetRole.includes("Frontend") ? "TypeScript" : "JavaScript"),
-        stargazers_count: 3 + (idx * 2),
-        forks_count: 1 + idx
-      }));
-    } else {
-      const baseName = username.toLowerCase().replace(/[^a-z0-9-]/g, "") || "developer";
-      reposList = [
-        {
-          name: `${baseName}-career-platform`,
-          description: "Full stack web application built with React, Node.js, and MongoDB.",
-          html_url: `https://github.com/${username}/${baseName}-career-platform`,
-          language: "TypeScript",
-          stargazers_count: 5,
-          forks_count: 2
-        },
-        {
-          name: `${baseName}-api-service`,
-          description: "RESTful backend microservice with authentication and database ORM.",
-          html_url: `https://github.com/${username}/${baseName}-api-service`,
-          language: "JavaScript",
-          stargazers_count: 3,
-          forks_count: 1
-        },
-        {
-          name: `${baseName}-portfolio`,
-          description: "Responsive developer portfolio and project showcase.",
-          html_url: `https://github.com/${username}/${baseName}-portfolio`,
-          language: "HTML",
-          stargazers_count: 4,
-          forks_count: 1
-        }
-      ];
-    }
+  if (response.status === 404) throw new Error("GitHub username was not found.");
+  if (response.status === 403 || response.status === 429) {
+    throw new Error("GitHub rate limit reached. Please retry the repository sync later.");
   }
+  if (!response.ok) throw new Error("GitHub could not provide repository details.");
+
+  const reposList = await response.json();
+  if (!Array.isArray(reposList)) throw new Error("GitHub returned an invalid repository response.");
 
   const savedRepos = [];
   const savedAnalyses = [];
@@ -104,7 +55,7 @@ async function syncDeveloperProfile(userId, githubUsername) {
     const forks = raw.forks_count || 0;
 
     // Discover repository file details via GitHub contents API
-    let filesList = [];
+    let filesList = null;
     try {
       const filesRes = await fetch(`https://api.github.com/repos/${username}/${name}/contents`, {
         headers: { "User-Agent": "CareerOS-DeveloperScanner/1.0" },
@@ -121,12 +72,15 @@ async function syncDeveloperProfile(userId, githubUsername) {
       console.warn(`[GitHub Sync] Contents scan failed for ${name}:`, filesErr.message);
     }
 
-    // Dynamic audits based on file presence (or default baseline if contents API is rate-limited)
-    const hasReadme = filesList.length > 0 ? filesList.some(f => f === "readme.md" || f === "readme.txt") : true;
+    if (filesList === null) {
+      throw new Error(`Could not inspect repository contents for ${name}. Please retry the sync later.`);
+    }
+
+    const hasReadme = filesList.some(f => f === "readme.md" || f === "readme.txt");
     const hasDocker = filesList.length > 0 ? filesList.some(f => f.includes("docker")) : false;
     const hasEnvExample = filesList.length > 0 ? filesList.some(f => f === ".env.example") : false;
     const hasTests = filesList.length > 0 ? filesList.some(f => f.includes("test") || f.includes("spec") || f === "tests") : false;
-    const hasLicense = filesList.length > 0 ? filesList.some(f => f === "license" || f === "license.txt") : true;
+    const hasLicense = filesList.some(f => f === "license" || f === "license.txt");
 
     const documentationScore = hasReadme ? 95 : 45;
     const testingScore = hasTests ? 90 : 35;
@@ -163,18 +117,22 @@ async function syncDeveloperProfile(userId, githubUsername) {
     if (!hasLicense) missingPractices.push(`${name}: Missing LICENSE file`);
 
     // Save Repository Analysis document
-    const analysis = await GithubRepositoryAnalysis.create({
-      repositoryId: repo._id,
-      healthScore,
-      documentationScore,
-      testingScore,
-      architectureScore,
-      activityScore,
-      maintainabilityScore,
-      securityScore,
-      missingPractices,
-      analysisVersion: "v1.0.0"
-    });
+    const analysis = await GithubRepositoryAnalysis.findOneAndUpdate(
+      { repositoryId: repo._id },
+      {
+        healthScore,
+        documentationScore,
+        testingScore,
+        architectureScore,
+        activityScore,
+        maintainabilityScore,
+        securityScore,
+        missingPractices,
+        analysisVersion: "v1.0.0",
+        analyzedAt: new Date()
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
     savedAnalyses.push(analysis);
   }
 
@@ -272,16 +230,11 @@ Output a JSON object conforming exactly to this structure:
     await userDoc.save();
   }
 
-  try {
-    const CareerProfile = require("../models/CareerProfile");
-    const profileDoc = await CareerProfile.findOne({ userId });
-    if (profileDoc) {
-      profileDoc.githubUrl = `https://github.com/${username}`;
-      await profileDoc.save();
-    }
-  } catch (profErr) {
-    console.warn("[GitHub Sync] Could not save githubUrl to CareerProfile:", profErr.message);
-  }
+  await CareerProfile.findOneAndUpdate(
+    { userId },
+    { $set: { githubUrl: `https://github.com/${username}` } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
 
   // 6. Force recalculate Career Score
   await recalculateUserStats(userId);
@@ -297,7 +250,8 @@ async function getDeveloperProfile(userId) {
 
     const repos = await GithubRepository.find({ userId });
     const repoIds = repos.map(r => r._id);
-    const analyses = await GithubRepositoryAnalysis.find({ repositoryId: { $in: repoIds } });
+    const analyses = await GithubRepositoryAnalysis.find({ repositoryId: { $in: repoIds } })
+      .sort({ analyzedAt: -1, updatedAt: -1 });
 
     return toDeveloperIntelligenceDTO(profile, repos, analyses);
   } catch (err) {

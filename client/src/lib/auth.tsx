@@ -25,7 +25,6 @@ interface AuthContextType {
   session: Session;
   signIn: (email?: string, password?: string) => Promise<boolean>;
   signOut: () => Promise<void>;
-  switchUser: (role: string, name: string) => void;
   signUp: (name: string, email: string, password: string) => Promise<boolean>;
 }
 
@@ -178,22 +177,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   };
 
-  const switchUser = (role: string, name: string) => {
-    const demoToken = "demo_careeros_token_" + Date.now();
-    localStorage.setItem("careeros_token", demoToken);
-    setSession({
-      user: {
-        name,
-        email: `${name.toLowerCase().replace(/\s+/g, ".")}@careeros.dev`,
-        role,
-      },
-      status: "authenticated",
-    });
-  };
-
-
   return (
-    <AuthContext.Provider value={{ session, signIn, signOut, switchUser, signUp }}>
+    <AuthContext.Provider value={{ session, signIn, signOut, signUp }}>
       {children}
     </AuthContext.Provider>
   );
@@ -209,7 +194,7 @@ export const useSession = () => {
 
 // 🔐 Client AuthGuard Interface Form Component
 export const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { session, signIn, signUp, switchUser } = useSession();
+  const { session, signIn, signUp } = useSession();
   const fetchDashboardData = useCareerStore((state) => state.fetchDashboardData);
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
@@ -277,7 +262,7 @@ export const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children })
   };
 
   if (session.status === "unauthenticated") {
-    return <LoginView onSignIn={signIn} onSignUp={signUp} onQuickDemoLogin={switchUser} />;
+    return <LoginView onSignIn={signIn} onSignUp={signUp} />;
   }
 
   const handleSkipOnboarding = async () => {

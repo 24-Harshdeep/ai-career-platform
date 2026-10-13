@@ -2,10 +2,14 @@
   "name": "careeros-backend",
   "version": "1.0.0",
   "description": "Backend API server for CareerOS",
+  "engines": {
+    "node": "^22.13.0 || ^24.0.0"
+  },
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node src/index.js"
+    "dev": "node src/index.js",
+    "test": "node --test src/tests/*.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -18,7 +22,7 @@
     "jsonwebtoken": "^9.0.2",
     "mammoth": "^1.12.3",
     "mongoose": "^8.3.1",
-    "multer": "^2.2.0",
+    "multer": "^2.4.0",
     "pdf-parse": "^1.1.1",
     "pdfkit": "^0.20.2"
   }

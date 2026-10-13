@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { reportService, CareerReportDTO, ReportSnapshotItem } from "@/services/report.service";
 import Card from "@/components/ui/Card/Card";
 import Button from "@/components/ui/Button/Button";
@@ -46,34 +46,60 @@ export default function CareerReportPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [downloading, setDownloading] = useState<boolean>(false);
   const [creatingSnapshot, setCreatingSnapshot] = useState<boolean>(false);
+  const [generatingAiSummary, setGeneratingAiSummary] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, [mode, selectedSnapshotId]);
+  const requestId = useRef(0);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    const currentRequest = ++requestId.current;
     try {
       setLoading(true);
       setError(null);
 
       const reportData = await reportService.getCareerReport(mode, selectedSnapshotId || undefined);
       
-      let snapshotsData: ReportSnapshotItem[] = [];
-      try {
-        snapshotsData = await reportService.getSnapshots();
-      } catch (snapErr) {
-        console.warn("Snapshots list endpoint warning:", snapErr);
-      }
-
+      if (currentRequest !== requestId.current) return;
       setReport(reportData.report);
       setIsSnapshotView(reportData.isSnapshot);
       setVersionNum(reportData.versionNumber);
-      setSnapshots(Array.isArray(snapshotsData) ? snapshotsData : []);
     } catch (err: any) {
-      setError(err.message || "Failed to load report");
+      if (currentRequest === requestId.current) setError(err.message || "Failed to load report");
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current) setLoading(false);
+    }
+  }, [mode, selectedSnapshotId]);
+
+  useEffect(() => {
+    void loadData();
+    return () => { requestId.current += 1; };
+  }, [loadData]);
+
+  useEffect(() => {
+    let active = true;
+    reportService.getSnapshots().then(items => {
+      if (active) setSnapshots(items);
+    }).catch(() => { if (active) setSnapshots([]); });
+    return () => { active = false; };
+  }, [selectedSnapshotId]);
+
+  const handleGenerateAiSummary = async () => {
+    if (generatingAiSummary || isSnapshotView || loading) return;
+    const currentRequest = requestId.current;
+    try {
+      setGeneratingAiSummary(true);
+      const { aiSummary } = await reportService.generateAiSummary();
+      if (report && currentRequest === requestId.current) {
+        setReport({
+          ...report,
+          aiSummary,
+          executiveSummary: aiSummary.content || report.executiveSummary
+        });
+      }
+    } catch (err: any) {
+      alert("Failed to generate AI Summary: " + err.message);
+    } finally {
+      setGeneratingAiSummary(false);
     }
   };
 
@@ -101,12 +127,12 @@ export default function CareerReportPage() {
     }
   };
 
-  if (loading && !report) {
+  if (loading) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-4">
         <Loader2 className="w-10 h-10 animate-spin text-cyan-400" />
-        <p className="text-sm font-semibold text-slate-300">Compiling CareerOS Central Intelligence...</p>
-        <p className="text-xs text-slate-500">Extracting verified artifacts, portfolio evidence, and skill trajectories.</p>
+        <p className="text-sm font-semibold text-slate-300">Loading your saved career report...</p>
+        <p className="text-xs text-slate-500">Fetching scores, skills, and portfolio evidence.</p>
       </div>
     );
   }
@@ -177,31 +203,6 @@ export default function CareerReportPage() {
                 <span>Private Diagnostics</span>
               </button>
             </div>
-
-            {/* Version Snapshot Selector */}
-            {Array.isArray(snapshots) && snapshots.length > 0 && (
-              <select
-                value={selectedSnapshotId}
-                onChange={(e) => setSelectedSnapshotId(e.target.value)}
-                className="bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-cyan-500"
-              >
-                <option value="">Live Report (Current)</option>
-                {snapshots.map((snap) => (
-                  <option key={snap._id} value={snap._id}>
-                    v{snap.versionNumber} - {snap.targetRole} ({new Date(snap.generatedAt).toLocaleDateString()})
-                  </option>
-                ))}
-              </select>
-            )}
-
-            <Button
-              variant="secondary"
-              onClick={handleCreateSnapshot}
-              isLoading={creatingSnapshot}
-              className="text-xs bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-200"
-            >
-              <History className="w-4 h-4 mr-1.5 text-cyan-400" /> Save Version
-            </Button>
 
             <Button
               variant="ai"
@@ -301,27 +302,86 @@ export default function CareerReportPage() {
                 </div>
               </div>
 
-              {/* Factual Executive Profile */}
-              <div className="bg-purple-950/30 border border-purple-800/40 p-5 rounded-xl space-y-2">
-                <div className="flex items-center space-x-2 text-purple-400 text-xs font-bold uppercase tracking-wider">
-                  <Sparkles className="w-4 h-4" />
-                  <span>Professional Profile</span>
+              {/* AI Executive Summary Card */}
+              <div className="bg-slate-950/90 border border-purple-900/50 rounded-2xl p-6 space-y-4 shadow-xl relative overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/30 pb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-purple-500/10 border border-purple-500/30 rounded-xl text-purple-400">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <h3 className="text-base font-bold text-white tracking-tight">AI Executive Summary</h3>
+                        {report.aiSummary?.status === "CURRENT" && report.aiSummary.versionNumber ? (
+                          <Badge variant="success" className="text-[10px] px-2 py-0.5">
+                            v{report.aiSummary.versionNumber} &bull; Current
+                          </Badge>
+                        ) : report.aiSummary?.status === "STALE" ? (
+                          <Badge variant="warning" className="text-[10px] px-2 py-0.5">
+                            Outdated (Stale)
+                          </Badge>
+                        ) : (
+                          <Badge variant="muted" className="text-[10px] px-2 py-0.5">
+                            Not Generated
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {report.aiSummary?.generatedAt
+                          ? `Generated on ${new Date(report.aiSummary.generatedAt).toLocaleDateString(undefined, { dateStyle: "medium" })}`
+                          : "User-initiated AI analysis based on your profile & career context."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="ai"
+                    onClick={handleGenerateAiSummary}
+                    isLoading={generatingAiSummary}
+                    disabled={generatingAiSummary || isSnapshotView || loading}
+                    className="text-xs font-bold px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-purple-900/20 shrink-0"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                    {report.aiSummary?.status === "CURRENT"
+                      ? "Generate New Version"
+                      : report.aiSummary?.status === "STALE"
+                      ? "Update AI Summary"
+                      : "Generate AI Summary"}
+                  </Button>
                 </div>
-                <p className="text-sm text-purple-100/90 leading-relaxed font-normal whitespace-pre-line">
-                  {report.executiveSummary}
-                </p>
+
+                {/* Staleness Warning Banner */}
+                {report.aiSummary?.status === "STALE" && (
+                  <div className="bg-amber-950/40 border border-amber-800/50 p-3 rounded-xl flex items-center justify-between text-xs text-amber-200">
+                    <div className="flex items-center space-x-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>
+                        Your target role, career goal, or experience level updated since the last AI summary generation. Click <strong>Update AI Summary</strong> above to refresh.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Summary Text Content */}
+                <div className="bg-purple-950/20 border border-purple-800/20 p-4 rounded-xl">
+                  <p className="text-sm text-purple-100/90 leading-relaxed font-normal whitespace-pre-line">
+                    {report.aiSummary?.content || (isSnapshotView ? report.executiveSummary : "No AI summary generated yet. Select Generate AI Summary to create one from your saved profile. Opening this page does not run AI.")}
+                  </p>
+                </div>
               </div>
 
               {/* Career Direction Visual Flow */}
               <div className="space-y-3 pt-2">
                 <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Career Direction Trajectory</span>
                 <div className="flex flex-wrap items-center gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
-                  {report.careerDirectionVisual?.map((step, idx) => (
+                  {report.careerDirectionVisual
+                    ?.filter(step => step && step !== "Not available" && step !== "Career goal not configured")
+                    .map((step, idx, arr) => (
                     <React.Fragment key={idx}>
                       <div className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs font-semibold text-slate-200">
                         {step}
                       </div>
-                      {idx < (report.careerDirectionVisual?.length || 0) - 1 && (
+                      {idx < arr.length - 1 && (
                         <ArrowRight className="w-4 h-4 text-cyan-400 shrink-0" />
                       )}
                     </React.Fragment>
@@ -329,46 +389,58 @@ export default function CareerReportPage() {
                 </div>
               </div>
 
-              {/* Secondary CareerOS Scores Banner */}
+              {/* Secondary CareerOS Scores Banner with Data Provenance Labels */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                 <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Career Score</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Career Score</span>
+                    <span className="text-[9px] text-slate-500">Central Brain Engine</span>
+                  </div>
                   <div className="text-2xl font-extrabold text-white mt-1">{report.careerScore} / 100</div>
                   <span className="text-[10px] text-cyan-400 mt-1 block">{report.growth.growthText}</span>
                 </div>
 
                 <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Job Readiness</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Job Readiness</span>
+                    <span className="text-[9px] text-slate-500">Target Role Matched</span>
+                  </div>
                   <div className="text-2xl font-extrabold text-emerald-400 mt-1">{report.jobReadiness}%</div>
-                  <span className="text-[10px] text-emerald-300 mt-1 block">Role Matched</span>
+                  <span className="text-[10px] text-emerald-300 mt-1 block">Evaluated against {report.targetRole}</span>
                 </div>
 
                 <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Confidence Score</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Confidence Score</span>
+                    <span className="text-[9px] text-slate-500">Multi-Factor Engine</span>
+                  </div>
                   <div className="text-2xl font-extrabold text-amber-400 mt-1">{report.confidence}%</div>
-                  <span className="text-[10px] text-slate-400 mt-1 block">Grounded Output</span>
+                  <span className="text-[10px] text-slate-400 mt-1 block">Interview, project, skills & consistency</span>
                 </div>
               </div>
 
               {/* Confidence Contributor Breakdown */}
               {report.confidenceContributors && (
                 <div className="bg-purple-950/40 border border-purple-800/50 p-4 rounded-xl space-y-2">
-                  <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider block">Confidence Score Contributor Breakdown</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider block">Confidence Score Contributor Breakdown</span>
+                    <span className="text-[9px] text-purple-400/80">Authoritative Provenance</span>
+                  </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                     <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800">
-                      <span className="text-[10px] text-slate-400 block">Interview Perf.</span>
+                      <span className="text-[10px] text-slate-400 block">Interview Perf. (35%)</span>
                       <span className="font-bold text-cyan-300">{report.confidenceContributors.interviewPerformance}%</span>
                     </div>
                     <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800">
-                      <span className="text-[10px] text-slate-400 block">Project Evidence</span>
+                      <span className="text-[10px] text-slate-400 block">Project Evidence (25%)</span>
                       <span className="font-bold text-emerald-300">{report.confidenceContributors.projectEvidence}%</span>
                     </div>
                     <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800">
-                      <span className="text-[10px] text-slate-400 block">Skill Matrix</span>
+                      <span className="text-[10px] text-slate-400 block">Skill Matrix (25%)</span>
                       <span className="font-bold text-purple-300">{report.confidenceContributors.skillEvidence}%</span>
                     </div>
                     <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800">
-                      <span className="text-[10px] text-slate-400 block">Consistency</span>
+                      <span className="text-[10px] text-slate-400 block">Consistency (15%)</span>
                       <span className="font-bold text-amber-300">{report.confidenceContributors.learningConsistency}%</span>
                     </div>
                   </div>
@@ -477,7 +549,9 @@ export default function CareerReportPage() {
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/60 pb-2">
                           <div>
                             <h4 className="text-base font-bold text-white">{proj.name}</h4>
-                            <span className="text-xs text-cyan-400 font-semibold">Role: {proj.role}</span>
+                            <span className="text-xs text-cyan-400 font-semibold">
+                              Role: {proj.role && proj.role !== "Not available" ? proj.role : (report.targetRole && report.targetRole !== "Not available" ? report.targetRole : "Software Developer")}
+                            </span>
                           </div>
                           <span className="text-[10px] font-semibold text-slate-400 bg-slate-900 px-2.5 py-1 rounded border border-slate-800">
                             {proj.evidence}

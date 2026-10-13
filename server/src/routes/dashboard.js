@@ -1,4 +1,5 @@
 const express = require("express");
+const { getErrorMessage } = require("../utils/errorMessage");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
 const { getDashboardData } = require("../services/dashboard.service");
@@ -20,7 +21,7 @@ router.get("/", authMiddleware, async (req, res) => {
   } catch (err) {
     return res.status(500).json({
       success: false,
-      message: `Failed to compile dashboard: ${err.message}`
+      message: getErrorMessage(err, "Failed to compile dashboard")
     });
   }
 });

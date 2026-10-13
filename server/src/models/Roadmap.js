@@ -24,7 +24,23 @@ const RoadmapSchema = new mongoose.Schema({
   id: { type: String, required: true },
   title: { type: String, required: true },
   reasoning: { type: String, default: "" },
-  modules: [ModuleSchema]
+  modules: [ModuleSchema],
+  versionNumber: { type: Number, default: 1 },
+  lastAdaptedReason: { type: String, default: "INITIAL_GENERATION" },
+  changeHistory: [{
+    versionNumber: { type: Number, required: true },
+    reason: { type: String, required: true },
+    summary: { type: String, default: "" },
+    timestamp: { type: Date, default: Date.now }
+  }],
+  pendingProposals: [{
+    id: { type: String, required: true },
+    skill: { type: String, required: true },
+    reason: { type: String, default: "" },
+    category: { type: String, default: "Job Requirement" },
+    type: { type: String, enum: ["ADD", "DEFER", "REMOVE"], default: "ADD" },
+    addedAt: { type: Date, default: Date.now }
+  }]
 }, { timestamps: true });
 
 module.exports = mongoose.model("Roadmap", RoadmapSchema);

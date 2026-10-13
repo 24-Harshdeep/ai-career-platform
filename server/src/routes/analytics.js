@@ -1,4 +1,5 @@
 const express = require("express");
+const { getErrorMessage } = require("../utils/errorMessage");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
 
@@ -28,7 +29,7 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
     const data = await analyticsService.compileDashboardData(req.user._id || req.user.id);
     return successResponse(res, "Executive Dashboard analytics compiled successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to compile analytics: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to compile analytics"), [], 500);
   }
 });
 

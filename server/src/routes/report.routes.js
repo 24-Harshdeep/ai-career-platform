@@ -1,10 +1,13 @@
 const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
-const { getCareerReport, downloadReportPdf, getReportSummary, getSnapshots, createSnapshot } = require("../controllers/report.controller");
+const { getCareerReport, downloadReportPdf, getReportSummary, getSnapshots, createSnapshot, generateAiSummary } = require("../controllers/report.controller");
 
 // GET /api/career/report
 router.get("/", authMiddleware, getCareerReport);
+
+// POST /api/career/report/ai-summary
+router.post("/ai-summary", authMiddleware, generateAiSummary);
 
 // GET /api/career/report/pdf
 router.get("/pdf", authMiddleware, downloadReportPdf);

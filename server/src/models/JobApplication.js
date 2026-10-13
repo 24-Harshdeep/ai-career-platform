@@ -10,7 +10,11 @@ const JobApplicationSchema = new mongoose.Schema({
   },
   savedAt: { type: Date, default: Date.now },
   appliedAt: { type: Date, default: null },
-  notes: { type: String, default: "" }
+  notes: { type: String, default: "" },
+  extractedGaps: [{
+    skill: { type: String, required: true },
+    addedToRoadmap: { type: Boolean, default: false }
+  }]
 }, { timestamps: true });
 
 JobApplicationSchema.index({ userId: 1, jobId: 1 }, { unique: true });

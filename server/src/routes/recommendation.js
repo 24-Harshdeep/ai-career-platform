@@ -1,4 +1,5 @@
 const express = require("express");
+const { getErrorMessage } = require("../utils/errorMessage");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
 
@@ -28,7 +29,7 @@ router.get("/", authMiddleware, async (req, res) => {
     const data = await recommendationService.getRankedRecommendations(req.user._id || req.user.id);
     return successResponse(res, "Ranked recommendations list retrieved successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to retrieve recommendations: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve recommendations"), [], 500);
   }
 });
 
@@ -46,7 +47,7 @@ router.post("/complete", authMiddleware, async (req, res) => {
     );
     return successResponse(res, "Recommendation marked as completed.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to complete recommendation: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to complete recommendation"), [], 500);
   }
 });
 
@@ -64,7 +65,7 @@ router.post("/skip", authMiddleware, async (req, res) => {
     );
     return successResponse(res, "Recommendation marked as skipped.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to skip recommendation: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to skip recommendation"), [], 500);
   }
 });
 
@@ -74,7 +75,7 @@ router.post("/regenerate", authMiddleware, async (req, res) => {
     const data = await recommendationService.forceRegenerate(req.user._id || req.user.id);
     return successResponse(res, "Recommendations list regenerated successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to regenerate recommendations: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to regenerate recommendations"), [], 500);
   }
 });
 

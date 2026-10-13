@@ -1,4 +1,5 @@
 const express = require("express");
+const { getErrorMessage } = require("../utils/errorMessage");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
 
@@ -36,7 +37,7 @@ router.post("/match", authMiddleware, async (req, res) => {
     });
     return successResponse(res, "Job description analyzed successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to analyze job: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to analyze job"), [], 500);
   }
 });
 
@@ -46,7 +47,7 @@ router.post("/save", authMiddleware, async (req, res) => {
     const data = await jobService.matchAndSaveJob(req.user._id || req.user.id, req.body);
     return successResponse(res, "Job opportunity saved to pipeline successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to save opportunity: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to save opportunity"), [], 500);
   }
 });
 
@@ -56,7 +57,7 @@ router.get("/pipeline", authMiddleware, async (req, res) => {
     const data = await jobService.getJobPipeline(req.user._id || req.user.id);
     return successResponse(res, "Hiring pipeline retrieved successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to retrieve pipeline: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve pipeline"), [], 500);
   }
 });
 
@@ -71,7 +72,7 @@ router.put("/status", authMiddleware, async (req, res) => {
     const data = await jobService.updateJobStatus(req.user._id || req.user.id, opportunityId, status);
     return successResponse(res, "Hiring pipeline stage updated successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to update status: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to update status"), [], 500);
   }
 });
 
@@ -81,7 +82,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
     await jobService.deleteJobOpportunity(req.user._id || req.user.id, req.params.id);
     return successResponse(res, "Job opportunity deleted successfully.", null);
   } catch (err) {
-    return errorResponse(res, `Failed to delete opportunity: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to delete opportunity"), [], 500);
   }
 });
 

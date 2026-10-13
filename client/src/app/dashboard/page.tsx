@@ -64,7 +64,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { label: "Upload Resume", href: "/resume" },
-                { label: "Add Opportunity", href: "/applications" },
+                { label: "Add Opportunity", href: "/resume?step=4" },
                 { label: "Analyze GitHub", href: "/portfolio" },
                 { label: "Mock Interview", href: "/interview" },
                 { label: "Weekly Plan", href: "/roadmap" },

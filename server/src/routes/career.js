@@ -1,4 +1,5 @@
 const express = require("express");
+const { getErrorMessage } = require("../utils/errorMessage");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
 const { SUPPORTED_ROLES } = require("../config/roles");
@@ -30,7 +31,7 @@ router.get("/profile", authMiddleware, async (req, res) => {
     const profile = await careerService.getProfile(req.user._id || req.user.id);
     return successResponse(res, "Career profile retrieved successfully.", profile);
   } catch (err) {
-    return errorResponse(res, `Failed to retrieve profile: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve profile"), [], 500);
   }
 });
 
@@ -56,7 +57,7 @@ router.put("/profile", authMiddleware, async (req, res) => {
     const profile = await careerService.updateProfile(req.user._id || req.user.id, req.body);
     return successResponse(res, "Career profile updated successfully.", profile);
   } catch (err) {
-    return errorResponse(res, `Failed to update profile: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to update profile"), [], 500);
   }
 });
 
@@ -74,7 +75,7 @@ router.post("/assessment", authMiddleware, async (req, res) => {
 
     return successResponse(res, "Assessment completed successfully.", profile);
   } catch (err) {
-    return errorResponse(res, `Failed to compute assessment: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to compute assessment"), [], 500);
   }
 });
 
@@ -87,7 +88,7 @@ router.get("/skills", authMiddleware, async (req, res) => {
       skillsTarget: profile.skillsTarget
     });
   } catch (err) {
-    return errorResponse(res, `Failed to retrieve skills: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve skills"), [], 500);
   }
 });
 
@@ -102,7 +103,7 @@ router.put("/skills", authMiddleware, async (req, res) => {
       skillsTarget: profile.skillsTarget
     });
   } catch (err) {
-    return errorResponse(res, `Failed to update skills: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to update skills"), [], 500);
   }
 });
 

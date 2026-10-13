@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const CareerProfile = require("../models/CareerProfile");
+const CareerAiSummary = require("../models/CareerAiSummary");
 
 
 const { calculateCareerScore } = require("../engines/careerScore.engine");
@@ -49,14 +50,19 @@ async function updateProfile(userId, profileData) {
     // Merge parameters
     if (profileData.targetRole) {
       profile.targetRole = profileData.targetRole;
-      // Mirror target role on User record too
-      await User.findByIdAndUpdate(userId, { role: profileData.targetRole, goal: profileData.targetRole });
+      await User.findByIdAndUpdate(userId, { role: profileData.targetRole });
     }
     if (profileData.experienceLevel) {
       profile.experienceLevel = profileData.experienceLevel;
       await User.findByIdAndUpdate(userId, { experience: profileData.experienceLevel });
     }
-    if (profileData.careerGoal) profile.careerGoal = profileData.careerGoal;
+    if (profileData.careerGoal !== undefined) {
+      profile.careerGoal = profileData.careerGoal;
+      await User.findByIdAndUpdate(userId, { goal: profileData.careerGoal });
+    }
+    if (profileData.targetRole || profileData.careerGoal !== undefined || profileData.experienceLevel) {
+      await CareerAiSummary.updateMany({ userId }, { status: "STALE" });
+    }
     if (profileData.currentPhase) profile.currentPhase = profileData.currentPhase;
     if (profileData.preferredLearningStyle) profile.preferredLearningStyle = profileData.preferredLearningStyle;
     if (profileData.preferredJobType) profile.preferredJobType = profileData.preferredJobType;
@@ -70,6 +76,11 @@ async function updateProfile(userId, profileData) {
     if (profileData.countryLocale) profile.countryLocale = profileData.countryLocale;
     if (profileData.targetSalary) profile.targetSalary = profileData.targetSalary;
     if (profileData.workType) profile.workType = profileData.workType;
+    if (profileData.growthMode) profile.growthMode = profileData.growthMode;
+    if (profileData.targetOutcome) profile.targetOutcome = { ...profile.targetOutcome, ...profileData.targetOutcome };
+    if (profileData.userPriorities) profile.userPriorities = profileData.userPriorities;
+    if (profileData.interests) profile.interests = profileData.interests;
+    if (profileData.userCustomGaps) profile.userCustomGaps = profileData.userCustomGaps;
     if (profileData.githubUrl !== undefined) profile.githubUrl = profileData.githubUrl;
     if (profileData.themeMode) profile.themeMode = profileData.themeMode;
     if (profileData.accentColor) profile.accentColor = profileData.accentColor;
@@ -86,6 +97,17 @@ async function updateProfile(userId, profileData) {
     }
 
     await profile.save();
+
+    // Dynamically trigger adaptive roadmap re-evaluation if target role, growth mode, or interests change
+    if (profileData.targetRole || profileData.growthMode || profileData.interests || profileData.userPriorities) {
+      try {
+        const { reevaluateRoadmap } = require("./roadmapAdaptation.service");
+        const reason = profileData.targetRole ? "TARGET_ROLE_CHANGED" : (profileData.growthMode ? "GROWTH_MODE_CHANGED" : "INTERESTS_UPDATED");
+        await reevaluateRoadmap(userId, reason);
+      } catch (adaptErr) {
+        console.warn("[CareerService] Background roadmap adaptation warning:", adaptErr.message);
+      }
+    }
 
     // Log PROFILE_UPDATED CareerEvent
     try {
@@ -173,10 +195,11 @@ async function getCareerStats(userId) {
     const streakDays = user ? user.streakDays : 0;
     const skillsCount = getSkillsCount(profile.skillsPossessed);
 
+    const JobApplication = require("../models/JobApplication");
     const JobOpportunity = require("../models/JobOpportunity");
     const InterviewSession = require("../models/InterviewSession");
 
-    const applicationsCount = await JobOpportunity.countDocuments({ userId });
+    const applicationsCount = (await JobApplication.countDocuments({ userId })) + (await JobOpportunity.countDocuments({ userId }));
     const offerCount = await JobOpportunity.countDocuments({ userId, status: "Offer" });
     
     // Fetch average interview score from completed interview sessions

@@ -22,7 +22,7 @@ export const NextActionCard: React.FC = () => {
         : type === "github" || type === "project" || type === "portfolio" || title.includes("github") || title.includes("portfolio") || title.includes("project") ? "/portfolio"
         : type === "interview" || title.includes("interview") ? "/interview"
         : type === "roadmap" || title.includes("roadmap") ? "/roadmap"
-        : type === "application" || type === "applications" || title.includes("application") || title.includes("job") ? "/applications"
+        : type === "application" || type === "applications" || title.includes("application") || title.includes("job") ? "/resume?step=4"
         : "/dna"
     );
     window.location.href = target;

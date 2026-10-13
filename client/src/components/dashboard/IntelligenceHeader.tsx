@@ -32,7 +32,7 @@ export const IntelligenceHeader: React.FC = () => {
     if (type === "github" || type === "project" || type === "portfolio" || title.includes("github") || title.includes("portfolio") || title.includes("project")) return "/portfolio";
     if (type === "interview" || title.includes("interview")) return "/interview";
     if (type === "roadmap" || title.includes("roadmap")) return "/roadmap";
-    if (type === "application" || type === "applications" || title.includes("application") || title.includes("job")) return "/applications";
+    if (type === "application" || type === "applications" || title.includes("application") || title.includes("job")) return "/resume?step=4";
     if (type === "skill" || title.includes("skill") || title.includes("dna")) return "/dna";
     return "/dna";
   };

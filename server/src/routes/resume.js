@@ -1,4 +1,6 @@
 const express = require("express");
+const { getErrorMessage } = require("../utils/errorMessage");
+const path = require("path");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
 const resumeService = require("../services/resume.service");
@@ -8,7 +10,19 @@ const cloudinary = require("../config/cloudinary");
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB max
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  fileFilter: (req, file, callback) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+    const mimeTypeByExtension = {
+      ".pdf": "application/pdf",
+      ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    };
+
+    if (mimeTypeByExtension[extension] !== file.mimetype) {
+      return callback(new Error("Upload a PDF or DOCX resume."));
+    }
+    return callback(null, true);
+  }
 });
 
 // Helper: Standardize Success JSON Envelope
@@ -38,7 +52,7 @@ router.get("/analysis", authMiddleware, async (req, res) => {
     }
     return successResponse(res, "Resume analysis retrieved successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to retrieve analysis: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve analysis"), [], 500);
   }
 });
 
@@ -50,7 +64,7 @@ router.post("/upload", authMiddleware, (req, res, next) => {
     if (err) {
       const message = err.code === "LIMIT_FILE_SIZE"
         ? "Resume file is too large. Maximum size is 5MB."
-        : `Resume upload failed: ${err.message}`;
+        : "Upload a valid PDF or DOCX resume.";
       return errorResponse(res, message, [], 400);
     }
     next();
@@ -62,10 +76,16 @@ router.post("/upload", authMiddleware, (req, res, next) => {
   let extractedLinks = [];
 
   if (req.file) {
-    targetFilename = req.file.originalname;
+    targetFilename = path.basename(req.file.originalname).replace(/[\r\n"\\]/g, "_");
+    const extension = path.extname(targetFilename).toLowerCase();
+    const hasPdfSignature = req.file.buffer.subarray(0, 5).toString("ascii") === "%PDF-";
+    const hasZipSignature = req.file.buffer.subarray(0, 2).toString("ascii") === "PK";
+    if ((extension === ".pdf" && !hasPdfSignature) || (extension === ".docx" && !hasZipSignature)) {
+      return errorResponse(res, "The uploaded file does not match its file type.", [], 400);
+    }
 
     try {
-      if (req.file.mimetype === "application/pdf" || targetFilename.endsWith(".pdf")) {
+      if (extension === ".pdf") {
         try {
           const pdfRes = await linkExtractor.parsePdfWithLinks(req.file.buffer);
           targetText = pdfRes.text;
@@ -75,10 +95,7 @@ router.post("/upload", authMiddleware, (req, res, next) => {
           const pdfData = await pdfParse(req.file.buffer);
           targetText = pdfData.text;
         }
-      } else if (
-        req.file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-        targetFilename.endsWith(".docx")
-      ) {
+      } else if (extension === ".docx") {
         try {
           const mammoth = require("mammoth");
           const docxResult = await mammoth.extractRawText({ buffer: req.file.buffer });
@@ -121,7 +138,7 @@ router.post("/upload", authMiddleware, (req, res, next) => {
       }
     } catch (err) {
       console.error("[Resume Upload] File parsing failed:", err);
-      return errorResponse(res, `File parsing failed: ${err.message}`, [], 500);
+      return errorResponse(res, getErrorMessage(err, "File parsing failed"), [], 500);
     }
   } else {
     const { filename, parsedText } = req.body;
@@ -143,7 +160,7 @@ router.post("/upload", authMiddleware, (req, res, next) => {
     );
     return successResponse(res, "Resume analyzed successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to analyze resume: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to analyze resume"), [], 500);
   }
 });
 
@@ -153,7 +170,7 @@ router.put("/content", authMiddleware, async (req, res) => {
     const data = await resumeService.saveResumeEdits(req.user._id || req.user.id, req.body);
     return successResponse(res, "Resume edits saved successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to save edits: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to save edits"), [], 500);
   }
 });
 
@@ -164,7 +181,7 @@ router.post("/versions/fork", authMiddleware, async (req, res) => {
     const data = await resumeService.forkResumeVersion(req.user._id || req.user.id, title, goal);
     return successResponse(res, "Resume version forked successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to fork version: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to fork version"), [], 500);
   }
 });
 
@@ -175,7 +192,7 @@ router.post("/versions/restore", authMiddleware, async (req, res) => {
     const data = await resumeService.restoreResumeVersion(req.user._id || req.user.id, versionNumber);
     return successResponse(res, "Resume version restored successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to restore version: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to restore version"), [], 500);
   }
 });
 
@@ -185,7 +202,7 @@ router.get("/cross-sync", authMiddleware, async (req, res) => {
     const data = await resumeService.getCrossSyncSuggestions(req.user._id || req.user.id);
     return successResponse(res, "Cross-sync recommendations retrieved successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to retrieve suggestions: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve suggestions"), [], 500);
   }
 });
 
@@ -196,7 +213,7 @@ router.post("/optimize", authMiddleware, async (req, res) => {
     const data = await resumeService.optimizeResumeContent(req.user._id || req.user.id, goal, targetDescription);
     return successResponse(res, "Resume optimized successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to optimize resume: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to optimize resume"), [], 500);
   }
 });
 // 8. Review Pending Change Log
@@ -206,7 +223,7 @@ router.post("/changelog/review", authMiddleware, async (req, res) => {
     const data = await resumeService.reviewChangeLog(req.user._id || req.user.id, logId, status, editedText);
     return successResponse(res, "Change log updated.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to update change log: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to update change log"), [], 500);
   }
 });
 
@@ -217,7 +234,7 @@ router.post("/changelog/apply", authMiddleware, async (req, res) => {
     const data = await resumeService.applyChangeLogs(req.user._id || req.user.id, goal);
     return successResponse(res, "Accepted AI changes applied to resume.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to apply changes: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to apply changes"), [], 500);
   }
 });
 

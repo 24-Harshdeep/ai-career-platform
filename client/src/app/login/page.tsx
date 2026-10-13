@@ -6,7 +6,7 @@ import { LoginView } from "@/components/auth/LoginView";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const { session, signIn, signUp, switchUser } = useSession();
+  const { session, signIn, signUp } = useSession();
   const router = useRouter();
 
   useEffect(() => {
@@ -26,5 +26,5 @@ export default function LoginPage() {
     );
   }
 
-  return <LoginView onSignIn={signIn} onSignUp={signUp} onQuickDemoLogin={switchUser} />;
+  return <LoginView onSignIn={signIn} onSignUp={signUp} />;
 }

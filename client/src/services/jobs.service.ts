@@ -128,7 +128,13 @@ export interface JobSearchResponse {
   providersStatus: Record<string, "success" | "failed">;
 }
 
-async function safeJsonParse(res: Response): Promise<any> {
+interface ApiEnvelope<T> {
+  success?: boolean;
+  message?: string;
+  data?: T;
+}
+
+async function safeJsonParse(res: Response): Promise<unknown> {
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
     return await res.json();
@@ -138,31 +144,37 @@ async function safeJsonParse(res: Response): Promise<any> {
 }
 
 export async function fetchProviderHealth(): Promise<Record<string, ProviderHealth>> {
-  const fallbackHealth: Record<string, ProviderHealth> = {
-    jobvetta: { name: "jobvetta", status: "HEALTHY" },
-    indianapi: { name: "indianapi", status: "HEALTHY" },
-    jooble: { name: "jooble", status: "HEALTHY" },
-    adzuna: { name: "adzuna", status: "HEALTHY" },
-    greenhouse: { name: "greenhouse", status: "HEALTHY" },
-    lever: { name: "lever", status: "HEALTHY" },
-    ashby: { name: "ashby", status: "HEALTHY" }
-  };
+  const providerNames = ["jobvetta", "indianapi", "jooble", "adzuna", "greenhouse", "lever", "ashby"];
+  const fallbackHealth: Record<string, ProviderHealth> = Object.fromEntries(
+    providerNames.map((name) => [name, {
+      name,
+      status: "DEGRADED",
+      errorMessage: "Provider health could not be loaded."
+    }])
+  );
 
   try {
     const res = await apiFetch(`${API_BASE_URL}/jobs/health`);
     if (!res.ok) {
-      console.warn(`[JobsService] Health check endpoint returned status ${res.status}. Using default provider health map.`);
+      console.warn(`[JobsService] Health check endpoint returned status ${res.status}.`);
       return fallbackHealth;
     }
     const json = await safeJsonParse(res);
-    if (json && json.success && json.data) {
-      return json.data;
+    if (json && typeof json === "object" && "success" in json && json.success === true &&
+      "data" in json && json.data && typeof json.data === "object") {
+      return json.data as Record<string, ProviderHealth>;
     }
-  } catch (err: any) {
-    console.warn("[JobsService] Provider health check warning:", err.message);
+  } catch (err) {
+    console.warn("[JobsService] Provider health check warning:", err instanceof Error ? err.message : String(err));
   }
 
   return fallbackHealth;
+}
+
+async function parseApiEnvelope<T>(res: Response): Promise<ApiEnvelope<T>> {
+  const value = await safeJsonParse(res);
+  if (!value || typeof value !== "object") throw new Error("Invalid server response");
+  return value as ApiEnvelope<T>;
 }
 
 export async function fetchJobs(params: JobSearchParams = {}): Promise<JobSearchResponse> {
@@ -180,25 +192,27 @@ export async function fetchJobs(params: JobSearchParams = {}): Promise<JobSearch
   if (params.sort) query.set("sort", params.sort);
 
   const res = await apiFetch(`${API_BASE_URL}/jobs?${query.toString()}`);
-  const json = await safeJsonParse(res);
+  const json = await parseApiEnvelope<JobSearchResponse>(res);
   if (!json.success) {
     throw new Error(json.message || "Failed to fetch jobs");
   }
+  if (!json.data) throw new Error("Job search returned no data");
   return json.data;
 }
 
 export async function fetchJobById(id: string): Promise<JobItem> {
   const res = await apiFetch(`${API_BASE_URL}/jobs/${id}`);
-  const json = await safeJsonParse(res);
+  const json = await parseApiEnvelope<JobItem>(res);
   if (!json.success) {
     throw new Error(json.message || "Failed to fetch job details");
   }
+  if (!json.data) throw new Error("Job details returned no data");
   return json.data;
 }
 
 export async function saveJob(id: string): Promise<void> {
   const res = await apiFetch(`${API_BASE_URL}/jobs/${id}/save`, { method: "POST" });
-  const json = await safeJsonParse(res);
+  const json = await parseApiEnvelope<unknown>(res);
   if (!json.success) {
     throw new Error(json.message || "Failed to save job");
   }
@@ -206,7 +220,7 @@ export async function saveJob(id: string): Promise<void> {
 
 export async function unsaveJob(id: string): Promise<void> {
   const res = await apiFetch(`${API_BASE_URL}/jobs/${id}/save`, { method: "DELETE" });
-  const json = await safeJsonParse(res);
+  const json = await parseApiEnvelope<unknown>(res);
   if (!json.success) {
     throw new Error(json.message || "Failed to unsave job");
   }
@@ -214,10 +228,11 @@ export async function unsaveJob(id: string): Promise<void> {
 
 export async function fetchSavedJobs(): Promise<JobItem[]> {
   const res = await apiFetch(`${API_BASE_URL}/jobs/saved`);
-  const json = await safeJsonParse(res);
+  const json = await parseApiEnvelope<JobItem[]>(res);
   if (!json.success) {
     throw new Error(json.message || "Failed to fetch saved jobs");
   }
+  if (!json.data) throw new Error("Saved jobs returned no data");
   return json.data;
 }
 
@@ -231,8 +246,43 @@ export async function updateApplicationStatus(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status, notes })
   });
-  const json = await safeJsonParse(res);
+  const json = await parseApiEnvelope<unknown>(res);
   if (!json.success) {
     throw new Error(json.message || "Failed to update application status");
   }
+}
+
+export async function addJobGapsToRoadmap(jobId: string, skills: string[]): Promise<any> {
+  const res = await apiFetch(`${API_BASE_URL}/roadmap/add-job-gaps`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jobId, skills })
+  });
+  const json = await parseApiEnvelope<unknown>(res);
+  if (!json.success) {
+    throw new Error(json.message || "Failed to add job gaps to roadmap");
+  }
+  return json.data;
+}
+
+export async function fetchMarketSignals(): Promise<any> {
+  const res = await apiFetch(`${API_BASE_URL}/roadmap/market-signals`);
+  const json = await parseApiEnvelope<unknown>(res);
+  if (!json.success) {
+    throw new Error(json.message || "Failed to fetch market signals");
+  }
+  return json.data;
+}
+
+export async function reevaluateRoadmap(reason = "MANUAL_USER_TRIGGER"): Promise<any> {
+  const res = await apiFetch(`${API_BASE_URL}/roadmap/reevaluate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason })
+  });
+  const json = await parseApiEnvelope<unknown>(res);
+  if (!json.success) {
+    throw new Error(json.message || "Failed to re-evaluate roadmap");
+  }
+  return json.data;
 }

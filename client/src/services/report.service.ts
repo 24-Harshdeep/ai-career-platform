@@ -69,6 +69,15 @@ export interface NextBestActionItem {
   reason: string;
 }
 
+export interface AiSummaryDTO {
+  content: string | null;
+  status: "CURRENT" | "STALE" | "NONE";
+  generatedAt?: string | null;
+  versionNumber?: number;
+  targetRole?: string | null;
+  careerGoal?: string | null;
+}
+
 export interface CareerReportDTO {
   mode: "shareable" | "private";
   userId: string;
@@ -106,6 +115,7 @@ export interface CareerReportDTO {
 
   // Shareable Specific Fields
   executiveSummary: string;
+  aiSummary?: AiSummaryDTO;
   currentFocusAreas?: string[];
   careerDirectionVisual?: string[];
   skillsMatrix?: SkillMatrixGroup;
@@ -243,5 +253,18 @@ export const reportService = {
     }
     const data = await safeParseJson<{ success: boolean; snapshot: ReportSnapshotItem }>(res);
     return data.snapshot;
+  },
+
+  async generateAiSummary(): Promise<{ aiSummary: AiSummaryDTO }> {
+    const res = await apiFetch(`${API_BASE_URL}/career/report/ai-summary`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (!res.ok) {
+      const errorJson = await safeParseJson<{ message?: string }>(res).catch(() => undefined);
+      throw new Error(errorJson?.message || `Failed to generate AI Summary (${res.status})`);
+    }
+    const data = await safeParseJson<{ success: boolean; aiSummary: AiSummaryDTO }>(res);
+    return { aiSummary: data.aiSummary };
   }
 };

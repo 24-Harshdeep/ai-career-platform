@@ -1,3 +1,4 @@
+const { getErrorMessage } = require("../utils/errorMessage");
 const jobDiscoveryService = require("../services/jobDiscovery.service");
 const { getProvidersHealth } = require("../providers");
 
@@ -12,7 +13,7 @@ async function getHealth(req, res) {
     return successResponse(res, "Provider health retrieved successfully.", health);
   } catch (err) {
     console.error("[JobsController] Error in getHealth:", err);
-    return errorResponse(res, `Failed to retrieve provider health: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve provider health"), [], 500);
   }
 }
 
@@ -24,7 +25,7 @@ async function searchJobs(req, res) {
     return successResponse(res, "Jobs fetched successfully.", result);
   } catch (err) {
     console.error("[JobsController] Error in searchJobs:", err);
-    return errorResponse(res, `Failed to search jobs: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to search jobs"), [], 500);
   }
 }
 
@@ -36,7 +37,7 @@ async function getSavedJobs(req, res) {
     return successResponse(res, "Saved jobs retrieved successfully.", jobs);
   } catch (err) {
     console.error("[JobsController] Error in getSavedJobs:", err);
-    return errorResponse(res, `Failed to fetch saved jobs: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to fetch saved jobs"), [], 500);
   }
 }
 
@@ -51,7 +52,7 @@ async function getJobById(req, res) {
     return successResponse(res, "Job details retrieved successfully.", job);
   } catch (err) {
     console.error("[JobsController] Error in getJobById:", err);
-    return errorResponse(res, `Failed to fetch job details: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to fetch job details"), [], 500);
   }
 }
 
@@ -63,7 +64,7 @@ async function saveJob(req, res) {
     return successResponse(res, "Job saved successfully.", app);
   } catch (err) {
     console.error("[JobsController] Error in saveJob:", err);
-    return errorResponse(res, `Failed to save job: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to save job"), [], 500);
   }
 }
 
@@ -75,7 +76,7 @@ async function unsaveJob(req, res) {
     return successResponse(res, "Job unsaved successfully.", null);
   } catch (err) {
     console.error("[JobsController] Error in unsaveJob:", err);
-    return errorResponse(res, `Failed to unsave job: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to unsave job"), [], 500);
   }
 }
 
@@ -91,7 +92,7 @@ async function updateApplicationStatus(req, res) {
     return successResponse(res, "Application status updated successfully.", app);
   } catch (err) {
     console.error("[JobsController] Error in updateApplicationStatus:", err);
-    return errorResponse(res, `Failed to update application status: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to update application status"), [], 500);
   }
 }
 

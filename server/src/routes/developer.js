@@ -1,4 +1,5 @@
 const express = require("express");
+const { getErrorMessage } = require("../utils/errorMessage");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
 
@@ -40,7 +41,7 @@ router.post("/github/sync", authMiddleware, async (req, res) => {
     );
     return successResponse(res, "Developer profile repository sync complete.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to sync profile: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to sync profile"), [], 500);
   }
 });
 
@@ -53,7 +54,7 @@ router.get("/profile", authMiddleware, async (req, res) => {
     }
     return successResponse(res, "Developer profile retrieved successfully.", data);
   } catch (err) {
-    return errorResponse(res, `Failed to retrieve profile: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve profile"), [], 500);
   }
 });
 
@@ -63,7 +64,7 @@ router.get("/repositories", authMiddleware, async (req, res) => {
     const data = await developerService.getDeveloperProfile(req.user._id || req.user.id);
     return successResponse(res, "Developer repositories retrieved successfully.", data ? data.repositories : []);
   } catch (err) {
-    return errorResponse(res, `Failed to retrieve repositories: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve repositories"), [], 500);
   }
 });
 
@@ -77,7 +78,7 @@ router.get("/health", authMiddleware, async (req, res) => {
       technologyCoverage: data.technologyCoverage
     } : null);
   } catch (err) {
-    return errorResponse(res, `Failed to retrieve health details: ${err.message}`, [], 500);
+    return errorResponse(res, getErrorMessage(err, "Failed to retrieve health details"), [], 500);
   }
 });
 

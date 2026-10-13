@@ -6,12 +6,15 @@ services:
     rootDir: server
     buildCommand: npm install
     startCommand: npm run start
+    healthCheckPath: /api/health
     envVars:
+      - key: NODE_VERSION
+        value: 24.21.0
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 5000
-      - key: MONGO_URI
+      - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET
         generateValue: true
@@ -19,6 +22,13 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false
+      - key: ALLOWED_ORIGINS
+        fromService:
+          name: careeros-frontend
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY
@@ -34,12 +44,15 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm run start
     envVars:
+      - key: NODE_VERSION
+        value: 24.21.0
       - key: NODE_ENV
         value: production
-      - key: NEXT_PUBLIC_API_URL
+      - key: NEXT_PUBLIC_API_BASE_URL
         fromService:
           name: careeros-backend
           type: web
-          property: host
-        # Next.js bundles NEXT_PUBLIC_ env vars during build time.
-        # Note: Render blueprints apply environment variables during build.
+          envVarKey: RENDER_EXTERNAL_URL
+        # RENDER_EXTERNAL_URL = "https://careeros-backend.onrender.com" (no /api suffix).
+        # api.ts appends /api automatically when the URL does not already end with /api.
+        # Next.js bundles NEXT_PUBLIC_ vars at build time — Render injects them before the build step.

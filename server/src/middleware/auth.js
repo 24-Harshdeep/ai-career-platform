@@ -20,19 +20,20 @@ const authMiddleware = async (req, res, next) => {
 
   // Demo token mode allowed ONLY in development and explicitly enabled via ALLOW_DEMO_MODE=true
   const isDev = process.env.NODE_ENV !== "production";
-  const allowDemo = isDev && (process.env.ALLOW_DEMO_MODE === "true" || process.env.ALLOW_DEMO_MODE !== "false");
+  const allowDemo = isDev && process.env.ALLOW_DEMO_MODE === "true";
 
   if (allowDemo && token && (token.startsWith("demo_") || token === "demo_token")) {
     try {
-      let demoUser = await User.findOne({ email: "alex@careeros.dev" });
+      let demoUser = await User.findOne({ email: "alex@careeros.dev" }).select("-passwordHash");
       if (!demoUser) {
-        demoUser = await User.create({
+        const createdDemoUser = await User.create({
           name: "Alex Chen",
           email: "alex@careeros.dev",
           passwordHash: "$2a$10$e846059955700cf11c50bu2vOq71.8zY46/kZp7L5P4V0hQZk.d86",
           role: "Senior Full Stack Developer",
           goal: "Senior Full Stack Developer"
         });
+        demoUser = await User.findById(createdDemoUser._id).select("-passwordHash");
       }
       req.user = demoUser;
       return next();

@@ -27,7 +27,6 @@ import {
 } from "lucide-react";
 import { PageTransition, StaggerItem } from "@/components/ui/PageTransition";
 import PageHeader from "@/components/ui/PageHeader";
-import { CareerReportWidget } from "@/components/dashboard/CareerReportWidget";
 
 type SettingsTab = "profile" | "ai" | "documents" | "notifications" | "accounts" | "theme" | "security";
 
@@ -48,6 +47,8 @@ export default function SettingsPage() {
   const [nameInput, setNameInput] = useState(storeUser?.name || user?.name || "");
   const [emailInput, setEmailInput] = useState(user?.email || "");
   const [targetRoleInput, setTargetRoleInput] = useState(profile?.targetRole || storeUser?.goal || "");
+  const [growthModeInput, setGrowthModeInput] = useState<any>(profile?.growthMode || "JOB_READINESS");
+  const [careerGoalInput, setCareerGoalInput] = useState(profile?.careerGoal || "");
   const [experienceInput, setExperienceInput] = useState<"Beginner" | "Intermediate" | "Advanced">(
     (profile?.experienceLevel as any) || (storeUser?.experience as any) || "Intermediate"
   );
@@ -62,6 +63,10 @@ export default function SettingsPage() {
   const [learningStyle, setLearningStyle] = useState("Practical");
   const [recommendationFreq, setRecommendationFreq] = useState("Daily");
   const [aiTemperature, setAiTemperature] = useState(0.5);
+
+  // Form states: Theme
+  const [themeMode, setThemeMode] = useState("Dark");
+  const [accentColor, setAccentColor] = useState("Purple");
 
   // Form states: Resume Defaults & Links
   const [primaryResume, setPrimaryResume] = useState("");
@@ -85,6 +90,8 @@ export default function SettingsPage() {
   useEffect(() => {
     if (profile && !profileLoaded) {
       setTargetRoleInput(profile.targetRole || storeUser?.goal || "Full Stack Developer");
+      setGrowthModeInput(profile.growthMode || "JOB_READINESS");
+      setCareerGoalInput(profile.careerGoal || "");
       setExperienceInput((profile.experienceLevel as any) || "Intermediate");
       setIndustryInput(profile.preferredIndustry || "Fintech");
       setCountryInput(profile.countryLocale || "United States");
@@ -106,50 +113,6 @@ export default function SettingsPage() {
     }
   }, [profile, profileLoaded]);
 
-  // Form states: Notifications
-  const [notifSettings, setNotifSettings] = useState({
-    scoreAlerts: true,
-    roadmapAlerts: true,
-    resumeAlerts: true,
-    weaknessAlerts: false,
-    reminderAlerts: true,
-    missionAlerts: true,
-    digestAlerts: false
-  });
-
-  // Form states: Connected Accounts toggles (interactive demo simulation)
-  const [connectedAccs, setConnectedAccs] = useState<Record<string, boolean>>({
-    GitHub: true,
-    LinkedIn: false,
-    Google: true,
-    "OpenAI / Gemini API": true
-  });
-
-  // Form states: Theme
-  const [themeMode, setThemeMode] = useState("Dark");
-  const [accentColor, setAccentColor] = useState("Purple");
-
-  const handleToggleNotif = (name: string) => {
-    setNotifSettings((prev) => {
-      const next = { ...prev, [name]: !prev[name as keyof typeof prev] };
-      addNotification(
-        `${name.replace("Alerts", "")} notifications updated.`,
-        "info"
-      );
-      return next;
-    });
-  };
-
-  const handleToggleAccount = (name: string) => {
-    setConnectedAccs((prev) => {
-      const isConnected = !prev[name];
-      addNotification(
-        `${name} account ${isConnected ? "connected" : "disconnected"} successfully.`,
-        isConnected ? "success" : "warning"
-      );
-      return { ...prev, [name]: isConnected };
-    });
-  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,6 +121,8 @@ export default function SettingsPage() {
       name: nameInput,
       email: emailInput,
       targetRole: targetRoleInput,
+      growthMode: growthModeInput,
+      careerGoal: careerGoalInput,
       experienceLevel: experienceInput,
       preferredIndustry: industryInput,
       countryLocale: countryInput,
@@ -165,7 +130,7 @@ export default function SettingsPage() {
       workType: workTypeInput,
       githubUrl: githubUrl
     });
-    addNotification("Profile and target career preferences synchronized successfully.", "success");
+    addNotification("Profile, Target Outcome & Growth Strategy synchronized successfully.", "success");
     setSaving(false);
     setProfileLoaded(false);
   };
@@ -255,11 +220,6 @@ export default function SettingsPage() {
         />
       </StaggerItem>
 
-      {/* Central Brain Career Report Widget */}
-      <StaggerItem>
-        <CareerReportWidget />
-      </StaggerItem>
-
       {/* Grid: Left tabs menu sidebar vs Right forms card */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
@@ -347,6 +307,31 @@ export default function SettingsPage() {
                       <option value="DevOps Engineer">DevOps Engineer</option>
                       <option value="Full Stack Developer">Full Stack Developer</option>
                     </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">Growth Strategy / Mode</label>
+                    <select
+                      value={growthModeInput}
+                      onChange={(e) => setGrowthModeInput(e.target.value as any)}
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50"
+                    >
+                      <option value="JOB_READINESS">Job Readiness (Maximize ATS, Portfolio & Interview)</option>
+                      <option value="SKILL_GROWTH">Skill Growth (Master Deep Technical Concepts)</option>
+                      <option value="INTERNSHIP_TO_FULLTIME">Internship → Full-Time Conversion</option>
+                      <option value="CAREER_PROGRESSION">Career Progression (Junior → Mid/Senior)</option>
+                      <option value="ROLE_TRANSITION">Role Transition (Switching Fields)</option>
+                      <option value="CUSTOM">Custom Outcome</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted font-bold uppercase">Career Goal / Objective</label>
+                    <input
+                      type="text"
+                      value={careerGoalInput}
+                      onChange={(e) => setCareerGoalInput(e.target.value)}
+                      placeholder="e.g. Lead engineering teams building high-scale SaaS platforms"
+                      className="w-full bg-accent/15 border border-border outline-none rounded-xl p-2.5 text-xs text-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                    />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] text-muted font-bold uppercase">Experience Bracket</label>
@@ -586,27 +571,23 @@ export default function SettingsPage() {
 
                 <div className="space-y-3">
                   {[
-                    { name: "scoreAlerts", label: "Career Score Changes", desc: "Instantly alert me when my overall score goes up or down." },
-                    { name: "roadmapAlerts", label: "Roadmap Completed Checkpoints", desc: "Notify me when I verify milestone sub-checkpoints." },
-                    { name: "resumeAlerts", label: "Resume Improved Diagnostics", desc: "Alert me when my ATS resume score is recalculated." },
-                    { name: "weaknessAlerts", label: "New Weak Areas Detected", desc: "Warn me when mock interviews flag recurring concept mistakes." },
-                    { name: "reminderAlerts", label: "Interview Simulation Reminders", desc: "Send reminders for scheduled mock interviews." },
-                    { name: "missionAlerts", label: "Daily Mission Syncs", desc: "Notify me when the daily checklist updates in Career DNA." },
-                    { name: "digestAlerts", label: "Weekly Performance Digests", desc: "Send an email summary of my weekly progression." }
+                    { label: "Career Score Changes", desc: "Instantly alert me when my overall score goes up or down." },
+                    { label: "Roadmap Completed Checkpoints", desc: "Notify me when I verify milestone sub-checkpoints." },
+                    { label: "Resume Improved Diagnostics", desc: "Alert me when my ATS resume score is recalculated." },
+                    { label: "New Weak Areas Detected", desc: "Warn me when mock interviews flag recurring concept mistakes." },
+                    { label: "Interview Simulation Reminders", desc: "Send reminders for scheduled mock interviews." },
+                    { label: "Daily Mission Syncs", desc: "Notify me when the daily checklist updates in Career DNA." },
+                    { label: "Weekly Performance Digests", desc: "Send an email summary of my weekly progression." }
                   ].map((item) => (
-                    <div key={item.name} className="flex items-center justify-between p-3.5 bg-accent/10 border border-border rounded-xl">
+                    <div key={item.label} className="flex items-center justify-between p-3.5 bg-accent/10 border border-border rounded-xl opacity-75">
                       <div className="space-y-1 pr-4 text-xs">
                         <span className="font-bold text-foreground">{item.label}</span>
                         <p className="text-[10px] text-muted leading-relaxed">{item.desc}</p>
                       </div>
-                      <input
-                        type="checkbox"
-                        checked={notifSettings[item.name as keyof typeof notifSettings]}
-                        onChange={() => handleToggleNotif(item.name)}
-                        className="w-8.5 h-4 bg-gray-200 rounded-full appearance-none cursor-pointer relative checked:bg-primary before:content-[''] before:absolute before:h-3 before:w-3 before:left-0.5 before:bottom-0.5 before:bg-white before:rounded-full before:transition-all checked:before:left-5"
-                      />
+                      <input type="checkbox" disabled aria-label={`${item.label} notification preference`} className="w-8.5 h-4 bg-gray-200 rounded-full appearance-none relative cursor-not-allowed" />
                     </div>
                   ))}
+                  <p className="text-xs text-muted">Notification delivery preferences are temporarily unavailable.</p>
                 </div>
               </div>
             )}
@@ -621,42 +602,36 @@ export default function SettingsPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {[
-                    { name: "GitHub", connected: connectedAccs.GitHub, details: "Syncs repositories, readme audits, and code velocity stats." },
-                    { name: "LinkedIn", connected: connectedAccs.LinkedIn, details: "Crawls matching job alerts and exports professional profiles." },
-                    { name: "Google", connected: connectedAccs.Google, details: "Connects email digests and schedules calendar prep alerts." },
-                    { name: "OpenAI / Gemini API", connected: connectedAccs["OpenAI / Gemini API"], details: "Powers customized AI coaching and resume tailors." }
+                    {
+                      name: "GitHub",
+                      status: profile?.githubUrl ? "Profile linked" : "Profile not set",
+                      details: "Repository sync uses the GitHub username saved with your profile.",
+                      href: "/portfolio"
+                    },
+                    { name: "LinkedIn", status: "Not available", details: "LinkedIn account connection is not available yet." },
+                    { name: "Google", status: "Not available", details: "Google calendar and email connections are not available yet." },
+                    { name: "OpenAI / Gemini API", status: "Server managed", details: "AI provider keys are configured by the service operator and are not stored in this browser." }
                   ].map((acc) => (
                     <div key={acc.name} className="p-4 bg-accent/10 border border-border rounded-2xl flex flex-col justify-between hover:bg-accent/15 transition-all">
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold text-foreground">{acc.name}</span>
-                          <Badge variant={acc.connected ? "success" : "muted"}>
-                            {acc.connected ? "Connected" : "Disconnected"}
-                          </Badge>
+                          <Badge variant={acc.status === "Profile linked" ? "success" : "muted"}>{acc.status}</Badge>
                         </div>
                         <p className="text-[10px] text-muted leading-relaxed">{acc.details}</p>
                       </div>
-                      <div className="flex justify-end pt-4">
-                        <Button
-                          variant={acc.connected ? "secondary" : "primary"}
-                          size="sm"
-                          onClick={() => handleToggleAccount(acc.name)}
-                          className="text-[10px] py-1 px-3 cursor-pointer"
-                        >
-                          {acc.connected ? "Configure" : "Connect"}
-                        </Button>
-                      </div>
+                      {"href" in acc && <a href={acc.href} className="text-xs font-semibold text-primary hover:underline mt-4">Manage GitHub profile</a>}
                     </div>
                   ))}
                 </div>
 
                 <div className="pt-3 border-t border-border/40 space-y-3">
                   <span className="text-[10px] text-muted font-bold uppercase tracking-wider block">Additional Developer Integrations</span>
-                  <div className="grid grid-cols-3 gap-3 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                     {["LeetCode", "Codeforces", "HackerRank"].map((platform) => (
                       <div key={platform} className="p-3 bg-accent/5 border border-border rounded-xl flex items-center justify-between">
                         <span className="font-semibold text-foreground">{platform}</span>
-                        <input type="checkbox" defaultChecked className="rounded border-border text-primary focus:ring-primary cursor-pointer" />
+                        <Badge variant="muted">Not connected</Badge>
                       </div>
                     ))}
                   </div>

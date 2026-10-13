@@ -102,43 +102,57 @@ CareerOS features a premium, state-of-the-art **Dark Mode Command Center** layou
 
 ---
 
-## ⚡ Setup & Installation
+## Setup & Installation
 
 ### Prerequisites
-- Node.js (v18 or higher)
+- Node.js 22.13+ or 24.x
 - MongoDB (Local instance or Atlas cloud URI)
 - A Google Gemini API Key or OpenAI API Key
 
 ### Installation
 
-1. Clone the repository:
+1. Clone the repository and install the workspaces from the root:
    ```bash
    git clone <repo-url>
    cd ai-career-platform
    ```
 
-2. Install dependencies:
+2. Copy the safe examples and configure the required environment variables:
+   ```bash
+   cp server/.env.example server/.env
+   cp client/.env.example client/.env.local
+   ```
+   Set `MONGODB_URI` and `JWT_SECRET` in `server/.env`. Add an AI provider key to use AI features. Demo sign-in is disabled unless `ALLOW_DEMO_MODE=true` is explicitly set for local development.
+
+3. Install once from the repository root:
    ```bash
    npm install
-   cd client && npm install
-   cd ../server && npm install
    ```
 
-3. Configure environment variables in `server/.env`:
-   ```env
-   PORT=5000
-   MONGO_URI=mongodb://localhost:27017/careeros
-   GEMINI_API_KEY=your_gemini_api_key
-   OPENAI_API_KEY=your_openai_api_key
-   ```
-
-4. Run the development environment:
+4. Run the API and frontend in separate terminals:
    ```bash
-   # Start the API backend (in server/)
-   npm run dev
-   
-   # Start the Next.js frontend (in client/)
-   npm run dev
+   npm run dev --workspace=server
    ```
 
-5. Access the dashboard on `http://localhost:3000`.
+   ```bash
+   npm run dev --workspace=client
+   ```
+
+Open `http://localhost:3000`. The frontend uses `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:5000/api`).
+
+## Project structure
+
+- `client/`: Next.js App Router frontend, shared components, client services, and state store.
+- `server/`: Express API, Mongoose models, routes, controllers, services, providers, and career engines.
+- `docs/`: project notes and feature documentation.
+
+## Validation and deployment
+
+- Frontend lint: `npm run lint --workspace=client`
+- Frontend type check: `npx tsc --noEmit -p client/tsconfig.json`
+- Production build: `npm run build --workspace=client`
+- Report read unit tests: `node --test server/src/tests/report_read.test.js`
+- Backend engine and security checks: run the `data_sync`, `job_intelligence`, `multi_source_job_intelligence`, and `security_audit` scripts individually with Node.
+- MongoDB integration checks use the isolated `careeros_test` database; never point them at production data.
+
+The Render Blueprint in `render.yaml` deploys the API and frontend separately. Configure the MongoDB connection, `JWT_SECRET`, `GITHUB_WEBHOOK_SECRET`, and any provider credentials in the Render environment. The frontend API URL and backend CORS origin are wired to the two Render service URLs. Do not commit local `.env` files or MongoDB data files.

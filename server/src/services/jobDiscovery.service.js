@@ -8,6 +8,11 @@ const { normalizeJob } = require("./jobNormalizer.service");
 const { deduplicateJobs } = require("./jobDeduplicator.service");
 const { evaluateJobMatch } = require("./jobMatching.service");
 const { getCareerContext } = require("./careerContext.service");
+const { escapeRegex } = require("../utils/escapeRegex");
+
+function isCuratedPlaceholderJob(job) {
+  return typeof job?.hash === "string" && job.hash.startsWith("curated-");
+}
 
 /**
  * Compiles real-time candidate Job Search Intent from CareerOS Central Brain.
@@ -117,7 +122,8 @@ async function searchJobs(userId, query = {}) {
   }
 
   // Auto-default search query to user's configured target role if empty
-  const searchQuery = (q && q.trim()) ? q.trim() : (candidateContext.targetRole || "");
+  const searchQuery = (typeof q === "string" && q.trim()) ? q.trim().slice(0, 120) : (candidateContext.targetRole || "");
+  const searchLocation = (typeof location === "string" ? location.trim() : "").slice(0, 120);
 
   // 1. Fetch from external providers in parallel with failure isolation
   const enabledProviders = getEnabledProviders();
@@ -125,7 +131,7 @@ async function searchJobs(userId, query = {}) {
 
   const providerPromises = enabledProviders.map(async (p) => {
     try {
-      const rawJobs = await p.searchJobs({ q: searchQuery, location, remote: Boolean(remote), page: pageNum, limit: limitNum });
+      const rawJobs = await p.searchJobs({ q: searchQuery, location: searchLocation, remote: Boolean(remote), page: pageNum, limit: limitNum });
       providerStatusMap[p.name] = "success";
       return rawJobs;
     } catch (err) {
@@ -168,7 +174,7 @@ async function searchJobs(userId, query = {}) {
   const filter = {};
 
   if (searchQuery) {
-    const rawQuery = searchQuery.trim();
+    const rawQuery = escapeRegex(searchQuery.trim());
     const normalizedQuery = rawQuery.replace(/full\s*stack/i, "fullstack");
     const terms = rawQuery.split(/\s+/).filter(w => w.length > 2);
 
@@ -188,7 +194,7 @@ async function searchJobs(userId, query = {}) {
   }
 
   if (location) {
-    filter["location.raw"] = new RegExp(location.trim(), "i");
+    filter["location.raw"] = new RegExp(escapeRegex(searchLocation), "i");
   }
 
   if (remote === "true" || remote === true) {
@@ -228,30 +234,15 @@ async function searchJobs(userId, query = {}) {
   if (dbJobs.length === 0) {
     const broaderFilter = {};
     if (provider) broaderFilter.provider = provider;
-    if (location) broaderFilter["location.raw"] = new RegExp(location.trim(), "i");
+    if (searchLocation) broaderFilter["location.raw"] = new RegExp(escapeRegex(searchLocation), "i");
     if (remote === "true" || remote === true) broaderFilter["location.remote"] = true;
 
     dbJobs = await Job.find(broaderFilter).sort({ publishedAt: -1, fetchedAt: -1 }).limit(limitNum).lean();
   }
 
-  // Seed curated fallback jobs if DB empty
-  if (dbJobs.length === 0) {
-    const fallbackJobs = getCuratedFallbackJobs(searchQuery, provider);
-    const bulkOps = fallbackJobs.map((j) => ({
-      updateOne: {
-        filter: { hash: j.hash },
-        update: { $set: j },
-        upsert: true
-      }
-    }));
-    try {
-      await Job.bulkWrite(bulkOps, { ordered: false });
-      const queryObj = provider ? { provider } : {};
-      dbJobs = await Job.find(queryObj).lean();
-    } catch (e) {
-      dbJobs = fallbackJobs.map(j => ({ ...j, _id: j.hash }));
-    }
-  }
+  // Keep old demo listings out of customer search results. Earlier versions
+  // generated these placeholders when providers returned no results.
+  dbJobs = dbJobs.filter((job) => !isCuratedPlaceholderJob(job));
 
   // 4. Evaluate Matches & Categorize ALL jobs BEFORE filtering
   const allEvaluatedJobs = dbJobs.map((j) => {
@@ -339,7 +330,7 @@ async function getJobById(userId, jobId) {
   }
 
   const job = await Job.findById(jobId).lean();
-  if (!job) return null;
+  if (!job || isCuratedPlaceholderJob(job)) return null;
 
   let candidateContext = {};
   let userApp = null;
@@ -377,7 +368,7 @@ async function saveJob(userId, jobId) {
   }
 
   const job = await Job.findById(jobId);
-  if (!job) throw new Error("Job opportunity not found.");
+  if (!job || isCuratedPlaceholderJob(job)) throw new Error("Job opportunity not found.");
 
   const app = await JobApplication.findOneAndUpdate(
     { userId, jobId },
@@ -408,10 +399,13 @@ async function getSavedJobs(userId) {
   try {
     candidateContext = await getCareerContext(userId);
     roadmapProgressMap = await getUserRoadmapProgress(userId);
-  } catch (e) {}
+  } catch (err) {
+    console.error("[JobDiscoveryService] Failed to load saved-job context:", err.message);
+    throw err;
+  }
 
   return savedApps
-    .filter((app) => app.jobId)
+    .filter((app) => app.jobId && !isCuratedPlaceholderJob(app.jobId))
     .map((app) => {
       const j = app.jobId;
       const matchData = evaluateJobMatch(candidateContext, j, roadmapProgressMap);
@@ -452,59 +446,6 @@ async function updateApplicationStatus(userId, jobId, status, notes = "") {
   );
 
   return app;
-}
-
-function getCuratedFallbackJobs(queryStr = "", targetProvider = "") {
-  const now = new Date();
-  const roleTitle = queryStr ? queryStr.trim() : "Full Stack Developer";
-  const providerNames = ["jobvetta", "indianapi", "jooble", "adzuna"];
-
-  const techRoles = [
-    { title: `Senior ${roleTitle}`, company: "Razorpay", location: "Bengaluru, Karnataka, India", skills: ["TypeScript", "React", "Node.js", "System Design", "PostgreSQL"], salary: { min: 2400000, max: 3600000, currency: "INR" } },
-    { title: `${roleTitle}`, company: "Swiggy", location: "Bengaluru, Karnataka, India", skills: ["React", "Next.js", "TypeScript", "Node.js", "Tailwind CSS"], salary: { min: 1800000, max: 2800000, currency: "INR" } },
-    { title: "Software Development Engineer II", company: "Flipkart", location: "Bengaluru, Karnataka, India", skills: ["Java", "Spring Boot", "Microservices", "Kafka", "Redis"], salary: { min: 2800000, max: 4000000, currency: "INR" } },
-    { title: "Backend Platform Engineer", company: "Postman", location: "Bengaluru, Karnataka, India", skills: ["Node.js", "Express", "MongoDB", "Docker", "Microservices"], salary: { min: 2200000, max: 3400000, currency: "INR" } },
-    { title: "Lead Software Architect", company: "Zomato", location: "Gurugram, Haryana, India", skills: ["Go", "Python", "System Design", "Kubernetes", "Redis"], salary: { min: 3500000, max: 5000000, currency: "INR" } },
-    { title: "Staff Full Stack Engineer", company: "PhonePe", location: "Bengaluru, Karnataka, India", skills: ["Java", "React", "Distributed Systems", "AWS"], salary: { min: 3800000, max: 5500000, currency: "INR" } },
-    { title: "Frontend Infrastructure Engineer", company: "CRED", location: "Bengaluru, Karnataka, India", skills: ["React", "TypeScript", "React Native", "Performance"], salary: { min: 2500000, max: 3800000, currency: "INR" } },
-    { title: "Senior Backend Developer", company: "Paytm", location: "Noida, Uttar Pradesh, India", skills: ["Node.js", "Python", "PostgreSQL", "Redis", "Kafka"], salary: { min: 2000000, max: 3200000, currency: "INR" } },
-    { title: "Full Stack Engineer (Core)", company: "Zepto", location: "Mumbai, Maharashtra, India", skills: ["React", "Node.js", "Docker", "Kubernetes", "TypeScript"], salary: { min: 2200000, max: 3500000, currency: "INR" } },
-    { title: "Senior Software Engineer - Product", company: "Groww", location: "Bengaluru, Karnataka, India", skills: ["React", "TypeScript", "Node.js", "PostgreSQL", "Redis"], salary: { min: 2600000, max: 4200000, currency: "INR" } }
-  ];
-
-  return techRoles.map((item, idx) => {
-    const prov = targetProvider ? targetProvider.toLowerCase() : providerNames[idx % providerNames.length];
-    const sourceName = prov.charAt(0).toUpperCase() + prov.slice(1);
-
-    return {
-      provider: prov,
-      externalId: `curated-${prov}-${idx + 1}`,
-      sourceJobId: `curated-${prov}-${idx + 1}`,
-      title: item.title,
-      normalizedTitle: item.title.toLowerCase().replace(/[^a-z0-9]/g, ""),
-      company: { name: item.company, logo: "", website: `https://${item.company.toLowerCase()}.com` },
-      companyNormalized: item.company.toLowerCase().replace(/[^a-z0-9]/g, ""),
-      location: { city: item.location.split(",")[0], state: "India", country: "India", remote: idx % 3 === 0, raw: item.location },
-      normalizedLocation: item.location,
-      country: "India",
-      remoteType: idx % 3 === 0 ? "Remote" : "Onsite",
-      employmentType: "Full-time",
-      experienceLevel: idx % 2 === 0 ? "Senior" : "Mid-Level",
-      seniority: idx % 2 === 0 ? "Senior" : "Mid-Level",
-      roleFamily: item.title.includes("Backend") ? "Backend Engineer" : item.title.includes("Frontend") ? "Frontend Engineer" : "Fullstack Engineer",
-      description: `Join ${item.company} as a ${item.title} in ${item.location}. Work with high-scale tech stack including ${item.skills.join(", ")}.`,
-      skills: item.skills,
-      requiredSkills: item.skills.slice(0, 3),
-      preferredSkills: item.skills.slice(3),
-      salary: { min: item.salary.min, max: item.salary.max, currency: "INR", period: "year" },
-      url: `https://${item.company.toLowerCase()}.com/careers`,
-      publishedAt: now,
-      fetchedAt: now,
-      source: sourceName,
-      sources: [sourceName],
-      hash: `curated-${prov}-${item.company.toLowerCase()}-${idx + 1}`
-    };
-  });
 }
 
 module.exports = {

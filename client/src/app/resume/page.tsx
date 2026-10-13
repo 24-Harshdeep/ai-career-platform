@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useCareerStore, ResumeVersionContent } from "@/store/careerStore";
 import Card from "@/components/ui/Card/Card";
 import Button from "@/components/ui/Button/Button";
@@ -44,7 +45,10 @@ import PageHeader from "@/components/ui/PageHeader";
 
 type WizardStep = "scan" | "ats" | "review" | "job_match" | "suggestions" | "builder";
 
-export default function ResumePage() {
+function ResumeContent() {
+  const searchParams = useSearchParams();
+  const stepParam = searchParams.get("step");
+
   const resumeAnalysis = useCareerStore((state) => state.resumeAnalysis);
   const fetchResumeAnalysis = useCareerStore((state) => state.fetchResumeAnalysis);
   const uploadResume = useCareerStore((state) => state.uploadResume);
@@ -55,7 +59,33 @@ export default function ResumePage() {
   const addNotification = useCareerStore((state) => state.addNotification);
 
   // Guided wizard step state machine
-  const [wizardStep, setWizardStep] = useState<WizardStep>("scan");
+  const [wizardStep, setWizardStep] = useState<WizardStep>(() => {
+    if (stepParam === "4" || stepParam === "job_match" || stepParam === "target_job_match") {
+      return "job_match";
+    }
+    if (stepParam === "1" || stepParam === "scan") return "scan";
+    if (stepParam === "2" || stepParam === "ats") return "ats";
+    if (stepParam === "3" || stepParam === "review") return "review";
+    if (stepParam === "5" || stepParam === "suggestions") return "suggestions";
+    if (stepParam === "6" || stepParam === "builder") return "builder";
+    return "scan";
+  });
+
+  useEffect(() => {
+    if (stepParam === "4" || stepParam === "job_match" || stepParam === "target_job_match") {
+      setWizardStep("job_match");
+    } else if (stepParam === "1" || stepParam === "scan") {
+      setWizardStep("scan");
+    } else if (stepParam === "2" || stepParam === "ats") {
+      setWizardStep("ats");
+    } else if (stepParam === "3" || stepParam === "review") {
+      setWizardStep("review");
+    } else if (stepParam === "5" || stepParam === "suggestions") {
+      setWizardStep("suggestions");
+    } else if (stepParam === "6" || stepParam === "builder") {
+      setWizardStep("builder");
+    }
+  }, [stepParam]);
 
   // File upload & scanning state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -166,14 +196,14 @@ export default function ResumePage() {
       workExperience: [
         ...formState.workExperience,
         {
-          company: "Company Name",
-          position: "Job Title",
+          company: "",
+          position: "",
           location: "",
           startDate: "",
           endDate: "",
           currentlyWorking: false,
           description: "",
-          bulletPoints: ["Engineered scalable solution using modern technologies."],
+          bulletPoints: [""],
           experienceUrl: ""
         }
       ]
@@ -242,10 +272,10 @@ export default function ResumePage() {
       projects: [
         ...formState.projects,
         {
-          title: "New Project",
+          title: "",
           technologies: [],
           description: "",
-          bulletPoints: ["Architected full stack web service."],
+          bulletPoints: [""],
           link: "",
           githubUrl: "",
           liveUrl: "",
@@ -288,7 +318,7 @@ export default function ResumePage() {
       ...formState,
       certifications: [
         ...(formState.certifications || []),
-        { name: "New Certification", issuer: "", issueDate: "", credentialId: "", credentialUrl: "", evidenceText: "", source: "user", confidence: 100, isRelevant: true }
+        { name: "", issuer: "", issueDate: "", credentialId: "", credentialUrl: "", evidenceText: "", source: "user", confidence: 100, isRelevant: true }
       ]
     });
   };
@@ -313,7 +343,7 @@ export default function ResumePage() {
     if (!formState) return;
     setFormState({
       ...formState,
-      achievements: [...(formState.achievements || []), "Awarded top performer in regional engineering hackathon."]
+      achievements: [...(formState.achievements || []), ""]
     });
   };
 
@@ -629,7 +659,7 @@ ${(formState.certifications || []).length > 0 ? `## Certifications\n${formState.
           <button
             type="button"
             onClick={() => setWizardStep("job_match")}
-            disabled={!formState}
+            disabled={!formState && wizardStep !== "job_match"}
             className={`p-2.5 rounded-xl border transition-all flex flex-col items-center justify-center gap-1 ${
               wizardStep === "job_match"
                 ? "bg-primary/10 border-primary text-primary font-bold shadow-sm cursor-pointer"
@@ -1369,8 +1399,20 @@ ${(formState.certifications || []).length > 0 ? `## Certifications\n${formState.
       )}
 
       {/* STEP 4: TARGET JOB MATCHING (OPTIONAL) */}
-      {wizardStep === "job_match" && formState && (
-        <div className="max-w-3xl mx-auto space-y-6">
+      {wizardStep === "job_match" && (
+        !formState ? (
+          <div className="max-w-xl mx-auto space-y-6">
+            <Card className="p-8 text-center space-y-4">
+              <UploadCloud className="w-10 h-10 text-primary mx-auto animate-bounce" />
+              <h3 className="text-base font-bold text-foreground">Upload or Select Resume First</h3>
+              <p className="text-xs text-muted">To analyze target job matches and ATS compatibility, please upload or select your resume first.</p>
+              <Button variant="primary" onClick={handleBoxClick}>
+                <UploadCloud className="w-4 h-4 mr-2" /> Upload Resume
+              </Button>
+            </Card>
+          </div>
+        ) : (
+          <div className="max-w-3xl mx-auto space-y-6">
           <Card className="p-6 space-y-6">
             <div className="flex items-center justify-between border-b border-border pb-4">
               <div>
@@ -1413,6 +1455,7 @@ ${(formState.certifications || []).length > 0 ? `## Certifications\n${formState.
             </div>
           </Card>
         </div>
+        )
       )}
 
       {/* STEP 5: AI IMPROVEMENTS / CHANGELOG REVIEW */}
@@ -1733,5 +1776,18 @@ ${(formState.certifications || []).length > 0 ? `## Certifications\n${formState.
       </div>
       )}
     </PageTransition>
+  );
+}
+
+export default function ResumePage() {
+  return (
+    <Suspense fallback={
+      <div className="h-[calc(100vh-140px)] flex flex-col items-center justify-center space-y-4">
+        <FileText className="w-10 h-10 text-primary animate-pulse" />
+        <span className="text-xs text-muted">Loading Resume Intelligence...</span>
+      </div>
+    }>
+      <ResumeContent />
+    </Suspense>
   );
 }

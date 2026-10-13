@@ -3,7 +3,7 @@
 import { useSession } from "@/lib/auth";
 
 export const useAuth = () => {
-  const { session, signIn, signOut, switchUser } = useSession();
+  const { session, signIn, signOut } = useSession();
 
   return {
     user: session.user,
@@ -12,6 +12,5 @@ export const useAuth = () => {
     isLoading: session.status === "loading",
     signIn,
     signOut,
-    switchUser,
   };
 };

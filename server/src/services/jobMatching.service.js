@@ -24,18 +24,33 @@ function extractUserSkills(candidateContext = {}) {
     }
   }
 
-  function traverse(val) {
-    if (!val) return;
+  const visited = new WeakSet();
+
+  function traverse(val, depth = 0) {
+    if (!val || depth > 5) return;
     if (typeof val === "string") {
       val.split(/[,;\n]/).forEach(addSkill);
-    } else if (Array.isArray(val)) {
-      val.forEach(traverse);
-    } else if (typeof val === "object") {
-      Object.values(val).forEach(traverse);
+      return;
+    }
+    if (typeof val === "number" || typeof val === "boolean") return;
+
+    if (typeof val === "object") {
+      if (visited.has(val)) return;
+      visited.add(val);
+
+      if (Array.isArray(val)) {
+        val.forEach(item => traverse(item, depth + 1));
+      } else {
+        for (const [key, prop] of Object.entries(val)) {
+          if (key.startsWith("_") || key.startsWith("$") || key === "schema" || key === "db" || key === "model") continue;
+          if (typeof prop === "function") continue;
+          traverse(prop, depth + 1);
+        }
+      }
     }
   }
 
-  sources.forEach(traverse);
+  sources.forEach(s => traverse(s, 0));
   return userSkillsSet;
 }
 

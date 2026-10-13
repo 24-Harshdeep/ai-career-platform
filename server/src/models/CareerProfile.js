@@ -13,10 +13,10 @@ const SkillSetSchema = new mongoose.Schema({
 const CareerProfileSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, unique: true },
   targetRole: { type: String, required: true, default: "" },
-  experienceLevel: { 
-    type: String, 
-    enum: ["Beginner", "Intermediate", "Advanced"], 
-    default: "Intermediate" 
+  experienceLevel: {
+    type: String,
+    enum: ["Beginner", "Intermediate", "Advanced"],
+    default: "Intermediate"
   },
   careerGoal: { type: String, default: "" },
   currentPhase: { type: String, default: "" },
@@ -42,7 +42,33 @@ const CareerProfileSchema = new mongoose.Schema({
   primaryResume: { type: String, default: "" },
   primaryPortfolio: { type: String, default: "" },
   linkedinUrl: { type: String, default: "" },
-  portfolioUrl: { type: String, default: "" }
+  portfolioUrl: { type: String, default: "" },
+  growthMode: {
+    type: String,
+    enum: ["SKILL_GROWTH", "JOB_READINESS", "INTERNSHIP_TO_FULLTIME", "CAREER_PROGRESSION", "ROLE_TRANSITION", "CUSTOM"],
+    default: "JOB_READINESS"
+  },
+  targetOutcome: {
+    targetRole: { type: String, default: "" },
+    growthMode: { type: String, default: "JOB_READINESS" },
+    goalDescription: { type: String, default: "" },
+    targetSalary: { type: String, default: "" },
+    workType: { type: String, default: "" }
+  },
+  userPriorities: [{ type: String }],
+  interests: [{
+    name: { type: String, required: true },
+    category: { type: String, default: "General" },
+    priority: { type: Number, default: 1 }
+  }],
+  userCustomGaps: [{
+    requirementId: { type: String },
+    title: { type: String },
+    category: { type: String },
+    source: { type: String },
+    priority: { type: String, default: "High" },
+    addedAt: { type: Date, default: Date.now }
+  }]
 }, { timestamps: true });
 
 module.exports = mongoose.model("CareerProfile", CareerProfileSchema);

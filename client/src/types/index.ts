@@ -85,10 +85,60 @@ export interface SkillSet {
   devops: string[];
 }
 
+export type GrowthMode = "SKILL_GROWTH" | "JOB_READINESS" | "INTERNSHIP_TO_FULLTIME" | "CAREER_PROGRESSION" | "ROLE_TRANSITION" | "CUSTOM";
+
+export interface TargetOutcome {
+  targetRole: string;
+  growthMode: GrowthMode;
+  goalDescription: string;
+  targetSalary?: string;
+  workType?: string;
+}
+
+export interface CareerRequirementItem {
+  requirementId: string;
+  name: string;
+  category: string;
+  currentLevel: "None" | "Beginner" | "Intermediate" | "Advanced";
+  requiredLevel: "Beginner" | "Intermediate" | "Advanced";
+  gapStatus: "Missing" | "Weak" | "Developing" | "Meets Requirement" | "Exceeds Requirement";
+  priority: "High" | "Medium" | "Low";
+  estimatedEffort: string;
+  dependencies: string[];
+  confidence: number;
+  evidence: string[];
+}
+
+export interface InterestItem {
+  name: string;
+  category?: string;
+  priority?: number;
+}
+
+export interface MarketSignalItem {
+  name: string;
+  count: number;
+  percentage: number;
+}
+
+export interface MarketIntelligenceData {
+  sampleSize: number;
+  daysWindow: number;
+  targetRole: string;
+  topSkills: MarketSignalItem[];
+  highDemand: MarketSignalItem[];
+  growingDemand: MarketSignalItem[];
+}
+
 export interface CareerProfile {
   name?: string;
   email?: string;
   targetRole: string;
+  growthMode?: GrowthMode;
+  targetOutcome?: TargetOutcome;
+  userPriorities?: string[];
+  interests?: InterestItem[];
+  userCustomGaps?: any[];
   experienceLevel: "Beginner" | "Intermediate" | "Advanced";
   careerGoal: string;
   currentPhase: string;

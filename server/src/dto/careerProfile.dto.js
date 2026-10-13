@@ -32,6 +32,15 @@ function toCareerProfileDTO(profile) {
     primaryPortfolio: profile.primaryPortfolio || "",
     linkedinUrl: profile.linkedinUrl || "",
     portfolioUrl: profile.portfolioUrl || "",
+    growthMode: profile.growthMode || "JOB_READINESS",
+    targetOutcome: profile.targetOutcome || {
+      targetRole: profile.targetRole || "Full Stack Developer",
+      growthMode: profile.growthMode || "JOB_READINESS",
+      goalDescription: profile.careerGoal || ""
+    },
+    userPriorities: profile.userPriorities || [],
+    interests: profile.interests || [],
+    userCustomGaps: profile.userCustomGaps || [],
     updatedAt: profile.updatedAt
   };
 }

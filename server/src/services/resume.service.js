@@ -406,6 +406,48 @@ Output JSON with keys: atsScore (number 0-100), breakdown ({keywords, projects, 
       };
     }
 
+    // 4. Save or update Resume document
+    let resume = await Resume.findOne({ userId });
+    const initialVersion = {
+      versionNumber: 1,
+      title: "Original Upload",
+      optimizationGoal: "ATS Optimization",
+      personalInfo: parsedContent.personalInfo || {},
+      summary: parsedContent.summary || "",
+      workExperience: parsedContent.workExperience || [],
+      projects: parsedContent.projects || [],
+      skills: parsedContent.skills || { languages: [], frontend: [], backend: [], database: [], tools: [], other: [] },
+      education: parsedContent.education || [],
+      achievements: parsedContent.achievements || [],
+      certifications: parsedContent.certifications || []
+    };
+
+    if (resume) {
+      resume.filename = filename;
+      resume.parsedText = rawText;
+      resume.fileHash = hash;
+      resume.storagePath = customStoragePath || `uploads/${filename}`;
+      resume.uploadDate = new Date();
+      if (!resume.versions || resume.versions.length === 0) {
+        resume.versions = [initialVersion];
+        resume.activeVersionId = 1;
+      } else {
+        resume.versions[0] = { ...resume.versions[0], ...initialVersion };
+      }
+      resume.markModified("versions");
+      await resume.save();
+    } else {
+      resume = await Resume.create({
+        userId,
+        filename,
+        storagePath: customStoragePath || `uploads/${filename}`,
+        fileHash: hash,
+        parsedText: rawText,
+        activeVersionId: 1,
+        versions: [initialVersion]
+      });
+    }
+
     // 5. Save Resume Analysis document
     const analysis = await ResumeAnalysis.create({
       userId,

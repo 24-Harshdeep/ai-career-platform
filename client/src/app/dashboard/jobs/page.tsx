@@ -7,6 +7,7 @@ import {
   fetchProviderHealth,
   saveJob, 
   unsaveJob, 
+  addJobGapsToRoadmap,
   JobItem, 
   JobSearchParams,
   ProviderHealth
@@ -70,6 +71,23 @@ export default function JobsPage() {
 
   // Drawer state for Match Breakdown
   const [selectedJobForDrawer, setSelectedJobForDrawer] = useState<JobItem | null>(null);
+  const [addingGaps, setAddingGaps] = useState(false);
+  const [gapSuccessMsg, setGapSuccessMsg] = useState<string | null>(null);
+
+  const handleAddMissingJobGaps = async (job: JobItem) => {
+    if (!job || !job.match?.missingSkills?.length) return;
+    setAddingGaps(true);
+    setGapSuccessMsg(null);
+    try {
+      await addJobGapsToRoadmap(job.id, job.match.missingSkills);
+      setGapSuccessMsg(`Added ${job.match.missingSkills.length} missing skills to your roadmap!`);
+      fetchDashboardData();
+    } catch (err: any) {
+      console.error("Error adding job gaps to roadmap:", err);
+    } finally {
+      setAddingGaps(false);
+    }
+  };
 
   useEffect(() => {
     fetchDashboardData().finally(() => {
@@ -731,6 +749,26 @@ export default function JobsPage() {
                       <p className="text-[11px] text-purple-300 font-medium">{gap.recommendation}</p>
                     </div>
                   ))}
+
+                  {selectedJobForDrawer.match?.missingSkills && selectedJobForDrawer.match.missingSkills.length > 0 && (
+                    <div className="pt-2 space-y-2">
+                      {gapSuccessMsg ? (
+                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-xs font-semibold flex items-center space-x-2">
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>{gapSuccessMsg}</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleAddMissingJobGaps(selectedJobForDrawer)}
+                          disabled={addingGaps}
+                          className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold text-xs rounded-xl transition-all shadow-md flex items-center justify-center space-x-2"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          <span>{addingGaps ? "Injecting Gaps into Roadmap..." : `Add ${selectedJobForDrawer.match.missingSkills.length} Missing Job Skills to Roadmap`}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs font-semibold">

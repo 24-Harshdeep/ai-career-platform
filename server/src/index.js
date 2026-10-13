@@ -4,6 +4,7 @@ const path = require("path");
 const dotenv = require("dotenv");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const mongoose = require("mongoose");
 
 // Prefer the environment-specific file, while still allowing hosting
 // platforms to inject environment variables directly into the process.
@@ -50,6 +51,16 @@ app.use(
 );
 
 // Body Parsing Limits
+// Preserve the original bytes only for signed GitHub webhook verification.
+app.use(
+  "/api/notifications/webhooks/github",
+  express.json({
+    limit: "10mb",
+    verify: (req, res, buffer) => {
+      req.rawBody = Buffer.from(buffer);
+    }
+  })
+);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
@@ -81,15 +92,26 @@ app.use("/api/", generalLimiter);
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
 app.use("/api/interview/session", aiLimiter);
+app.use("/api/interview/answer", aiLimiter);
+app.use("/api/interview/finish", aiLimiter);
 app.use("/api/coach/chat", aiLimiter);
+app.use("/api/career/report/ai-summary", aiLimiter);
 app.use("/api/resume/optimize", aiLimiter);
+app.use("/api/resume/upload", aiLimiter);
+app.use("/api/project/audit", aiLimiter);
+app.use("/api/career/assessment", aiLimiter);
+app.use("/api/job/match", aiLimiter);
+app.use("/api/recommendation/regenerate", aiLimiter);
 
 // Gracefully connect to Database
-connectDB();
-
 // Basic Health Check
 app.get("/api/health", (req, res) => {
-  res.json({ status: "healthy", timestamp: new Date() });
+  const databaseConnected = mongoose.connection.readyState === 1;
+  res.status(databaseConnected ? 200 : 503).json({
+    status: databaseConnected ? "healthy" : "degraded",
+    database: databaseConnected ? "connected" : "unavailable",
+    timestamp: new Date()
+  });
 });
 
 // API Routes prefix mounting
@@ -121,6 +143,14 @@ app.use((err, req, res, next) => {
 });
 
 // Start Server
-app.listen(PORT, () => {
-  console.log(`[CareerOS Server] running on http://localhost:${PORT}`);
+async function startServer() {
+  await connectDB();
+  app.listen(PORT, () => {
+    console.log(`[CareerOS Server] listening on port ${PORT}`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error("[CareerOS] Startup failed:", err.message);
+  process.exitCode = 1;
 });
