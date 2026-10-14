@@ -528,6 +528,8 @@ const initialStats: CareerStats = {
   timeline: []
 };
 
+let dashboardFetchInFlight: Promise<void> | null = null;
+
 export const useCareerStore = create<CareerState>((set, get) => ({
   user: {
     name: "",
@@ -570,7 +572,10 @@ export const useCareerStore = create<CareerState>((set, get) => ({
   streakDays: 0,
 
   // Fetch unified dashboard data from Express backend
-  fetchDashboardData: async () => {
+  fetchDashboardData: () => {
+    if (dashboardFetchInFlight) return dashboardFetchInFlight;
+
+    const request = (async () => {
     const token = localStorage.getItem("careeros_token");
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) {
@@ -617,6 +622,12 @@ export const useCareerStore = create<CareerState>((set, get) => ({
     } catch (err) {
       console.warn("Failed to sync backend dashboard state:", err);
     }
+    })();
+
+    dashboardFetchInFlight = request.finally(() => {
+      dashboardFetchInFlight = null;
+    });
+    return dashboardFetchInFlight;
   },
 
   fetchRoadmap: async () => {

@@ -2,7 +2,7 @@ const User = require("../models/User");
 const CareerProfile = require("../models/CareerProfile");
 const LearningProgress = require("../models/LearningProgress");
 const Achievement = require("../models/Achievement");
-
+const { isDemoUser, isDemoEmail } = require("../utils/demoUser");
 
 const { toRoadmapDTO } = require("../dto/roadmap.dto");
 const { calculateMissionReward } = require("../engines/mission.engine");
@@ -30,9 +30,18 @@ async function getUserRoadmapTracks(userId) {
   try {
     let track = await Roadmap.findOne({ userId });
     if (!track) {
+      // Demo users: never auto-generate a roadmap via AI — the seed script pre-creates it.
+      // If the roadmap is missing (e.g. before first seed), return empty gracefully.
+      const userDoc = await User.findById(userId).select("email").lean();
+      const isDemo = isDemoUser(userId) || (userDoc && isDemoEmail(userDoc.email));
+
+      if (isDemo) {
+        console.warn("[Demo] Roadmap not found for demo user — run seedDemoAccount.js to populate.");
+        return [];
+      }
+
       const userContext = await getCareerContext(userId);
       const generatedTrack = await generatePersonalizedRoadmap(userContext);
-      
       track = await Roadmap.create({
         userId,
         id: generatedTrack.id,

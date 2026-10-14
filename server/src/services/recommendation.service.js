@@ -1,16 +1,31 @@
 const User = require("../models/User");
 const LearningProgress = require("../models/LearningProgress");
 const Recommendation = require("../models/Recommendation");
+const { isDemoUser, isDemoEmail } = require("../utils/demoUser");
 
-
-const { computeNextBestAction } = require("../engines/nextBestAction.engine");
+const { computeNextBestAction, groundedFallbackActions } = require("../engines/nextBestAction.engine");
 const { toRecommendationListDTO } = require("../dto/recommendation.dto");
 const { recalculateUserStats } = require("./career.service");
 
 const { getCareerContext } = require("./careerContext.service");
 
-// 2. Fetch Ranked Recommendations
+// Fetch Ranked Recommendations
 async function getRankedRecommendations(userId) {
+  // Demo users: serve pre-seeded recommendations from the database.
+  // Never call computeNextBestAction (Gemini) for the demo account.
+  const userDoc = await User.findById(userId).select("email").lean();
+  const isDemo = isDemoUser(userId) || (userDoc && isDemoEmail(userDoc.email));
+
+  if (isDemo) {
+    const persisted = await Recommendation.find({ userId, status: "Active" }).lean();
+    if (persisted.length > 0) {
+      return toRecommendationListDTO(persisted);
+    }
+    // Fallback: grounded rule-based actions (no Gemini)
+    const userContext = await getCareerContext(userId);
+    return toRecommendationListDTO(groundedFallbackActions(userContext));
+  }
+
   const userContext = await getCareerContext(userId);
   const ranked = await computeNextBestAction(userContext);
 

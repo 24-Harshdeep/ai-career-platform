@@ -18,6 +18,8 @@ for (const envFile of envFiles) {
 }
 dotenv.config();
 const { connectDB } = require("./config/db");
+const { demoGuard, validateDemoConfig } = require("./middleware/demoGuard");
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -114,6 +116,12 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// ─── Demo Guard ────────────────────────────────────────────────────────────────
+// Centralized read-only enforcement for the public demo account.
+// Must be mounted BEFORE all API route handlers so every mutating request
+// (POST, PUT, PATCH, DELETE) from the demo user is intercepted in one place.
+app.use("/api", demoGuard);
+
 // API Routes prefix mounting
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/career/report", require("./routes/report.routes"));
@@ -144,6 +152,7 @@ app.use((err, req, res, next) => {
 
 // Start Server
 async function startServer() {
+  validateDemoConfig(); // Logs demo guard configuration at startup
   await connectDB();
   app.listen(PORT, () => {
     console.log(`[CareerOS Server] listening on port ${PORT}`);

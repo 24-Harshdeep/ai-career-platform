@@ -7,6 +7,7 @@ const CareerEvent = require("../models/CareerEvent");
 const AnalyticsSnapshot = require("../models/AnalyticsSnapshot");
 const WeeklyReport = require("../models/WeeklyReport");
 const Achievement = require("../models/Achievement");
+const { isDemoUser, isDemoEmail } = require("../utils/demoUser");
 
 
 const { calculateGrowthDeltas } = require("../engines/analytics/careerGrowth.engine");
@@ -107,15 +108,32 @@ Output a JSON object conforming exactly to this structure:
   "nextWeekFocus": "Specific, actionable recommendation based on their activity (e.g., 'Focus on Docker as you struggled with it in interviews')."
 }`;
 
+    // Demo users: return the pre-seeded static WeeklyReport — never call Gemini.
+    const isDemo = isDemoUser(userId) || (events.length === 0 ? false : false) ||
+      (await User.findById(userId).select("email").lean().then(u => u && isDemoEmail(u.email)));
+
     const { generateAiContent } = require("../config/ai");
     let weeklyDigest = null;
-    try {
-      const geminiJson = await generateAiContent(analyticsPrompt, "You are a Senior Data Analyst generating a weekly progress report. Output JSON only.", true);
-      if (geminiJson) {
-        weeklyDigest = JSON.parse(geminiJson);
+    if (!isDemo) {
+      try {
+        const geminiJson = await generateAiContent(analyticsPrompt, "You are a Senior Data Analyst generating a weekly progress report. Output JSON only.", true);
+        if (geminiJson) {
+          weeklyDigest = JSON.parse(geminiJson);
+        }
+      } catch (e) {
+        console.error("Gemini analytics generation failed:", e);
       }
-    } catch (e) {
-      console.error("Gemini analytics generation failed:", e);
+    } else {
+      // Use persisted static digest seeded for demo account
+      const existing = await WeeklyReport.findOne({ userId }).lean();
+      if (existing) {
+        weeklyDigest = {
+          summary: existing.summary,
+          completedTasksCount: existing.completedTasksCount,
+          pointsEarned: existing.pointsEarned,
+          nextWeekFocus: Array.isArray(existing.nextWeekFocus) ? existing.nextWeekFocus[0] : existing.nextWeekFocus
+        };
+      }
     }
 
     // Save current Analytics Snapshot

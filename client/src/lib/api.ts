@@ -1,11 +1,6 @@
-const configuredApiUrl =
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:5000/api";
-
-export const API_BASE_URL = `${configuredApiUrl.replace(/\/+$/, "")}${
-  /\/api$/i.test(configuredApiUrl) ? "" : "/api"
-}`;
+// Keep browser requests same-origin. next.config.ts proxies /api/* to the
+// configured backend, avoiding browser CORS and localhost issues in previews.
+export const API_BASE_URL = "/api";
 
 export async function safeParseJson<T = any>(response: Response): Promise<T> {
   const contentType = response.headers.get("content-type") || "";

@@ -191,19 +191,26 @@ export default function JobsPage() {
     return "bg-slate-500/10 text-slate-400 border-slate-500/30";
   };
 
+  const PROVIDER_SETUP_URLS: Record<string, string> = {
+    jobvetta: "https://jobvetta.com/developer",
+    indianapi: "https://indianapi.in",
+    jooble: "https://in.jooble.org/api/about",
+    adzuna: "https://developer.adzuna.com/"
+  };
+
   const getHealthBadge = (healthObj?: ProviderHealth) => {
-    if (!healthObj) return { color: "bg-emerald-400", label: "HEALTHY" };
+    if (!healthObj) return { color: "bg-emerald-400", label: "HEALTHY", setupUrl: null };
     switch (healthObj.status) {
       case "HEALTHY":
-        return { color: "bg-emerald-400", label: "HEALTHY" };
+        return { color: "bg-emerald-400", label: "HEALTHY", setupUrl: null };
       case "DEGRADED":
-        return { color: "bg-amber-400", label: "DEGRADED" };
+        return { color: "bg-amber-400", label: "DEGRADED", setupUrl: null };
       case "UNCONFIGURED":
-        return { color: "bg-slate-400", label: "UNCONFIGURED" };
+        return { color: "bg-slate-500", label: "SETUP NEEDED", setupUrl: PROVIDER_SETUP_URLS[healthObj.provider] || null };
       case "DISABLED":
-        return { color: "bg-red-400", label: "DISABLED" };
+        return { color: "bg-red-400", label: "DISABLED", setupUrl: null };
       default:
-        return { color: "bg-emerald-400", label: "HEALTHY" };
+        return { color: "bg-emerald-400", label: "HEALTHY", setupUrl: null };
     }
   };
 
@@ -253,12 +260,29 @@ export default function JobsPage() {
           {["jobvetta", "indianapi", "jooble", "adzuna", "greenhouse", "lever", "ashby"].map((provKey) => {
             const healthObj = providerHealthMap[provKey];
             const badge = getHealthBadge(healthObj);
-            return (
-              <div key={provKey} className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-accent/40 border border-border/50">
-                <div className={`w-2 h-2 rounded-full ${badge.color} animate-pulse`} />
-                <span className="capitalize font-semibold text-foreground/90">{provKey}</span>
-                <span className="text-[10px] text-muted font-normal">({badge.label})</span>
+            const isUnconfigured = healthObj?.status === "UNCONFIGURED" || (!healthObj && false);
+
+            const inner = (
+              <div key={provKey} className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md border transition-colors ${
+                isUnconfigured
+                  ? "bg-slate-800/60 border-slate-600/40 hover:border-amber-500/50 hover:bg-amber-500/5 cursor-pointer"
+                  : "bg-accent/40 border-border/50"
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${badge.color} ${isUnconfigured ? "" : "animate-pulse"}`} />
+                <span className="capitalize font-semibold text-foreground/90">{provKey === "indianapi" ? "IndianApi" : provKey.charAt(0).toUpperCase() + provKey.slice(1)}</span>
+                <span className={`text-[10px] font-normal ${
+                  isUnconfigured ? "text-amber-400/80" : "text-muted"
+                }`}>({badge.label})</span>
+                {isUnconfigured && <span className="text-[9px] text-amber-400/60 ml-0.5">↗</span>}
               </div>
+            );
+
+            return badge.setupUrl ? (
+              <a key={provKey} href={badge.setupUrl} target="_blank" rel="noopener noreferrer" title={`Get API key at ${badge.setupUrl}`}>
+                {inner}
+              </a>
+            ) : (
+              <div key={provKey}>{inner}</div>
             );
           })}
         </div>

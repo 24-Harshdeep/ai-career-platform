@@ -5,6 +5,7 @@ import Sidebar from "@/components/layout/Sidebar";
 import Navbar from "@/components/layout/Navbar";
 import { SessionProvider, AuthGuard } from "@/lib/auth";
 import ThemeProvider from "@/components/layout/ThemeProvider";
+import { DemoBannerWrapper } from "@/components/demo/DemoBannerWrapper";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -29,6 +30,8 @@ export default function RootLayout({
         <SessionProvider>
           <AuthGuard>
             <ThemeProvider>
+              {/* Demo mode banner — shown when logged in as alex@careeros.dev */}
+              <DemoBannerWrapper />
               <div className="flex min-h-screen">
                 {/* Left Sidebar */}
                 <Sidebar />

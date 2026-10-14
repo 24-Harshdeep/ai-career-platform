@@ -15,8 +15,7 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
-        // Proxy server-side /api/* calls to the backend service.
-        // Client-side code uses apiFetch() with the full backend URL directly.
+        // Proxy same-origin browser /api/* calls to the backend service.
         source: "/api/:path*",
         destination: `${backendBase}/api/:path*`,
       },

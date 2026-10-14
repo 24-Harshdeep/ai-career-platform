@@ -110,21 +110,7 @@ router.post("/login", async (req, res) => {
         matchedUser = await User.findOne({ email: normalizedEmail });
       }
 
-      // Demo login is available only when explicitly enabled in development.
-      const isDev = process.env.NODE_ENV !== "production";
-      const allowDemo = isDev && process.env.ALLOW_DEMO_MODE === "true";
-      if (allowDemo && !matchedUser && normalizedEmail === "alex@careeros.dev" && password === "password123") {
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash(password, salt);
-        matchedUser = await User.create({
-          name: "Alex Chen",
-          email: normalizedEmail,
-          passwordHash,
-          role: "Senior Full Stack Developer",
-          goal: "Senior Full Stack Developer"
-        });
-        isMatch = true;
-      } else if (matchedUser) {
+      if (matchedUser) {
         if (matchedUser.passwordHash) {
           isMatch = await bcrypt.compare(password, matchedUser.passwordHash);
         }

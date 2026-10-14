@@ -1,6 +1,7 @@
 const User = require("../models/User");
 const CareerProfile = require("../models/CareerProfile");
 const Mission = require("../models/Mission");
+const { isDemoUser, isDemoEmail } = require("../utils/demoUser");
 
 
 const { getCareerStats } = require("./career.service");
@@ -48,25 +49,42 @@ async function getDashboardData(userId) {
       };
     });
 
-    const { generateDailyMissions } = require("../engines/mission.engine");
-    const { getCareerContext } = require("./careerContext.service");
+    const isDemo = isDemoUser(userId) || (userDoc && isDemoEmail(userDoc.email));
 
     let dbMissions = await Mission.find({ userId, completed: false });
-    
-    // If user has less than 3 active missions, generate new ones dynamically using Gemini
+
+    // For demo users: never call Gemini — serve static fallback missions to avoid
+    // unnecessary AI spend and to keep the shared demo dataset stable.
     if (dbMissions.length < 3) {
-      const userContext = await getCareerContext(userId);
-      const generated = await generateDailyMissions(userContext);
-      
-      for (const m of generated) {
-        if (dbMissions.length >= 3) break;
-        const newMission = await Mission.create({
-          userId,
-          title: m.title,
-          scoreReward: m.scoreReward,
-          completed: false
-        });
-        dbMissions.push(newMission);
+      if (isDemo) {
+        const staticMissions = [
+          { title: "Practice one TypeScript advanced generics challenge", scoreReward: 3 },
+          { title: "Review Kubernetes Deployment YAML configuration", scoreReward: 4 },
+          { title: "Add optimistic UI update to CareerSync using useOptimistic()", scoreReward: 3 }
+        ];
+        for (const m of staticMissions) {
+          if (dbMissions.length >= 3) break;
+          const exists = await Mission.findOne({ userId, title: m.title });
+          if (!exists) {
+            const newMission = await Mission.create({ userId, ...m, completed: false });
+            dbMissions.push(newMission);
+          }
+        }
+      } else {
+        const { generateDailyMissions } = require("../engines/mission.engine");
+        const { getCareerContext } = require("./careerContext.service");
+        const userContext = await getCareerContext(userId);
+        const generated = await generateDailyMissions(userContext);
+        for (const m of generated) {
+          if (dbMissions.length >= 3) break;
+          const newMission = await Mission.create({
+            userId,
+            title: m.title,
+            scoreReward: m.scoreReward,
+            completed: false
+          });
+          dbMissions.push(newMission);
+        }
       }
     }
 

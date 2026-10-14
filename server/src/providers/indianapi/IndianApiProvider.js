@@ -35,7 +35,7 @@ class IndianApiProvider extends JobProvider {
       pageSize: String(limit)
     });
 
-    const url = `https://indianapi.in/api/v1/jobs?${params.toString()}`;
+    const url = `https://jobs.indianapi.in/jobs?${params.toString()}`;
 
     try {
       const controller = new AbortController();

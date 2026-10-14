@@ -11,55 +11,31 @@ const authMiddleware = async (req, res, next) => {
   }
 
   const authHeader = req.header("Authorization");
-  
+
   if (!authHeader) {
     return res.status(401).json({ error: "Access denied. No authorization header provided." });
   }
 
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
 
-  // Demo token mode allowed ONLY in development and explicitly enabled via ALLOW_DEMO_MODE=true
-  const isDev = process.env.NODE_ENV !== "production";
-  const allowDemo = isDev && process.env.ALLOW_DEMO_MODE === "true";
-
-  if (allowDemo && token && (token.startsWith("demo_") || token === "demo_token")) {
-    try {
-      let demoUser = await User.findOne({ email: "alex@careeros.dev" }).select("-passwordHash");
-      if (!demoUser) {
-        const createdDemoUser = await User.create({
-          name: "Alex Chen",
-          email: "alex@careeros.dev",
-          passwordHash: "$2a$10$e846059955700cf11c50bu2vOq71.8zY46/kZp7L5P4V0hQZk.d86",
-          role: "Senior Full Stack Developer",
-          goal: "Senior Full Stack Developer"
-        });
-        demoUser = await User.findById(createdDemoUser._id).select("-passwordHash");
-      }
-      req.user = demoUser;
-      return next();
-    } catch (err) {
-      console.error("Error resolving demo user token:", err);
-    }
-  }
-
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    
+
     let user = null;
     try {
       user = await User.findById(decoded.id).select("-passwordHash");
-      
+
       if (user) {
         const today = new Date();
         const lastActive = user.lastActivityDate || user.createdAt || new Date();
-        
+
         // Normalize both dates to midnight (00:00:00.000) to compute true calendar days difference
         const d1 = new Date(lastActive.getFullYear(), lastActive.getMonth(), lastActive.getDate());
         const d2 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        
+
         const diffTime = d2 - d1;
         const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-        
+
         let updated = false;
         if (diffDays === 1) {
           // Consecutive day: increment streak
@@ -77,7 +53,7 @@ const authMiddleware = async (req, res, next) => {
           user.lastActivityDate = today;
           updated = true;
         }
-        
+
         if (updated) {
           await user.save();
         }
