@@ -206,7 +206,7 @@ export default function JobsPage() {
       case "DEGRADED":
         return { color: "bg-amber-400", label: "DEGRADED", setupUrl: null };
       case "UNCONFIGURED":
-        return { color: "bg-slate-500", label: "SETUP NEEDED", setupUrl: PROVIDER_SETUP_URLS[healthObj.provider] || null };
+        return { color: "bg-slate-500", label: "SETUP NEEDED", setupUrl: PROVIDER_SETUP_URLS[healthObj.name] || null };
       case "DISABLED":
         return { color: "bg-red-400", label: "DISABLED", setupUrl: null };
       default:

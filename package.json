@@ -9,6 +9,10 @@
   "scripts": {
     "build": "npm run build --workspace=client"
   },
+  "dependencies": {
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
   "devDependencies": {
     "eslint": "^9",
     "husky": "^9.1.7",
